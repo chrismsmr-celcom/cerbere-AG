@@ -14,6 +14,16 @@ Reproducibility guarantees:
   - Every run records: SDK version, Python version, corpus SHA-256,
     active layers, date, machine-free raw latencies.
 
+v2 (2026-09-28):
+  - SUPPRIMÉ le prétraitement normalize_prompt du runner : la normalisation
+    anti-obfuscation vit désormais DANS PolicyEngine.check_injection (passe
+    fallback via agentguard/normalizer.py, early-exit). Le benchmark doit
+    mesurer le moteur exactement comme la production l'appelle : texte brut.
+    L'ancien prétraitement inline (suppression zero-width au lieu de
+    remplacement par espace, points collés) corrompait les prompts et mas-
+    quait 6 détections (cf. runs 2026-09-26/28 à 91.5%).
+  - Correction de l'IndentationError introduite par la suppression partielle.
+
 Usage:
     python benchmarks/run_public_benchmark.py --layers regex
     python benchmarks/run_public_benchmark.py --layers regex,ml
@@ -24,10 +34,8 @@ import hashlib
 import json
 import os
 import platform
-import re
 import sys
 import time
-import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,37 +53,6 @@ LAYER_PRESETS = {
     "regex,ml": ["regex", "ml"],
     "regex,ml,llm": ["regex", "ml", "llm"],
 }
-
-
-def normalize_prompt(text: str) -> str:
-    """
-    Normalise le prompt pour contrer les techniques d'obfuscation courantes.
-    (Idéalement, cette logique doit être déplacée dans agentguard_sdk.policy_engine)
-    """
-    if not isinstance(text, str):
-        return text
-    
-    # 1. Supprimer les caractères invisibles (zero-width space, etc.)
-    text = re.sub(r'[\u200b\u200c\u200d\ufeff\u2060]', '', text)
-    
-    # 2. Normaliser les homoglyphes unicode (ex: ɿ -> r)
-    text = unicodedata.normalize('NFKC', text)
-    
-    # 3. Corriger l'obfuscation par espaces/points (ex: "i . g . n . o . r . e" -> "ignore")
-    text = re.sub(r'(\w)\s*\.\s*(\w)', r'\1\2', text)
-    
-    # 4. Décoder les échappements hexadécimaux simples (ex: \x67 -> g)
-    def replace_hex(match):
-        try:
-            return chr(int(match.group(1), 16))
-        except ValueError:
-            return match.group(0)
-    text = re.sub(r'\\x([0-9a-fA-F]{2})', replace_hex, text)
-    
-    # 5. Supprimer les balises HTML/Commentaires courants utilisés pour cacher des instructions
-    text = re.sub(r'<!--.*?-->', ' ', text, flags=re.DOTALL)
-    
-    return text.strip()
 
 
 def sha256_file(path: Path) -> str:
@@ -120,17 +97,20 @@ def load_json(name: str) -> list:
 
 
 class Engine:
-    """Thin wrapper around PolicyEngine avec prétraitement de normalisation."""
+    """Thin wrapper around PolicyEngine — texte brut, aucun prétraitement.
+
+    La normalisation anti-obfuscation est une responsabilité du MOTEUR
+    (PolicyEngine.check_injection, passe fallback normalizer.py). Le runner
+    ne doit jamais transformer le prompt : il mesure le pipeline exact que
+    la production exécute.
+    """
 
     def __init__(self):
         from agentguard_sdk import PolicyEngine
         self.policy_engine = PolicyEngine()
 
     def check(self, prompt: str):
-    # NOTE (2026-09-28): la normalisation anti-obfuscation vit désormais DANS
-    # PolicyEngine.check_injection (passe fallback normalizer.py, early-exit).
-     # Le runner mesure le moteur tel qu'il est appelé en production : texte brut.
-    check = self.policy_engine.check_injection(prompt)
+        check = self.policy_engine.check_injection(prompt)
         return {
             "detected": not check.passed,
             "risk_level": str(getattr(check.risk_level, "value", check.risk_level)),
