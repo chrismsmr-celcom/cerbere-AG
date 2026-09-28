@@ -71,7 +71,7 @@ class MLDetector:
             local_loaded = False
             if os.path.exists(self.model_path):
                 try:
-                    logger.info("ml_model_local_load", path=self.model_path)
+                    logger.info("ml_model_local_load: %s", self.model_path)
                     local_tokenizer = AutoTokenizer.from_pretrained(self.model_path)
                     local_model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
                     labels = self._validate_model_labels(local_model)
@@ -86,7 +86,7 @@ class MLDetector:
                     )
 
             if not local_loaded:
-                logger.info("ml_model_download", model=self.model_name)
+                logger.info("ml_model_download: %s", self.model_name)
                 remote_tokenizer = AutoTokenizer.from_pretrained(self.model_name)
                 remote_model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
                 labels = self._validate_model_labels(remote_model)
@@ -98,9 +98,9 @@ class MLDetector:
                     os.makedirs(self.model_path, exist_ok=True)
                     self.model.save_pretrained(self.model_path)
                     self.tokenizer.save_pretrained(self.model_path)
-                    logger.info("ml_model_cached", path=self.model_path)
+                    logger.info("ml_model_cached: %s", self.model_path)
                 except Exception as save_err:
-                    logger.warning("ml_model_cache_failed", error=str(save_err))
+                    logger.warning("ml_model_cache_failed: %s", save_err)
 
             self.model.to(self.device)
 
@@ -129,7 +129,7 @@ class MLDetector:
             )
 
         except Exception as exc:
-            logger.warning("ml_load_failed", error=str(exc))
+            logger.warning("ml_load_failed: %s", exc)
             self.enabled = False
 
     @staticmethod
@@ -241,5 +241,5 @@ class MLDetector:
             return {"score": score, "risk": risk, "confidence": confidence}
 
         except Exception as exc:
-            logger.warning("ml_predict_error", error=str(exc))
+            logger.warning("ml_predict_error: %s", exc)
             return {"score": 0.0, "risk": "UNKNOWN", "confidence": "low"}
