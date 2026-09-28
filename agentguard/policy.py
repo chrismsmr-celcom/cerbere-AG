@@ -14,6 +14,8 @@ except ImportError:
     class MLDetector:
         def __init__(self):
             self.enabled = False
+            # v5: le seuil vit sur le detector — le fallback doit l'exposer aussi
+            self.threshold = 0.95
         def predict(self, text):
             return {"score": 0.0, "risk": "UNKNOWN", "confidence": "low"}
 
@@ -82,7 +84,7 @@ class PolicyEngine:
 
     def check_injection(self, text: str) -> SecurityCheck:
         """
-        Detection pipeline (v3), in strict order:
+        Detection pipeline (v5), in strict order:
 
         1. RAW pass   — strong patterns on the raw text. Raw first means
                         normalization can never introduce false positives
@@ -91,6 +93,11 @@ class PolicyEngine:
         2. Triple judge / ML layers (on raw text — they are robust to
            obfuscation by design; feeding them normalized text would double
            the normalization cost for no gain).
+           v5: le bloc ML utilise le seuil PORTE par MLDetector (0.95 par
+           defaut, env AGENTGUARD_ML_THRESHOLD) et applique le downgrader
+           didactique — un signal ML fort dans un contexte educatif devient
+           REVIEW, pas BLOCK. Sans ca, le benchmark montrait 4 hard-negs
+           bloques par le ML (hn_0004/5/7/11).
         3. NORMALIZED pass — only if the raw pass found nothing AND the
            normalizer actually changed the text (early exit: most benign
            prompts are untouched by normalization and skip this entirely).
@@ -98,6 +105,13 @@ class PolicyEngine:
            keyword list.
         5. Didactic downgrader — a strong hit in an educational/quoted
            context becomes REVIEW (human in the loop), not BLOCK.
+
+        Known limitation (documented, benchmark 2026-09-28): the ML
+        classifier is English-centric and produces high-confidence FPs on
+        French professional text (ben_0008 "Traduis ce paragraphe..." at
+        99.93% on the RAW score). No threshold fixes this; it is documented
+        in the benchmark and README as a known ML-layer limitation. The
+        regex layer (0% FPR, multilingual) remains the default.
 
         Obfuscation/normalization logic lives in agentguard/normalizer.py
         (single source of truth, unit-tested). Do not inline it here.
@@ -137,10 +151,23 @@ class PolicyEngine:
                 logger.warning("triple_judge_failed", error=str(e))
 
         # ── ÉTAPE 3 : détection ML (texte brut) ──
+        # v5: seuil lu depuis le detector (source unique, 0.95 par défaut) ;
+        # downgrader didactique aligné sur le comportement du bloc regex.
         if self.ml_detector.enabled:
             ml_result = self.ml_detector.predict(text)
-            if ml_result["risk"] == "HIGH" and ml_result["score"] >= 0.85:
-                return SecurityCheck("prompt_injection", False, RiskLevel.HIGH, f"ML detected threat ({ml_result['score']:.2%})", {"layer": "ml"}, SecurityAction.BLOCK)
+            if ml_result["risk"] == "HIGH" and ml_result["score"] >= getattr(self.ml_detector, "threshold", 0.95):
+                if is_didactic_context(text):
+                    return SecurityCheck(
+                        "prompt_injection", True, RiskLevel.MEDIUM,
+                        "ML flag in didactic context: downgraded to review",
+                        {"layer": "ml", "downgraded": True, "ml_score": round(ml_result["score"], 4)},
+                        SecurityAction.REVIEW,
+                    )
+                return SecurityCheck(
+                    "prompt_injection", False, RiskLevel.HIGH,
+                    f"ML detected threat ({ml_result['score']:.2%})",
+                    {"layer": "ml"}, SecurityAction.BLOCK,
+                )
 
         # ── ÉTAPE 4 : passe NORMALISÉE (fallback anti-obfuscation) ──
         # Early exit : la grande majorité des prompts (bénins ET attaques
