@@ -127,12 +127,10 @@ class Engine:
         self.policy_engine = PolicyEngine()
 
     def check(self, prompt: str):
-        # 🛡️ PRÉTRAITEMENT : Normalisation pour contrer l'obfuscation
-        # Note : Pour la production, déplacez cette logique à l'intérieur 
-        # de `PolicyEngine.check_injection` afin qu'elle s'applique partout.
-        normalized_prompt = normalize_prompt(prompt)
-        
-        check = self.policy_engine.check_injection(normalized_prompt)
+    # NOTE (2026-09-28): la normalisation anti-obfuscation vit désormais DANS
+    # PolicyEngine.check_injection (passe fallback normalizer.py, early-exit).
+     # Le runner mesure le moteur tel qu'il est appelé en production : texte brut.
+    check = self.policy_engine.check_injection(prompt)
         return {
             "detected": not check.passed,
             "risk_level": str(getattr(check.risk_level, "value", check.risk_level)),
