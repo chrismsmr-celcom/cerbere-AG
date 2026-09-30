@@ -1182,30 +1182,85 @@ function renderObservedAgents(){
 // REFRESH LOOP & API KEYS
 // ─────────────────────────────────────────────────────────────
 function refreshAll() {
+    // Fonction utilitaire pour récupérer les données sans faire planter tout le dashboard si une route échoue
+    function safeApi(endpoint) {
+        return api(endpoint).catch(function(e) {
+            console.warn("API endpoint failed (non-fatal):", endpoint, e.message);
+            return null; // Retourne null au lieu de rejeter la promesse
+        });
+    }
+
     Promise.all([
-        api('/api/metrics'),
-        api('/api/traces'),
-        api('/api/detection/stats'),
-        api('/api/models'),
-        api('/api/checks/breakdown'),
-        api('/api/heatmap'),
-        api('/api/spans/expensive'),
-        api('/api/cost/trend'),
-        api('/api/latency/distribution'),
-        api('/api/events/recent'),
-        api('/api/trend/daily'),
-        api('/api/audit/trail'),
-        api('/api/audit/summary'),
-        api('/api/checks/daily'),
-        api('/api/models/daily')
+        safeApi('/api/metrics'),
+        safeApi('/api/traces'),
+        safeApi('/api/detection/stats'),
+        safeApi('/api/models'),
+        safeApi('/api/checks/breakdown'),
+        safeApi('/api/heatmap'),
+        safeApi('/api/spans/expensive'),
+        safeApi('/api/cost/trend'),
+        safeApi('/api/latency/distribution'),
+        safeApi('/api/events/recent'),
+        safeApi('/api/trend/daily'),
+        safeApi('/api/audit/trail'),
+        safeApi('/api/audit/stats'), // ✅ CORRECTION: /api/audit/summary n'existe pas, c'est /api/audit/stats
+        safeApi('/api/checks/daily'),
+        safeApi('/api/models/daily')
     ]).then(function(results) {
-        var m = results[0], t = results[1], d = results[2], models = results[3], checks = results[4], heatmap = results[5], expensive = results[6], costTrend = results[7], latencyDist = results[8], recentEvents = results[9], dailyTrend = results[10], audit = results[11], auditSummary = results[12], checksDaily = results[13], modelsDaily = results[14];
-        state.metrics = m; state.traces = t; state.detection = d; state.models = models; state.checksBreakdown = checks; state.heatmap = heatmap; state.expensive = expensive; state.costTrend = costTrend; state.latencyDist = latencyDist; state.recentEvents = recentEvents; state.dailyTrend = dailyTrend; state.audit = audit; state.auditSummary = auditSummary; state.checksDaily = checksDaily; state.modelsDaily = modelsDaily;
+        // On utilise || {} ou || [] pour fournir une valeur par défaut si la requête a échoué (null)
+        var m = results[0] || {};
+        var t = results[1] || [];
+        var d = results[2] || {};
+        var models = results[3] || [];
+        var checks = results[4] || [];
+        var heatmap = results[5] || { cells: [] };
+        var expensive = results[6] || [];
+        var costTrend = results[7] || [];
+        var latencyDist = results[8] || {};
+        var recentEvents = results[9] || [];
+        var dailyTrend = results[10] || [];
+        var audit = results[11] || [];
+        var auditStats = results[12] || {};
+        var checksDaily = results[13] || [];
+        var modelsDaily = results[14] || [];
+
+        state.metrics = m;
+        state.traces = t;
+        state.detection = d;
+        state.models = models;
+        state.checksBreakdown = checks;
+        state.heatmap = heatmap;
+        state.expensive = expensive;
+        state.costTrend = costTrend;
+        state.latencyDist = latencyDist;
+        state.recentEvents = recentEvents;
+        state.dailyTrend = dailyTrend;
+        state.audit = audit;
+        
+        // ✅ CORRECTION: Adapter le format de auditStats à ce que le dashboard attend
+        state.auditSummary = {
+            total: auditStats.total_events || auditStats.total || 0,
+            blocked: auditStats.blocked_events || auditStats.blocked || 0,
+            flagged: auditStats.flagged_events || auditStats.flagged || 0,
+            high_risk: auditStats.high_risk_events || auditStats.high_risk || 0,
+            allowed: auditStats.allowed_events || auditStats.allowed || 0,
+            require_approval: auditStats.approval_events || auditStats.require_approval || 0,
+            critical: auditStats.critical_events || auditStats.critical || 0,
+            affected_agents: auditStats.affected_agents || 0
+        };
+        
+        state.checksDaily = checksDaily;
+        state.modelsDaily = modelsDaily;
+
         renderObservedAgents();
-        var active = document.querySelector('.view.active').id.replace('view-', '');
-        showView(active);
-        toast('Dashboard refreshed');
-    }).catch(function(e) { toast('Collector unavailable: ' + e.message); });
+        
+        var active = document.querySelector('.view.active');
+        if (active) {
+            showView(active.id.replace('view-', ''));
+        }
+    }).catch(function(e) {
+        console.error("Dashboard refresh failed critically:", e);
+    });
 }
 
 var _refreshTimer = null;
