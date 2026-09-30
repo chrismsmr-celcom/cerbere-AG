@@ -357,3 +357,542 @@ button.info{background:none;color:var(--dim);border:1px solid var(--border2)}
 .subtabs span{cursor:pointer}
 .tr-body.minimized > div:first-child{display:none}
 .tr-body.minimized #spanDetail{display:none}
+/* =========================================
+   AUDIT / COMPLIANCE SECTION
+   ========================================= */
+
+/* Header de la section */
+.audit-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: flex-start; 
+  gap: 16px; 
+  margin-bottom: 8px; 
+}
+.audit-header-actions { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
+
+/* Filtres de recherche */
+.audit-filters-card { padding: 20px 22px !important; }
+.audit-filters { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+  gap: 16px; 
+}
+.audit-filter { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 6px; 
+}
+.audit-filter label { 
+  font-size: 11.5px; 
+  font-weight: 500; 
+  color: var(--muted); 
+}
+.audit-filter-actions { 
+  grid-column: 1 / -1; 
+  display: flex; 
+  justify-content: flex-end; 
+  margin-top: 8px; 
+}
+.audit-filter-summary { 
+  margin-top: 16px; 
+  font-size: 12.5px; 
+  color: var(--muted); 
+  padding-top: 16px; 
+  border-top: 1px solid var(--border); 
+}
+
+/* Toolbar du graphique de tendance (Trend) */
+.audit-chart-toolbar { 
+  display: flex; 
+  gap: 6px; 
+  margin-bottom: 16px; 
+  border-bottom: 1px solid var(--border); 
+  padding-bottom: 12px; 
+}
+/* Le HTML utilise class="stat-tab" directement sur le bouton au lieu de l'envelopper dans .stat-tabs */
+button.stat-tab { 
+  background: var(--card); 
+  border: 1px solid var(--border2); 
+  color: var(--muted); 
+  border-radius: 8px; 
+  padding: 5px 14px; 
+  font-size: 12px; 
+  font-weight: 500; 
+  cursor: pointer; 
+  transition: all .15s; 
+}
+button.stat-tab:hover { 
+  color: var(--text); 
+  border-color: #5a4b3f; 
+}
+button.stat-tab.active { 
+  background: rgba(218,119,81,.14); 
+  color: var(--purple2); 
+  border-color: rgba(218,119,81,.4); 
+}
+
+/* Table d'audit (Trail) */
+.audit-trail-card { 
+  padding: 0 !important; 
+  overflow: hidden; 
+}
+.audit-table th { 
+  background: var(--bg2); 
+  position: sticky; 
+  top: 0; 
+  z-index: 2; 
+}
+.audit-table td { 
+  white-space: nowrap; 
+  font-size: 12px; 
+}
+
+/* Empty State */
+.audit-empty-state { 
+  text-align: center; 
+  padding: 60px 20px !important; 
+  display: flex !important; 
+  flex-direction: column; 
+  align-items: center; 
+  gap: 12px; 
+}
+.audit-empty-icon { 
+  font-size: 48px; 
+  color: var(--dim); 
+  opacity: 0.6; 
+}
+.audit-empty-title { 
+  font-family: 'Fraunces', Georgia, serif; 
+  font-size: 20px; 
+  font-weight: 500; 
+  color: var(--text); 
+}
+.audit-empty-text { 
+  font-size: 13px; 
+  color: var(--muted); 
+  max-width: 320px; 
+  line-height: 1.5; 
+  margin-bottom: 8px; 
+}
+/* =========================================
+   SECURITY EVENT DRAWER (Panneau de détails)
+   ========================================= */
+
+.security-event-body { 
+  padding: 0 !important; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 24px; 
+}
+
+/* Résumé de l'événement (Haut du tiroir) */
+.security-event-summary { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: flex-start; 
+  padding: 24px 26px; 
+  border-bottom: 1px solid var(--border); 
+  background: rgba(255,255,255,0.015); 
+}
+.security-event-main { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 6px; 
+}
+.security-event-label { 
+  font-size: 11px; 
+  text-transform: uppercase; 
+  letter-spacing: 0.05em; 
+  color: var(--dim); 
+  font-weight: 600; 
+}
+.security-event-name { 
+  font-family: 'Fraunces', serif; 
+  font-size: 20px; 
+  font-weight: 500; 
+  color: var(--text); 
+}
+.security-event-status { 
+  padding: 4px 12px; 
+  border-radius: 999px; 
+  font-size: 12px; 
+  font-weight: 600; 
+  background: var(--card2); 
+  color: var(--muted); 
+  border: 1px solid var(--border2); 
+  text-transform: capitalize; 
+}
+
+/* Sections et Titres */
+.security-detail-section { padding: 0 26px; }
+.security-detail-title { 
+  font-family: 'Fraunces', serif; 
+  font-size: 17px; 
+  font-weight: 500; 
+  color: var(--text); 
+  margin-bottom: 16px; 
+  padding-bottom: 10px; 
+  border-bottom: 1px solid var(--border); 
+  letter-spacing: -.01em; 
+}
+
+/* Grilles de métadonnées */
+.security-detail-grid { 
+  display: grid; 
+  grid-template-columns: repeat(2, 1fr); 
+  gap: 16px 24px; 
+}
+.security-detail-item { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 4px; 
+  font-size: 13px; 
+}
+.security-detail-item span { 
+  font-size: 11.5px; 
+  color: var(--dim); 
+  font-weight: 500; 
+}
+.security-detail-item b { 
+  font-weight: 500; 
+  color: var(--text); 
+  word-break: break-word; 
+}
+
+/* Boîtes de décision (Risque, Décision, Détection) */
+.security-decision-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
+  gap: 12px; 
+}
+.security-decision-box { 
+  background: var(--card); 
+  border: 1px solid var(--border); 
+  border-radius: 12px; 
+  padding: 16px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 8px; 
+}
+.detail-label { 
+  font-size: 11.5px; 
+  color: var(--muted); 
+  font-weight: 500; 
+}
+.security-risk-value { 
+  font-family: 'Fraunces', serif; 
+  font-size: 22px; 
+  font-weight: 500; 
+  text-transform: capitalize; 
+}
+/* Couleurs conditionnelles pour le risque */
+.security-risk-value.high, .security-risk-value.critical { color: var(--red2); }
+.security-risk-value.medium { color: var(--yellow); }
+.security-risk-value.low { color: var(--green); }
+.security-decision-value { 
+  font-size: 14px; 
+  font-weight: 600; 
+  color: var(--text); 
+  text-transform: capitalize; 
+}
+
+/* Carte d'explication de la détection */
+.security-detection-card { 
+  background: var(--card); 
+  border: 1px solid var(--border); 
+  border-radius: 12px; 
+  overflow: hidden; 
+}
+.security-detection-row { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 12px 16px; 
+  border-bottom: 1px solid var(--border); 
+  font-size: 13px; 
+}
+.security-detection-row:last-child { border-bottom: 0; }
+.security-detection-row span { 
+  color: var(--muted); 
+  font-weight: 500; 
+}
+.security-detection-row strong { 
+  color: var(--text); 
+  font-weight: 500; 
+  font-family: var(--mono); 
+  font-size: 12px; 
+}
+.security-detection-reason { 
+  padding: 16px; 
+  background: rgba(0,0,0,0.15); 
+  border-top: 1px solid var(--border); 
+}
+.security-detection-reason span { 
+  display: block; 
+  font-size: 11.5px; 
+  color: var(--dim); 
+  margin-bottom: 8px; 
+  font-weight: 600; 
+  text-transform: uppercase; 
+  letter-spacing: 0.03em; 
+}
+.security-evidence-text { 
+  font-size: 13px; 
+  color: var(--text); 
+  line-height: 1.6; 
+  white-space: pre-wrap; 
+}
+
+/* Exécution et Enforcement */
+.security-enforcement { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 12px; 
+}
+.security-enforcement-item { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 12px 16px; 
+  background: var(--card); 
+  border: 1px solid var(--border); 
+  border-radius: 10px; 
+  font-size: 13px; 
+}
+.security-enforcement-item span { color: var(--muted); }
+.security-enforcement-item strong { 
+  color: var(--text); 
+  font-weight: 500; 
+  text-transform: capitalize; 
+}
+
+/* Blocs de code (Prompt, System, Tool args) */
+.security-evidence-block { 
+  background: var(--card); 
+  border: 1px solid var(--border); 
+  border-radius: 12px; 
+  overflow: hidden; 
+  margin-bottom: 16px; 
+}
+.security-evidence-heading { 
+  padding: 10px 16px; 
+  background: rgba(255,255,255,0.02); 
+  border-bottom: 1px solid var(--border); 
+  font-size: 11px; 
+  font-weight: 600; 
+  color: var(--muted); 
+  text-transform: uppercase; 
+  letter-spacing: 0.05em; 
+}
+pre.security-code { 
+  margin: 0; 
+  padding: 16px; 
+  background: #0b0a09; 
+  font-family: var(--mono); 
+  font-size: 12px; 
+  color: #c9c0b3; 
+  line-height: 1.6; 
+  white-space: pre-wrap; 
+  word-break: break-word; 
+  max-height: 300px; 
+  overflow-y: auto; 
+  border: 0; 
+  border-radius: 0; 
+}
+
+/* Actions en bas du tiroir */
+.security-event-actions { 
+  display: flex; 
+  gap: 12px; 
+  padding: 20px 26px; 
+  border-top: 1px solid var(--border); 
+  margin-top: auto; 
+  background: var(--bg2); 
+  position: sticky; 
+  bottom: 0; 
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.1); 
+}
+.text-btn { 
+  background: none; 
+  border: 0; 
+  color: var(--purple2); 
+  cursor: pointer; 
+  font-size: 12.5px; 
+  padding: 0; 
+  font-weight: 500; 
+  text-decoration: underline; 
+  text-underline-offset: 2px; 
+}
+.text-btn:hover { color: var(--text); }
+.hero.small { font-size: 28px; }
+.modal-wrap { display: none; }
+.modal-wrap.open, .modal-wrap.active { display: flex; } 
+button.pill { cursor: pointer; transition: border-color .15s; }
+button.pill:hover { border-color: #5a4b3f; color: var(--text); }
+/* ==========================================================================
+   RESPONSIVE DESIGN (Tablettes & Mobiles)
+   ========================================================================== */
+
+/* ── TABLETTES (max 1024px) ────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* 1. Barre du haut : on compresse pour gagner de la place */
+  .topbar { padding: 0 12px; gap: 12px; }
+  .prod small { display: none; } /* Cache le sous-titre "Runtime security..." */
+  .tb-btn .lbl { display: none; } /* Cache le texte des boutons, garde seulement les icônes */
+  .tb-btn { padding: 0 10px; }
+  
+  /* 2. Sidebar : on la masque sur tablette pour donner la priorité au contenu principal */
+  .fside { display: none; }
+  .main { padding: 20px; }
+
+  /* 3. Grilles : on passe à 2 colonnes maximum pour éviter l'écrasement */
+  .g4, .g5 { grid-template-columns: repeat(2, 1fr) !important; }
+  .g3 { grid-template-columns: repeat(2, 1fr); }
+  
+  /* 4. Vue Tracing : on empile l'arbre des spans et les détails */
+  .tr-body { grid-template-columns: 1fr; }
+  
+  /* 5. Filtres d'audit : 2 colonnes au lieu de s'écraser */
+  .audit-filters { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── MOBILES & PETITES TABLETTES (max 768px) ───────────────────────────── */
+@media (max-width: 768px) {
+  /* 1. Barre du haut : permet le retour à la ligne si nécessaire */
+  .topbar { 
+    flex-wrap: wrap; 
+    height: auto; 
+    padding: 12px; 
+    gap: 16px; 
+  }
+  .brand { width: 100%; justify-content: space-between; }
+  
+  /* Onglets défilables horizontalement */
+  .tabs { 
+    width: 100%; 
+    overflow-x: auto; 
+    padding-bottom: 8px; 
+    border-bottom: 1px solid var(--border);
+    -webkit-overflow-scrolling: touch; /* Défilement fluide sur iOS */
+  }
+  .tabs button { flex-shrink: 0; padding: 0 12px; }
+
+  /* 2. Contenu principal : marges réduites */
+  .main { padding: 16px; }
+  .sec { font-size: 18px; margin: 24px 0 12px; }
+
+  /* 3. Grilles : 1 seule colonne pour une lecture verticale facile */
+  .g2, .g3, .g4, .g5 { 
+    grid-template-columns: 1fr !important; 
+  }
+
+  /* 4. Tableaux : défilement horizontal pour ne pas casser la mise en page */
+  .card { padding: 16px; overflow: visible; }
+  .audit-trail-card, 
+  .card:has(table) { 
+    overflow-x: auto; 
+    padding: 0;
+  }
+  table { 
+    min-width: 800px; /* Force la largeur, l'utilisateur peut scroller */
+    font-size: 12px;
+  }
+  th, td { padding: 8px 12px; white-space: nowrap; }
+
+  /* 5. Modales et Tiroirs (Drawers) : plein écran ou presque */
+  .modal-card { 
+    width: 95vw; 
+    max-width: 95vw; 
+    margin: 10px; 
+    padding: 20px; 
+    border-radius: 12px;
+  }
+  .drawer { width: 100vw; } /* Le tiroir prend 100% de la largeur */
+  .drawer-head { padding: 16px; }
+  .drawer-title { font-size: 22px; }
+  .drawer-body { padding: 16px; }
+
+  /* 6. Filtres d'audit : 1 colonne */
+  .audit-filters { grid-template-columns: 1fr; }
+  .audit-filter-actions { justify-content: stretch; }
+  .audit-filter-actions .btn { width: 100%; }
+
+  /* 7. Typographie adaptée */
+  .hero { font-size: 36px; }
+  .hero.mid { font-size: 28px; }
+  .hero.sm { font-size: 24px; }
+  
+  /* 8. Connect Modal : grille en 1 colonne */
+  .connect-grid { grid-template-columns: 1fr !important; }
+  .connect-panel { max-height: 90vh; width: 95vw; }
+
+  /* 9. Ajustement des détails de sécurité */
+  .security-detail-grid { grid-template-columns: 1fr; }
+  .security-decision-grid { grid-template-columns: 1fr; }
+  .security-event-summary { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .security-event-actions { flex-direction: column; }
+  .security-event-actions .btn { width: 100%; }
+}
+
+/* ── TRÈS PETITS ÉCRANS (max 480px) ────────────────────────────────────── */
+@media (max-width: 480px) {
+  .tb-right { gap: 6px; }
+  .tb-icon, .help { width: 32px; height: 32px; }
+  .clabel { font-size: 11px; }
+  .modal-head h3 { font-size: 18px; }
+}
+/* ==========================================================================
+   POLICY EDITOR MODAL STYLES
+   ========================================================================== */
+
+/* Style des cartes d'action radio */
+.policy-action-card {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--card);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+.policy-action-card:hover {
+  border-color: var(--border2);
+  background: var(--card2);
+  transform: translateY(-1px);
+}
+
+/* État sélectionné (grâce à :has, supporté par tous les navigateurs modernes) */
+.policy-action-card:has(input:checked) {
+  border-color: var(--purple);
+  background: rgba(218, 119, 81, 0.08);
+  box-shadow: 0 0 0 1px var(--purple), 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.policy-action-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  pointer-events: none; /* Laisse le label gérer le clic */
+}
+
+.policy-action-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+/* Assurer que la modale passe au-dessus du drawer (z-index 95) */
+#policyEditorModal {
+  z-index: 2000;
+}
