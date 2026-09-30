@@ -1,53 +1,97 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Cerbere — Runtime security for AI agents</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
+
 <body>
+
 <header class="topbar">
   <div class="brand">
-    <div class="logo-box"><img src="/static/logo.svg" alt="Cerbere" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="logo-fallback" aria-hidden="true">C</span></div>
-    <span class="prod">Cerbere<small>Runtime security for AI agents</small></span>
+    <div class="logo-box">
+      <img src="/static/logo.svg" alt="Cerbere" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+      <span class="logo-fallback" aria-hidden="true">C</span>
+    </div>
+    <span class="prod">
+      Cerbere
+      <small>Runtime security for AI agents</small>
+    </span>
   </div>
+
   <nav class="tabs" id="topTabs">
     <button data-view="overview">Overview</button>
     <button data-view="health" class="active">Health</button>
     <button data-view="tracing">Explorer</button>
     <button data-view="audit">Compliance</button>
   </nav>
+
   <div class="tb-right">
     <span class="live" title="Auto-refreshing"><i></i>Live</span>
+
     <button class="tb-btn" id="btnApprovals" type="button" onclick="openApprovalsPanel()" aria-label="Open the approval queue">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4.2 2.9 8 7 10 4.1-2 7-5.8 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
-      <span class="lbl">Approvals</span><span class="tb-badge" id="approvalsBadge">0</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3 5 6v5c0 4.2 2.9 8 7 10 4.1-2 7-5.8 7-10V6l-7-3Z"/>
+        <path d="m9 12 2 2 4-4"/>
+      </svg>
+      <span class="lbl">Approvals</span>
+      <span class="tb-badge" id="approvalsBadge">0</span>
     </button>
+
     <button class="tb-btn" id="btnAgents" type="button" onclick="openAgentsPanel()" aria-label="Open connected agents">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M12 7V4M9 12.5h.01M15 12.5h.01M9.5 15.5h5"/></svg>
-      <span class="lbl">Agents</span><span class="tb-count zero" id="agentsBadge">0</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="7" width="14" height="11" rx="3"/>
+        <path d="M12 7V4M9 12.5h.01M15 12.5h.01M9.5 15.5h5"/>
+      </svg>
+      <span class="lbl">Agents</span>
+      <span class="tb-count zero" id="agentsBadge">0</span>
     </button>
+
     <button class="tb-btn primary" type="button" onclick="openConnectAgentModal()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
       <span class="lbl">Connect agent</span>
     </button>
-    <button class="tb-icon" type="button" onclick="openApiKeyModal()" title="API keys" aria-label="API keys">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8m-3 3 3 3"/></svg>
+
+    <button class="tb-icon" type="button" onclick="openAlertDestinationsModal()" title="Alert destinations" aria-label="Alert destinations">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
     </button>
+
+    <button class="tb-icon" type="button" onclick="openApiKeyModal()" title="API keys" aria-label="API keys">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8" cy="15" r="4"/>
+        <path d="m11 12 8-8m-3 3 3 3"/>
+      </svg>
+    </button>
+
     <button class="help" type="button" onclick="openHelpModal()" aria-label="Help">?</button>
   </div>
 </header>
 
+<!-- =========================================================
+     HELP MODAL
+========================================================= -->
 <div id="helpModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeHelpModal()">
   <div class="modal-card">
-    <div class="modal-head"><h3>Quick help</h3><button class="connect-close" type="button" aria-label="Close" onclick="closeHelpModal()">×</button></div>
+    <div class="modal-head">
+      <h3>Quick help</h3>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closeHelpModal()">×</button>
+    </div>
     <ul class="modal-list">
       <li><b>Overview / Health</b> — health, latency and cost of your agents over the selected period.</li>
       <li><b>Explorer</b> — inspect a trace: spans, security checks, blocked actions.</li>
-      <li><b>Compliance</b> — tamper-evident audit log of every decision.</li>
+      <li><b>Compliance</b> — tamper-evident audit log of every security decision.</li>
       <li><b>Approvals</b> — actions held by policy, waiting for a human decision.</li>
       <li><b>Agents</b> — every connected agent. Disconnect and reconnect without touching code.</li>
       <li><b>+ New alert</b> — set a threshold on a metric; crossing it is flagged on the card.</li>
@@ -62,9 +106,15 @@
 <div id="cardMenuPopover" class="popover"></div>
 <div id="infoPopover" class="popover info-pop"></div>
 
+<!-- =========================================================
+     ALERT MODAL
+========================================================= -->
 <div id="alertModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeAlertModal()">
   <div class="modal-card">
-    <div class="modal-head"><h3 id="alertModalTitle">New alert</h3><button class="connect-close" type="button" aria-label="Close" onclick="closeAlertModal()">×</button></div>
+    <div class="modal-head">
+      <h3 id="alertModalTitle">New alert</h3>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closeAlertModal()">×</button>
+    </div>
     <p class="modal-sub" id="alertModalSubtitle"></p>
     <div id="alertRulesExisting" style="margin:14px 0 0"></div>
     <div class="row2">
@@ -78,6 +128,9 @@
   </div>
 </div>
 
+<!-- =========================================================
+     GLOBAL TOOLBAR
+========================================================= -->
 <div class="toolbar">
   <div class="right" style="margin-left:auto">
     <select id="rangeSelect" class="pill" style="background:var(--card);color:var(--text);border:1px solid var(--border2);cursor:pointer">
@@ -86,121 +139,551 @@
       <option value="30">Last 30 days</option>
       <option value="90">Last 90 days</option>
     </select>
-    <button class="btn" onclick="refreshAll()"><span class="ui-icon" data-icon="refresh"></span> Refresh</button>
-    <form method="post" action="/logout" style="margin:0"><button class="btn" type="submit">Sign out</button></form>
+    <button class="btn" onclick="refreshAll()">
+      <span class="ui-icon" data-icon="refresh"></span> Refresh
+    </button>
+    <form method="post" action="/logout" style="margin:0">
+      <button class="btn" type="submit">Sign out</button>
+    </form>
   </div>
 </div>
+
 <div class="body">
-<aside class="fside" id="fside"></aside>
-<main class="main">
-<section id="view-overview" class="view">
-  <div class="sec">Service health &amp; performance</div>
-  <div class="grid" style="grid-template-columns:170px 1fr 1fr 1fr;gap:12px">
-    <div class="card logo-card" style="background:#000;border:0;border-radius:18px"><div class="logo-box"><img src="/static/logo.svg" alt="Cerbere" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" style="width:100%;height:100%;object-fit:cover;border-radius:18px"><span class="logo-fallback" aria-hidden="true">AG</span></div></div>
-    <div class="card"><div class="clabel">Open Problems</div><div class="hero mid" id="ovProblems" style="color:var(--red2)">0</div></div>
-    <div class="card"><div class="clabel"># of Total Requests</div><div class="hero mid" id="ovRequests">0</div><div class="trend" id="ovRequestsT"></div></div>
-    <div class="card"><div class="clabel">Cost</div><div class="hero mid" id="ovCost">$0</div><div class="trend" id="ovCostT"></div></div>
-  </div>
-  <div class="grid g4" style="margin-top:12px">
-    <div class="card"><div class="clabel">Service Health</div><div id="ovDonut" style="height:170px"></div></div>
-    <div class="card"><div class="clabel">AVG Request Duration</div><div class="hero mid" id="ovAvg">—</div><div class="trend" id="ovAvgT"></div></div>
-    <div class="card"><div class="clabel">P99 Request Duration</div><div class="hero mid" id="ovP99">—</div><div class="trend" id="ovP99T"></div></div>
-    <div class="card"><div class="clabel">Cerbere Activity</div><div id="ovHeatmap"></div></div>
-  </div>
-  <div class="sec">Service Quality &amp; Guardrails</div>
-  <div class="grid g5" id="gqBig"></div>
-  <div class="grid g5" style="margin-top:12px" id="gqSmall"></div>
-  <div class="sec">End-To-End Tracing &amp; Debugging</div>
-  <div class="card"><div class="clabel">Top 10 expensive prompts</div>
-    <table><thead><tr><th>prompt <span class="sort">⇅</span></th><th>response <span class="sort">⇅</span></th><th>trace.id <span class="sort">⇅</span></th><th>token <span class="sort">⇅</span></th><th>cost <span class="sort">⇅</span></th></tr></thead><tbody id="expTable"></tbody></table>
-  </div>
-</section>
+  <aside class="fside" id="fside"></aside>
+  <main class="main">
 
-<section id="view-health" class="view active">
-  <div class="sec"><span class="ico"><span class="ui-icon" data-icon="latency"></span></span>Traffic and Latency <button class="info" type="button" onclick="showInfoPopover(event,'traffic')">i</button></div>
-  <div class="stat-tabs" id="latTabs"><button class="active" data-s="avg">AVG</button><button data-s="p50">p50</button><button data-s="p90">p90</button><button data-s="p95">p95</button></div>
-  <div class="grid g2">
-    <div class="card"><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Time to response</div><div class="hero" style="text-align:center" id="ttrHero">—</div><div class="chart" id="ttrChart"></div></div>
-    <div class="card"><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Response time per model</div><div id="rtModel" style="height:290px"></div></div>
-  </div>
-  <div class="sec"><span class="ico">◈</span>Cost <button class="info" type="button" onclick="showInfoPopover(event,'cost')">i</button></div>
-  <div class="grid g3">
-    <div class="card"><button class="alert-btn" type="button" onclick="openAlertModal('token_count','Token count')">+ New alert</button><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Token count</div><div class="hero" id="tokHero">0</div><div id="tokHeroAlertFlag"></div></div>
-    <div class="card"><button class="alert-btn" type="button" onclick="openAlertModal('avg_cost_per_request','Average cost per request')">+ New alert</button><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Average cost per request</div><div class="hero" id="avgCostHero">—</div><div id="avgCostHeroAlertFlag"></div><div class="chart" id="avgCostChart" style="height:120px"></div></div>
-    <div class="card"><button class="alert-btn" type="button" onclick="openAlertModal('token_forecast','Token usage forecast')">+ New alert</button><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Token usage forecast</div><div class="chart tall" id="tokForecast"></div><div class="legend"><span><i style="background:var(--purple2)"></i>Total amount of tokens used</span></div></div>
-  </div>
-  <div class="sec"><span class="ico"><span class="ui-icon" data-icon="security"></span></span>Guardrails <button class="info" type="button" onclick="showInfoPopover(event,'guardrails')">i</button></div>
-  <div class="grid g2">
-    <div class="card"><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Number of requests with guardrail enabled</div><div class="hero" id="grHero">0</div></div>
-    <div class="card"><button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button><div class="clabel">Guardrail activation by type</div><div class="chart tall" id="grStacked"></div><div class="legend" id="grLegend"></div></div>
-  </div>
-  <div class="sec"><span class="ico">◎</span>Tokens per model</div>
-  <div class="card"><div id="tokModel" style="min-height:60px"></div></div>
-</section>
-
-<section id="view-tracing" class="view">
-  <div class="tr-head">
-    <span>⇄</span><span class="name">Cerbere workflow</span>
-    <select id="traceSelect" class="pill" style="background:var(--card);color:var(--text);border:1px solid var(--border2)"></select>
-    <button class="pill" type="button" onclick="openTrajectoryPanel(state.selTrace)" style="cursor:pointer">Timeline</button>
-    <span id="trDate" class="dim"></span>
-    <span><span class="ui-icon" data-icon="latency"></span> Duration: <b id="trDur">—</b></span>
-    <span class="err"><span class="ui-icon" data-icon="error"></span> Errors: <b id="trErr">0</b></span>
-    <span class="mono dim">ID: <span id="trId"></span> ⧉</span>
-    <span class="right">
-      <span onclick="openTraceRaw()" style="cursor:pointer" title="Open raw trace data in a new tab">Open with ⊞</span>
-      <span id="btnCloseDetails" onclick="toggleTraceDetails()" style="cursor:pointer" title="Hide the logs/exceptions panel">Close details</span>
-      <span id="btnMinimize" onclick="toggleTraceMinimize()" style="cursor:pointer" title="Collapse this trace view">Minimize</span>
-    </span>
-  </div>
-  <div class="tr-body" id="trBody">
-    <div>
-      <div class="card" style="padding:12px">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <input class="searchbox" id="spanSearch" placeholder="Search name, endpoint, service, or attributes" style="max-width:340px">
-          <span class="pilltag" id="spanCount">0 spans</span>
+    <!-- =========================================================
+         OVERVIEW
+    ========================================================= -->
+    <section id="view-overview" class="view">
+      <div class="sec">Service health &amp; performance</div>
+      <div class="grid" style="grid-template-columns:170px 1fr 1fr 1fr;gap:12px">
+        <div class="card logo-card" style="background:#000;border:0;border-radius:18px">
+          <div class="logo-box">
+            <img src="/static/logo.svg" alt="Cerbere" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" style="width:100%;height:100%;object-fit:cover;border-radius:18px">
+            <span class="logo-fallback" aria-hidden="true">AG</span>
+          </div>
         </div>
-        <div class="axis"><span id="ax0">0 ms</span><span id="ax1"></span><span id="ax2"></span></div>
-        <div id="spanTree"></div>
-      </div>
-      <div class="card" id="trDetailsCard" style="margin-top:12px;padding:12px">
-        <div class="subtabs">
-          <span id="tabLogs" onclick="switchTraceTab('logs')">Logs</span>
-          <span id="tabExceptions" class="active" onclick="switchTraceTab('exceptions')">Exceptions<span class="n" id="excN">0</span></span>
+        <div class="card">
+          <div class="clabel">Open Problems</div>
+          <div class="hero mid" id="ovProblems" style="color:var(--red2)">0</div>
         </div>
-        <table id="logsTableWrap" style="display:none"><thead><tr><th>time</th><th>span</th><th>detail</th></tr></thead><tbody id="logsTable"></tbody></table>
-        <table id="excTableWrap"><thead><tr><th></th><th>Exception class</th><th>Exception message</th></tr></thead><tbody id="excTable"></tbody></table>
+        <div class="card">
+          <div class="clabel"># of Total Requests</div>
+          <div class="hero mid" id="ovRequests">0</div>
+          <div class="trend" id="ovRequestsT"></div>
+        </div>
+        <div class="card">
+          <div class="clabel">Cost</div>
+          <div class="hero mid" id="ovCost">$0</div>
+          <div class="trend" id="ovCostT"></div>
+        </div>
       </div>
-    </div>
-    <div id="spanDetail"></div>
-  </div>
-</section>
 
-<section id="view-audit" class="view">
-  <h1 style="font-size:24px;margin:4px 0 2px">GenAI Compliance Audit</h1>
-  <div class="dim" style="font-size:12px;margin-bottom:20px" id="auRange"></div>
-  <div class="grid g2">
-    <div>
-      <div class="sec" style="margin-top:0">Auditing Events</div>
-      <div class="qblock"><div class="ln">1<br>2<br>3<br>4</div><div class="code">fetch spans
-| filter matchesValue(event.type, "agentguard.security")
-| summarize count() by: { gen_ai.model }
-| filter gen_ai.model != ""</div><span class="copy" onclick="toast('Query copied')">⧉</span></div>
-      <div class="card" style="margin-top:12px;padding:6px 0">
-        <table><thead><tr><th>llm model <span class="sort">⇅</span></th><th style="text-align:right">events <span class="sort">⇅</span></th></tr></thead><tbody id="auModels"></tbody></table>
+      <div class="grid g4" style="margin-top:12px">
+        <div class="card">
+          <div class="clabel">Service Health</div>
+          <div id="ovDonut" style="height:170px"></div>
+        </div>
+        <div class="card">
+          <div class="clabel">AVG Request Duration</div>
+          <div class="hero mid" id="ovAvg">—</div>
+          <div class="trend" id="ovAvgT"></div>
+        </div>
+        <div class="card">
+          <div class="clabel">P99 Request Duration</div>
+          <div class="hero mid" id="ovP99">—</div>
+          <div class="trend" id="ovP99T"></div>
+        </div>
+        <div class="card">
+          <div class="clabel">Cerbere Activity</div>
+          <div id="ovHeatmap"></div>
+        </div>
       </div>
-    </div>
-    <div><div class="sec" style="margin-top:0">Trend</div><div class="card"><div class="chart tall" id="auTrend" style="height:330px"></div></div></div>
-  </div>
-  <div class="sec">Audit Trail</div>
-  <div class="card" style="padding:6px 0;overflow-x:auto">
-    <table style="min-width:1100px"><thead><tr><th>timestamp <span class="sort">⇅</span></th><th>event.id <span class="sort">⇅</span></th><th>event.provider <span class="sort">⇅</span></th><th>event.type <span class="sort">⇅</span></th><th>gen_ai.model <span class="sort">⇅</span></th><th>gen_ai.prompt <span class="sort">⇅</span></th><th>gen_ai.role <span class="sort">⇅</span></th><th>gen_ai.system <span class="sort">⇅</span></th><th>gen_ai.type <span class="sort">⇅</span></th></tr></thead><tbody id="auTrail"></tbody></table>
-  </div>
-</section>
 
-</main>
+      <div class="sec">Service Quality &amp; Guardrails</div>
+      <div class="grid g5" id="gqBig"></div>
+      <div class="grid g5" style="margin-top:12px" id="gqSmall"></div>
+
+      <div class="sec">End-To-End Tracing &amp; Debugging</div>
+      <div class="card">
+        <div class="clabel">Top 10 expensive prompts</div>
+        <table>
+          <thead>
+            <tr>
+              <th>prompt <span class="sort">⇅</span></th>
+              <th>response <span class="sort">⇅</span></th>
+              <th>trace.id <span class="sort">⇅</span></th>
+              <th>token <span class="sort">⇅</span></th>
+              <th>cost <span class="sort">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody id="expTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         HEALTH
+    ========================================================= -->
+    <section id="view-health" class="view active">
+      <div class="sec">
+        <span class="ico"><span class="ui-icon" data-icon="latency"></span></span>
+        Traffic and Latency
+        <button class="info" type="button" onclick="showInfoPopover(event,'traffic')">i</button>
+      </div>
+      <div class="stat-tabs" id="latTabs">
+        <button class="active" data-s="avg">AVG</button>
+        <button data-s="p50">p50</button>
+        <button data-s="p90">p90</button>
+        <button data-s="p95">p95</button>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Time to response</div>
+          <div class="hero" style="text-align:center" id="ttrHero">—</div>
+          <div class="chart" id="ttrChart"></div>
+        </div>
+        <div class="card">
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Response time per model</div>
+          <div id="rtModel" style="height:290px"></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <span class="ico">◈</span> Cost
+        <button class="info" type="button" onclick="showInfoPopover(event,'cost')">i</button>
+      </div>
+      <div class="grid g3">
+        <div class="card">
+          <button class="alert-btn" type="button" onclick="openAlertModal('token_count','Token count')">+ New alert</button>
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Token count</div>
+          <div class="hero" id="tokHero">0</div>
+          <div id="tokHeroAlertFlag"></div>
+        </div>
+        <div class="card">
+          <button class="alert-btn" type="button" onclick="openAlertModal('avg_cost_per_request','Average cost per request')">+ New alert</button>
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Average cost per request</div>
+          <div class="hero" id="avgCostHero">—</div>
+          <div id="avgCostHeroAlertFlag"></div>
+          <div class="chart" id="avgCostChart" style="height:120px"></div>
+        </div>
+        <div class="card">
+          <button class="alert-btn" type="button" onclick="openAlertModal('token_forecast','Token usage forecast')">+ New alert</button>
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Token usage forecast</div>
+          <div class="chart tall" id="tokForecast"></div>
+          <div class="legend">
+            <span><i style="background:var(--purple2)"></i> Total amount of tokens used</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <span class="ico"><span class="ui-icon" data-icon="security"></span></span>
+        Guardrails
+        <button class="info" type="button" onclick="showInfoPopover(event,'guardrails')">i</button>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Number of requests with guardrail enabled</div>
+          <div class="hero" id="grHero">0</div>
+        </div>
+        <div class="card">
+          <button class="menu" type="button" onclick="openCardMenu(event,this)">⋮</button>
+          <div class="clabel">Guardrail activation by type</div>
+          <div class="chart tall" id="grStacked"></div>
+          <div class="legend" id="grLegend"></div>
+        </div>
+      </div>
+
+      <div class="sec"><span class="ico">◎</span> Tokens per model</div>
+      <div class="card"><div id="tokModel" style="min-height:60px"></div></div>
+    </section>
+
+    <!-- =========================================================
+         TRACING / EXPLORER
+    ========================================================= -->
+    <section id="view-tracing" class="view">
+      <div class="tr-head">
+        <span>⇄</span>
+        <span class="name">Cerbere workflow</span>
+        <select id="traceSelect" class="pill" style="background:var(--card);color:var(--text);border:1px solid var(--border2)"></select>
+        <button class="pill" type="button" onclick="openTrajectoryPanel(state.selTrace)" style="cursor:pointer">Timeline</button>
+        <span id="trDate" class="dim"></span>
+        <span><span class="ui-icon" data-icon="latency"></span> Duration: <b id="trDur">—</b></span>
+        <span class="err"><span class="ui-icon" data-icon="error"></span> Errors: <b id="trErr">0</b></span>
+        <span class="mono dim">ID: <span id="trId"></span> ⧉</span>
+        <span class="right">
+          <span onclick="openTraceRaw()" style="cursor:pointer" title="Open raw trace data in a new tab">Open with ⊞</span>
+          <span id="btnCloseDetails" onclick="toggleTraceDetails()" style="cursor:pointer" title="Hide the logs/exceptions panel">Close details</span>
+          <span id="btnMinimize" onclick="toggleTraceMinimize()" style="cursor:pointer" title="Collapse this trace view">Minimize</span>
+        </span>
+      </div>
+      <div class="tr-body" id="trBody">
+        <div>
+          <div class="card" style="padding:12px">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+              <input class="searchbox" id="spanSearch" placeholder="Search name, endpoint, service, or attributes" style="max-width:340px">
+              <span class="pilltag" id="spanCount">0 spans</span>
+            </div>
+            <div class="axis">
+              <span id="ax0">0 ms</span>
+              <span id="ax1"></span>
+              <span id="ax2"></span>
+            </div>
+            <div id="spanTree"></div>
+          </div>
+          <div class="card" id="trDetailsCard" style="margin-top:12px;padding:12px">
+            <div class="subtabs">
+              <span id="tabLogs" onclick="switchTraceTab('logs')">Logs</span>
+              <span id="tabExceptions" class="active" onclick="switchTraceTab('exceptions')">Exceptions <span class="n" id="excN">0</span></span>
+            </div>
+            <table id="logsTableWrap" style="display:none">
+              <thead><tr><th>time</th><th>span</th><th>detail</th></tr></thead>
+              <tbody id="logsTable"></tbody>
+            </table>
+            <table id="excTableWrap">
+              <thead><tr><th></th><th>Exception class</th><th>Exception message</th></tr></thead>
+              <tbody id="excTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="spanDetail"></div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         SECURITY / COMPLIANCE AUDIT
+    ========================================================= -->
+    <section id="view-audit" class="view">
+      <div class="audit-header">
+        <div>
+          <h1 style="font-size:24px;margin:4px 0 2px">Security Audit</h1>
+          <div class="dim" style="font-size:12px" id="auRange"></div>
+        </div>
+        <div class="audit-header-actions">
+          <div class="audit-export-wrap" style="position:relative;">
+            <button class="btn" type="button" onclick="toggleAuditExportMenu(event, this)" style="display:inline-flex; align-items:center; gap:8px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px; height:10px; opacity:.6;">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <div id="auditExportMenu" class="popover" style="min-width:220px; top:42px; right:0; left:auto;">
+              <button onclick="exportAudit('csv')">
+                <span style="display:inline-flex; align-items:center; gap:8px;">
+                  <span style="width:18px; height:18px; display:grid; place-items:center; background:var(--green); color:#000; border-radius:4px; font-size:9px; font-weight:700;">CSV</span>
+                  Export as CSV <span style="margin-left:auto; font-size:10px; color:var(--dim);">Excel / Sheets</span>
+                </span>
+              </button>
+              <button onclick="exportAudit('json')">
+                <span style="display:inline-flex; align-items:center; gap:8px;">
+                  <span style="width:18px; height:18px; display:grid; place-items:center; background:var(--purple2); color:#000; border-radius:4px; font-size:9px; font-weight:700;">{}</span>
+                  Export as JSON <span style="margin-left:auto; font-size:10px; color:var(--dim);">API / Logs</span>
+                </span>
+              </button>
+              <div style="border-top:1px solid var(--border); margin:6px 0;"></div>
+              <button onclick="exportAudit('markdown')">
+                <span style="display:inline-flex; align-items:center; gap:8px;">
+                  <span style="width:18px; height:18px; display:grid; place-items:center; background:var(--blue); color:#000; border-radius:4px; font-size:10px; font-weight:700;">M↓</span>
+                  Export as Markdown <span style="margin-left:auto; font-size:10px; color:var(--dim);">Reports</span>
+                </span>
+              </button>
+            </div>
+          </div>
+          <button class="btn" type="button" onclick="refreshAudit()">
+            <span class="ui-icon" data-icon="refresh"></span> Refresh
+          </button>
+        </div>
+      </div>
+
+      <div class="sec">Security overview</div>
+      <div class="grid g4 security-overview-grid" id="securityOverview">
+        <div class="card security-stat-card" data-security-stat="total">
+          <div class="clabel">Security events</div>
+          <div class="hero mid" id="auTotalEvents">0</div>
+          <div class="trend" id="auTotalEventsTrend"></div>
+        </div>
+        <div class="card security-stat-card" data-security-stat="blocked">
+          <div class="clabel">Blocked</div>
+          <div class="hero mid" id="auBlockedEvents">0</div>
+          <div class="trend" id="auBlockedTrend"></div>
+        </div>
+        <div class="card security-stat-card" data-security-stat="flagged">
+          <div class="clabel">Flagged</div>
+          <div class="hero mid" id="auFlaggedEvents">0</div>
+          <div class="trend" id="auFlaggedTrend"></div>
+        </div>
+        <div class="card security-stat-card" data-security-stat="high-risk">
+          <div class="clabel">High risk</div>
+          <div class="hero mid" id="auHighRiskEvents">0</div>
+          <div class="trend" id="auHighRiskTrend"></div>
+        </div>
+      </div>
+
+      <div class="grid g4" style="margin-top:12px" id="securitySecondaryStats">
+        <div class="card"><div class="clabel">Allowed</div><div class="hero small" id="auAllowedEvents">0</div></div>
+        <div class="card"><div class="clabel">Require approval</div><div class="hero small" id="auApprovalEvents">0</div></div>
+        <div class="card"><div class="clabel">Critical risk</div><div class="hero small" id="auCriticalEvents">0</div></div>
+        <div class="card"><div class="clabel">Agents affected</div><div class="hero small" id="auAffectedAgents">0</div></div>
+      </div>
+
+      <div class="grid g2 audit-main-grid">
+        <div>
+          <div class="sec" style="margin-top:0">Security events</div>
+          <div class="qblock">
+            <div class="ln">1<br>2<br>3<br>4</div>
+            <div class="code">fetch spans<br>| filter matchesValue(event.type, "agentguard.security")<br>| summarize count() by: { gen_ai.model }<br>| filter gen_ai.model != ""</div>
+            <span class="copy" onclick="copyAuditQuery()" title="Copy query">⧉</span>
+          </div>
+          <div class="card" style="margin-top:12px;padding:6px 0">
+            <table>
+              <thead><tr><th>LLM model <span class="sort">⇅</span></th><th style="text-align:right">events <span class="sort">⇅</span></th></tr></thead>
+              <tbody id="auModels"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="sec" style="margin-top:0">Security trend</div>
+          <div class="card">
+            <div class="audit-chart-toolbar" id="auTrendControls">
+              <button type="button" class="stat-tab active" data-audit-trend="events">Events</button>
+              <button type="button" class="stat-tab" data-audit-trend="decisions">Decisions</button>
+              <button type="button" class="stat-tab" data-audit-trend="risk">Risk</button>
+            </div>
+            <div class="chart tall" id="auTrend" style="height:300px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">Investigate events</div>
+      <div class="card audit-filters-card">
+        <div class="audit-filters">
+          <div class="audit-filter">
+            <label for="auditSearch">Search</label>
+            <input id="auditSearch" class="field" type="search" placeholder="Search event, tool, prompt, agent..." autocomplete="off">
+          </div>
+          <div class="audit-filter">
+            <label for="auditAgentFilter">Agent</label>
+            <select id="auditAgentFilter" class="field"><option value="">All agents</option></select>
+          </div>
+          <div class="audit-filter">
+            <label for="auditModelFilter">Model</label>
+            <select id="auditModelFilter" class="field"><option value="">All models</option></select>
+          </div>
+          <div class="audit-filter">
+            <label for="auditRiskFilter">Risk</label>
+            <select id="auditRiskFilter" class="field">
+              <option value="">All risks</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="audit-filter">
+            <label for="auditDecisionFilter">Decision</label>
+            <select id="auditDecisionFilter" class="field">
+              <option value="">All decisions</option>
+              <option value="blocked">Blocked</option>
+              <option value="flagged">Flagged</option>
+              <option value="allowed">Allowed</option>
+              <option value="require_approval">Require approval</option>
+            </select>
+          </div>
+          <div class="audit-filter">
+            <label for="auditDetectionFilter">Detection</label>
+            <select id="auditDetectionFilter" class="field"><option value="">All detections</option></select>
+          </div>
+          <div class="audit-filter">
+            <label for="auditToolFilter">Tool</label>
+            <select id="auditToolFilter" class="field"><option value="">All tools</option></select>
+          </div>
+          <div class="audit-filter-actions">
+            <button type="button" class="btn" onclick="resetAuditFilters()">Clear filters</button>
+          </div>
+        </div>
+        <div class="audit-filter-summary" id="auditFilterSummary">Showing all security events</div>
+      </div>
+
+      <div class="sec">Audit Trail</div>
+      <div class="card audit-trail-card" style="padding:6px 0;overflow-x:auto">
+        <table class="audit-table" style="min-width:1500px">
+          <thead>
+            <tr>
+              <th>timestamp <span class="sort">⇅</span></th>
+              <th>event.id <span class="sort">⇅</span></th>
+              <th>agent <span class="sort">⇅</span></th>
+              <th>event.provider <span class="sort">⇅</span></th>
+              <th>event.type <span class="sort">⇅</span></th>
+              <th>model <span class="sort">⇅</span></th>
+              <th>tool <span class="sort">⇅</span></th>
+              <th>risk <span class="sort">⇅</span></th>
+              <th>detection <span class="sort">⇅</span></th>
+              <th>decision <span class="sort">⇅</span></th>
+              <th>policy <span class="sort">⇅</span></th>
+              <th>role <span class="sort">⇅</span></th>
+              <th>type <span class="sort">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody id="auTrail"></tbody>
+        </table>
+      </div>
+
+      <div id="auditEmptyState" class="card audit-empty-state" style="display:none">
+        <div class="audit-empty-icon">◌</div>
+        <div class="audit-empty-title">No security events found</div>
+        <div class="audit-empty-text">No events match the current time range and filters.</div>
+        <button type="button" class="btn" onclick="resetAuditFilters()">Clear filters</button>
+      </div>
+    </section>
+
+  </main>
 </div>
 
+<!-- =========================================================
+     SECURITY EVENT DETAIL DRAWER
+========================================================= -->
+<div id="securityEventPanel" class="drawer-wrap" onclick="if(event.target===this)closeSecurityEventPanel()">
+  <aside class="drawer wide security-event-drawer" role="dialog" aria-modal="true" aria-labelledby="securityEventTitle">
+    <div class="drawer-head">
+      <div class="grow">
+        <div class="drawer-title" id="securityEventTitle">Security event</div>
+        <div class="drawer-sub" id="securityEventSubtitle">Security decision and evidence</div>
+      </div>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closeSecurityEventPanel()">×</button>
+    </div>
+ 
+    <div class="drawer-body security-event-body">
+      <div class="security-event-summary">
+        <div class="security-event-main">
+          <div class="security-event-label">Event</div>
+          <div class="security-event-name" id="securityEventName">—</div>
+          <div class="mono dim" id="securityEventId">—</div>
+        </div>
+        <div class="security-event-status" id="securityEventStatus">—</div>
+      </div>
+
+      <div class="security-detail-section">
+        <div class="security-detail-title">Event context</div>
+        <div class="security-detail-grid">
+          <div class="security-detail-item"><span>Timestamp</span><b id="securityEventTimestamp">—</b></div>
+          <div class="security-detail-item"><span>Agent</span><b id="securityEventAgent">—</b></div>
+          <div class="security-detail-item"><span>Model</span><b id="securityEventModel">—</b></div>
+          <div class="security-detail-item"><span>Provider</span><b id="securityEventProvider">—</b></div>
+          <div class="security-detail-item"><span>Role</span><b id="securityEventRole">—</b></div>
+          <div class="security-detail-item"><span>Event type</span><b id="securityEventType">—</b></div>
+          <div class="security-detail-item"><span>AI type</span><b id="securityEventAiType">—</b></div>
+          <div class="security-detail-item"><span>Tool</span><b id="securityEventTool">—</b></div>
+        </div>
+      </div>
+
+      <div class="security-detail-section security-decision-section">
+        <div class="security-detail-title">Security decision</div>
+        <div class="security-decision-grid">
+          <div class="security-decision-box">
+            <span class="detail-label">Risk</span>
+            <strong id="securityEventRisk" class="security-risk-value">—</strong>
+          </div>
+          <div class="security-decision-box">
+            <span class="detail-label">Decision</span>
+            <strong id="securityEventDecision" class="security-decision-value">—</strong>
+          </div>
+          <div class="security-decision-box">
+            <span class="detail-label">Detection</span>
+            <strong id="securityEventDetection">—</strong>
+          </div>
+          <div class="security-decision-box">
+            <span class="detail-label">Policy</span>
+            <strong id="securityEventPolicy" class="mono">—</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- POLICY EDITOR TRIGGER -->
+      <button type="button" class="tb-btn" style="width:100%; justify-content:center; border-style:dashed;" onclick="openPolicyEditor()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          <path d="M11 4h4"/><path d="M11 8h4"/>
+        </svg>
+        Adjust this policy rule
+      </button>
+
+      <div class="security-detail-section">
+        <div class="security-detail-title">Detection</div>
+        <div class="security-detection-card">
+          <div class="security-detection-row"><span>Detection type</span><strong id="securityDetectionType">—</strong></div>
+          <div class="security-detection-row"><span>Rule</span><strong id="securityDetectionRule" class="mono">—</strong></div>
+          <div class="security-detection-row"><span>Risk score</span><strong id="securityDetectionScore">—</strong></div>
+          <div class="security-detection-reason">
+            <span>Reason</span>
+            <div id="securityDetectionReason" class="security-evidence-text">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="security-detail-section">
+        <div class="security-detail-title">Enforcement</div>
+        <div class="security-enforcement" id="securityEnforcement">
+          <div class="security-enforcement-item"><span>Action</span><strong id="securityEnforcementAction">—</strong></div>
+          <div class="security-enforcement-item"><span>Approval required</span><strong id="securityEnforcementApproval">—</strong></div>
+          <div class="security-enforcement-item"><span>Execution status</span><strong id="securityEnforcementExecution">—</strong></div>
+        </div>
+      </div>
+
+      <div class="security-detail-section">
+        <div class="security-detail-title">Input context</div>
+        <div class="security-evidence-block">
+          <div class="security-evidence-heading">Prompt</div>
+          <pre id="securityEventPrompt" class="security-code">—</pre>
+        </div>
+        <div class="security-evidence-block">
+          <div class="security-evidence-heading">System</div>
+          <pre id="securityEventSystem" class="security-code">—</pre>
+        </div>
+      </div>
+
+      <div class="security-detail-section">
+        <div class="security-detail-title">Tool execution</div>
+        <div class="security-evidence-block">
+          <div class="security-evidence-heading">Tool arguments</div>
+          <pre id="securityEventToolArgs" class="security-code">—</pre>
+        </div>
+      </div>
+
+      <div class="security-detail-section">
+        <div class="security-detail-title">Trace context</div>
+        <div class="security-detail-grid">
+          <div class="security-detail-item"><span>Trace ID</span><b id="securityEventTraceId" class="mono">—</b></div>
+          <div class="security-detail-item"><span>Span ID</span><b id="securityEventSpanId" class="mono">—</b></div>
+          <div class="security-detail-item"><span>Previous event</span><button type="button" class="text-btn" id="securityEventPrevious" onclick="openRelatedSecurityEvent('previous')">—</button></div>
+          <div class="security-detail-item"><span>Next event</span><button type="button" class="text-btn" id="securityEventNext" onclick="openRelatedSecurityEvent('next')">—</button></div>
+        </div>
+      </div>
+
+      <div class="security-event-actions">
+        <button type="button" class="btn" onclick="openSecurityEventTrajectory()">Open trajectory</button>
+        <button type="button" class="btn" onclick="openSecurityEventRaw()">Open raw event</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- =========================================================
+     CONNECT AGENT MODAL
+========================================================= -->
 <div id="connectAgentModal" class="connect-modal" role="dialog" aria-modal="true" aria-labelledby="connectAgentTitle" aria-describedby="connectAgentSubtitle" onclick="if(event.target===this)closeConnectAgentModal()">
   <div class="connect-panel">
     <div class="connect-head">
@@ -214,23 +697,73 @@
       <div id="connectChooser" class="connect-view active">
         <div class="connect-section">Cerbere integrations</div>
         <div class="connect-grid">
-          <button class="connect-card" type="button" onclick="showConnectDetail('python')"><span class="brand-mark python"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/python/default.svg" alt="Python" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">PY</span></span><span><span class="name">Python SDK</span><span class="desc">Native runtime instrumentation for LLM calls and tool execution.</span></span></button>
-          <button class="connect-card" type="button" onclick="showConnectDetail('mcp')"><span class="brand-mark mcp"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/model-context-protocol/default.svg" alt="MCP" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">MCP</span></span><span><span class="name">MCP</span><span class="desc">Security boundary for MCP clients, servers and tool calls.</span></span></button>
-          <button class="connect-card" type="button" onclick="showConnectDetail('http')"><span class="brand-mark http">HTTP</span><span><span class="name">HTTP Gateway</span><span class="desc">Language-agnostic telemetry and policy boundary.</span></span></button>
-          <button class="connect-card" type="button" onclick="showConnectDetail('composio')"><span class="brand-mark composio"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/composio/default.svg" alt="Composio" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">C</span></span><span><span class="name">Composio</span><span class="desc">Guard Composio tool execution with AgentGuard policy enforcement.</span></span></button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('python')">
+            <span class="brand-mark python">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/python/default.svg" alt="Python" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">PY</span>
+            </span>
+            <span><span class="name">Python SDK</span><span class="desc">Native runtime instrumentation for LLM calls and tool execution.</span></span>
+          </button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('mcp')">
+            <span class="brand-mark mcp">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/model-context-protocol/default.svg" alt="MCP" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">MCP</span>
+            </span>
+            <span><span class="name">MCP</span><span class="desc">Security boundary for MCP clients, servers and tool calls.</span></span>
+          </button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('http')">
+            <span class="brand-mark http">HTTP</span>
+            <span><span class="name">HTTP Gateway</span><span class="desc">Language-agnostic telemetry and policy boundary.</span></span>
+          </button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('composio')">
+            <span class="brand-mark composio">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/composio/default.svg" alt="Composio" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">C</span>
+            </span>
+            <span><span class="name">Composio</span><span class="desc">Guard Composio tool execution with AgentGuard policy enforcement.</span></span>
+          </button>
         </div>
         <div class="connect-section">AI providers</div>
         <div class="connect-grid">
-          <button class="connect-card" type="button" onclick="showConnectDetail('openai')"><span class="brand-mark openai"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/default.svg" alt="OpenAI" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">O</span></span><span><span class="name">OpenAI</span><span class="desc">Protect Responses and Chat Completions through the SDK.</span></span></button>
-          <button class="connect-card" type="button" onclick="showConnectDetail('anthropic')"><span class="brand-mark anthropic"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/claude-code/color.svg" alt="Claude" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">A</span></span><span><span class="name">Anthropic</span><span class="desc">Protect Claude requests and tool-use workflows.</span></span></button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('openai')">
+            <span class="brand-mark openai">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/default.svg" alt="OpenAI" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">O</span>
+            </span>
+            <span><span class="name">OpenAI</span><span class="desc">Protect Responses and Chat Completions through the SDK.</span></span>
+          </button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('anthropic')">
+            <span class="brand-mark anthropic">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/claude-code/color.svg" alt="Claude" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">A</span>
+            </span>
+            <span><span class="name">Anthropic</span><span class="desc">Protect Claude requests and tool-use workflows.</span></span>
+          </button>
         </div>
         <div class="connect-section">Agent frameworks</div>
         <div class="connect-grid">
-          <button class="connect-card" type="button" onclick="showConnectDetail('langgraph')"><span class="brand-mark langgraph"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/langgraph/default.svg" alt="LangGraph" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">LG</span></span><span><span class="name">LangGraph</span><span class="desc">Instrument graph nodes and side-effecting tool edges.</span></span></button>
-          <button class="connect-card" type="button" onclick="showConnectDetail('crewai')"><span class="brand-mark crewai"><img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/crewai/default.svg" alt="CrewAI" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="brand-fallback">CA</span></span><span><span class="name">CrewAI</span><span class="desc">Guard CrewAI tools and agent execution paths.</span></span></button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('langgraph')">
+            <span class="brand-mark langgraph">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/langgraph/default.svg" alt="LangGraph" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">LG</span>
+            </span>
+            <span><span class="name">LangGraph</span><span class="desc">Instrument graph nodes and side-effecting tool edges.</span></span>
+          </button>
+          <button class="connect-card" type="button" onclick="showConnectDetail('crewai')">
+            <span class="brand-mark crewai">
+              <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/crewai/default.svg" alt="CrewAI" style="width:23px;height:23px;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+              <span class="brand-fallback">CA</span>
+            </span>
+            <span><span class="name">CrewAI</span><span class="desc">Guard CrewAI tools and agent execution paths.</span></span>
+          </button>
         </div>
-        <div class="connect-note"><b>Security:</b> keep <span class="mono">AGENTGUARD_API_KEY</span> in the agent environment or secret manager. Never expose it in browser code. The admin secret remains server-side and is not used by this onboarding flow.</div>
-        <div class="connect-agents"><div class="connect-section" style="margin-top:0">Already connected?</div><button type="button" class="tb-btn" onclick="closeConnectAgentModal();openAgentsPanel()">Manage connected agents</button></div>
+        <div class="connect-note">
+          <b>Security:</b> keep <span class="mono">AGENTGUARD_API_KEY</span> in the agent environment or secret manager. Never expose it in browser code. The admin secret remains server-side and is not used by this onboarding flow.
+        </div>
+        <div class="connect-agents">
+          <div class="connect-section" style="margin-top:0">Already connected?</div>
+          <button type="button" class="tb-btn" onclick="closeConnectAgentModal();openAgentsPanel()">Manage connected agents</button>
+        </div>
       </div>
       <div id="connectPython" class="connect-view connect-detail"></div>
       <div id="connectMcp" class="connect-view connect-detail"></div>
@@ -244,19 +777,31 @@
   </div>
 </div>
 
+<!-- =========================================================
+     API KEY MODAL
+========================================================= -->
 <div id="apiKeyModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeApiKeyModal()">
   <div class="modal-card" style="width:min(520px,100%)">
-    <div class="modal-head"><h3>API keys</h3><button class="connect-close" type="button" aria-label="Close" onclick="closeApiKeyModal()">×</button></div>
+    <div class="modal-head">
+      <h3>API keys</h3>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closeApiKeyModal()">×</button>
+    </div>
     <p class="modal-sub">Keys let your agents send events to Cerbere. Store them in your secret manager: a key is shown only once, when you create it.</p>
     <div id="apiKeyList" class="key-list"></div>
     <button type="button" id="btnGenerate" class="tb-btn primary wide" onclick="generateNewKey()">+ Generate a new key</button>
     <div id="newKeyDisplay" class="newkey" style="display:none">
       <p>Copy this key now. It will not be shown again.</p>
-      <div class="newkey-row"><input type="text" id="newKeyValue" readonly><button type="button" class="tb-btn" onclick="copyKey()">Copy</button></div>
+      <div class="newkey-row">
+        <input type="text" id="newKeyValue" readonly>
+        <button type="button" class="tb-btn" onclick="copyKey()">Copy</button>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- =========================================================
+     APPROVALS PANEL
+========================================================= -->
 <div id="approvalsPanel" class="drawer-wrap" onclick="if(event.target===this)closeApprovalsPanel()">
   <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="apTitle">
     <div class="drawer-head">
@@ -274,6 +819,9 @@
   </aside>
 </div>
 
+<!-- =========================================================
+     AGENTS PANEL
+========================================================= -->
 <div id="agentsPanel" class="drawer-wrap" onclick="if(event.target===this)closeAgentsPanel()">
   <aside class="drawer wide" role="dialog" aria-modal="true" aria-labelledby="agTitle">
     <div class="drawer-head">
@@ -291,6 +839,9 @@
   </aside>
 </div>
 
+<!-- =========================================================
+     TRAJECTORY PANEL
+========================================================= -->
 <div id="trajectoryPanel" class="drawer-wrap" onclick="if(event.target===this)closeTrajectoryPanel()">
   <aside class="drawer wide" role="dialog" aria-modal="true" aria-labelledby="trTitle">
     <div class="drawer-head">
@@ -307,6 +858,266 @@
   </aside>
 </div>
 
+<!-- =========================================================
+     BUDGET MODAL
+========================================================= -->
+<div id="budgetModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeBudgetModal()">
+  <div class="modal-card" style="width:min(520px, 95vw);">
+    <div class="modal-head">
+      <div>
+        <h3>Set Budget for <span id="budgetAgentName" style="color:var(--purple2)">—</span></h3>
+        <p class="modal-sub">Define a spending limit. When exceeded, Cerbere will block or warn based on your policy.</p>
+      </div>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closeBudgetModal()">×</button>
+    </div>
+    <div style="margin-top:24px; display:flex; flex-direction:column; gap:20px;">
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-size:12px; color:var(--muted);">Current Period Usage</span>
+          <span id="budgetCurrentUsage" style="font-family:var(--mono); font-size:14px; font-weight:600;">$0.00</span>
+        </div>
+        <div style="height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+          <div id="budgetProgressBar" style="height:100%; background:var(--green); width:0%; transition:width 0.3s;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--dim);">
+          <span>$0</span>
+          <span id="budgetMaxDisplay">$0</span>
+        </div>
+      </div>
+      <div>
+        <label class="clabel" style="font-weight:600; color:var(--text);">Maximum Budget (USD)</label>
+        <div style="position:relative;">
+          <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px;">$</span>
+          <input id="budgetAmount" class="field" type="number" step="0.01" min="0" placeholder="e.g., 10.00" style="padding-left:28px;">
+        </div>
+      </div>
+      <div>
+        <label class="clabel" style="font-weight:600; color:var(--text);">Reset Period</label>
+        <select id="budgetPeriod" class="field">
+          <option value="daily">Daily (resets every 24h)</option>
+          <option value="weekly">Weekly (resets every Monday)</option>
+          <option value="monthly">Monthly (resets on 1st)</option>
+        </select>
+      </div>
+      <div>
+        <label class="clabel" style="font-weight:600; color:var(--text); margin-bottom:10px; display:block;">When Budget is Exceeded</label>
+        <div style="display:flex; gap:12px;">
+          <label class="policy-action-card" style="flex:1;">
+            <input type="radio" name="budgetAction" value="warn" style="display:none">
+            <div class="policy-action-inner">
+              <span class="policy-action-icon" style="color:var(--yellow)">⚠️</span>
+              <div>
+                <div style="font-weight:600; font-size:13px;">Warn Only</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Allow requests but alert.</div>
+              </div>
+            </div>
+          </label>
+          <label class="policy-action-card" style="flex:1;">
+            <input type="radio" name="budgetAction" value="block" style="display:none">
+            <div class="policy-action-inner">
+              <span class="policy-action-icon" style="color:var(--red2)">🛑</span>
+              <div>
+                <div style="font-weight:600; font-size:13px;">Block Requests</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Stop all calls immediately.</div>
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="tb-btn" onclick="closeBudgetModal()">Cancel</button>
+      <button class="tb-btn primary" onclick="saveBudget()">Save Budget</button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     ALERT DESTINATIONS MODAL
+========================================================= -->
+<div id="alertDestModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeAlertDestinationsModal()">
+  <div class="modal-card" style="width:min(640px, 95vw);">
+    <div class="modal-head">
+      <div>
+        <h3>Alert Destinations</h3>
+        <p class="modal-sub">Configure where Cerbere sends alerts when thresholds are crossed or critical events occur.</p>
+      </div>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closeAlertDestinationsModal()">×</button>
+    </div>
+    <div style="margin-top:20px;">
+      <div id="destList" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;"></div>
+      <div style="border-top:1px solid var(--border); padding-top:20px;">
+        <div class="clabel" style="font-weight:600; color:var(--text); margin-bottom:12px;">Add New Destination</div>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <label class="clabel">Destination Type</label>
+            <select id="destType" class="field" onchange="updateDestPlaceholder()">
+              <option value="slack">Slack Webhook</option>
+              <option value="discord">Discord Webhook</option>
+              <option value="email">Email</option>
+              <option value="webhook">Custom Webhook (POST)</option>
+            </select>
+          </div>
+          <div>
+            <label class="clabel" id="destUrlLabel">Webhook URL</label>
+            <input id="destUrl" class="field" type="text" placeholder="https://hooks.slack.com/services/T00/B00/XXXX">
+          </div>
+          <div>
+            <label class="clabel">Send Alerts For</label>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                <input type="checkbox" id="destCritical" checked style="accent-color:var(--red2);"> Critical
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                <input type="checkbox" id="destHigh" checked style="accent-color:var(--orange);"> High
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                <input type="checkbox" id="destMedium" style="accent-color:var(--yellow);"> Medium
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                <input type="checkbox" id="destLow" style="accent-color:var(--green);"> Low
+              </label>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:16px;">
+          <button class="tb-btn" onclick="testDestination()">Test Connection</button>
+          <button class="tb-btn primary" onclick="saveDestination()">Add Destination</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     POLICY EDITOR MODAL
+========================================================= -->
+<div id="policyEditorModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closePolicyEditor()">
+  <div class="modal-card" style="width:min(640px, 95vw);">
+    <div class="modal-head">
+      <div>
+        <h3>Adjust Policy Rule</h3>
+        <p class="modal-sub">Modify how Cerbere handles this specific detection. Changes apply in real-time to all matching events.</p>
+      </div>
+      <button class="connect-close" type="button" aria-label="Close" onclick="closePolicyEditor()">×</button>
+    </div>
+    <div style="margin-top:24px; display:flex; flex-direction:column; gap:24px;">
+      <div>
+        <div class="clabel" style="font-weight:600; color:var(--text); font-size:13px; margin-bottom:12px;">1. Scope (Apply to)</div>
+        <div class="grid g2" style="gap:12px;">
+          <div>
+            <label class="clabel">Agent Scope</label>
+            <select id="peAgent" class="field">
+              <option value="all">All Agents</option>
+              <option value="current">This Agent Only</option>
+            </select>
+          </div>
+          <div>
+            <label class="clabel">Event Type</label>
+            <select id="peEventType" class="field" onchange="togglePolicyToolField()">
+              <option value="all">All Events</option>
+              <option value="tool_call">Tool Call</option>
+              <option value="llm_call">LLM Call</option>
+            </select>
+          </div>
+        </div>
+        <div id="peToolNameWrap" style="margin-top:12px; display:none;">
+          <label class="clabel">Target Tool Name</label>
+          <input id="peToolName" class="field" type="text" placeholder="e.g., send_email, execute_sql">
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border); margin:0 -26px;"></div>
+      <div>
+        <div class="clabel" style="font-weight:600; color:var(--text); font-size:13px; margin-bottom:12px;">2. Condition (When)</div>
+        <div class="grid g3" style="gap:12px; align-items:end;">
+          <div>
+            <label class="clabel">Detection Type</label>
+            <select id="peDetectionType" class="field">
+              <option value="pii_detection">PII Detection</option>
+              <option value="prompt_injection">Prompt Injection</option>
+              <option value="tool_policy">Tool Policy</option>
+              <option value="budget_policy">Budget Policy</option>
+              <option value="custom_regex">Custom Regex</option>
+            </select>
+          </div>
+          <div>
+            <label class="clabel">Operator</label>
+            <select id="peOperator" class="field">
+              <option value=">">Score ></option>
+              <option value="<">Score <</option>
+              <option value="==">Equals</option>
+              <option value="contains">Contains</option>
+            </select>
+          </div>
+          <div>
+            <label class="clabel">Threshold / Value</label>
+            <input id="peThreshold" class="field" type="text" placeholder="e.g., 0.85">
+          </div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border); margin:0 -26px;"></div>
+      <div>
+        <div class="clabel" style="font-weight:600; color:var(--text); font-size:13px; margin-bottom:12px;">3. Enforcement Action (Then)</div>
+        <div class="grid g2" style="gap:12px;">
+          <label class="policy-action-card">
+            <input type="radio" name="peAction" value="allow" style="display:none">
+            <div class="policy-action-inner">
+              <span class="policy-action-icon" style="color:var(--green)">🟢</span>
+              <div>
+                <div style="font-weight:600; font-size:13px;">Allow</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Let the request pass silently.</div>
+              </div>
+            </div>
+          </label>
+          <label class="policy-action-card">
+            <input type="radio" name="peAction" value="require_approval" style="display:none">
+            <div class="policy-action-inner">
+              <span class="policy-action-icon" style="color:var(--yellow)">🟡</span>
+              <div>
+                <div style="font-weight:600; font-size:13px;">Require Approval</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Hold for human review.</div>
+              </div>
+            </div>
+          </label>
+          <label class="policy-action-card">
+            <input type="radio" name="peAction" value="block" style="display:none">
+            <div class="policy-action-inner">
+              <span class="policy-action-icon" style="color:var(--red2)">🔴</span>
+              <div>
+                <div style="font-weight:600; font-size:13px;">Block</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Terminate execution immediately.</div>
+              </div>
+            </div>
+          </label>
+          <label class="policy-action-card">
+            <input type="radio" name="peAction" value="redact" style="display:none">
+            <div class="policy-action-inner">
+              <span class="policy-action-icon" style="color:var(--purple2)">🟣</span>
+              <div>
+                <div style="font-weight:600; font-size:13px;">Redact & Log</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Mask sensitive data in transit.</div>
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:28px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:11px; color:var(--dim); display:flex; align-items:center; gap:6px;">
+        <span style="width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green);"></span>
+        Hot-reload: Changes apply immediately.
+      </span>
+      <div style="display:flex; gap:10px;">
+        <button class="tb-btn" onclick="closePolicyEditor()">Cancel</button>
+        <button class="tb-btn primary" onclick="savePolicyRule()">Save Policy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     GLOBAL UI
+========================================================= -->
 <div id="calTooltip" class="cal-tooltip"></div>
 <div id="toast" class="toast"></div>
 
