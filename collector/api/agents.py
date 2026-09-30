@@ -6,9 +6,9 @@ import json
 
 from flask import jsonify, g
 
-from collector.auth import require_auth, require_human_auth
+from collector.auth import require_auth
 from collector.api.helpers import (
-    api_bp, logger, _db_run, _iso_utc, _agent_state, _audit_human_action,
+    api_bp, logger, _db_run, _iso_utc, _agent_state, _audit_human_action, _human_auth,
     _request_agent_id, _agent_status, _AGENT_STATUS,
 )
 
@@ -75,7 +75,7 @@ def api_list_agents():
 
 def _set_agent_status(agent_id, new_status):
     # Décision humaine uniquement : un agent ne doit pas pouvoir se (re)connecter lui-même.
-    if not require_human_auth():
+    if not _human_auth():
         return jsonify({"error": "Human session required"}), 401
     org_id = g.org_id
     actor = getattr(g, "human_email", None) or f"org:{org_id}"
@@ -132,7 +132,7 @@ def _ensure_test_agent(org_id):
 
 @api_bp.route("/api/agents/test", methods=["POST"], endpoint="api_test_agent")
 def api_test_agent():
-    if not require_human_auth():
+    if not _human_auth():
         return jsonify({"error": "Human session required"}), 401
     try:
         _ensure_test_agent(g.org_id)
@@ -144,7 +144,7 @@ def api_test_agent():
 @api_bp.route("/api/approvals/test", methods=["POST"], endpoint="api_test_approval")
 def api_test_approval():
     """Crée une demande d'approbation factice, pour voir la file et la décision de bout en bout."""
-    if not require_human_auth():
+    if not _human_auth():
         return jsonify({"error": "Human session required"}), 401
     approval_id = "test_" + secrets.token_hex(4)
     try:
