@@ -14,9 +14,18 @@ NOTE : ces assertions portent sur le CONTENU, pas sur l'emplacement. Si un
 bloc est extrait vers collector/templates/*.html, il faudra mettre a jour
 l'import dans ce fichier - c'est volontaire : cela force a traiter le
 refactor explicitement plutot qu'a le subir.
+
+MISE A JOUR (commit bb413fb "Move dashboard.js to static directory") :
+le JS du dashboard a ete externalise vers collector/static/dashboard.js.
+DASHBOARD_HTML ne contient donc plus les marqueurs JS (endpoints, fonctions).
+On verifie desormais :
+  - la STRUCTURE sur DASHBOARD_HTML seul (balises equilibrees, ids uniques),
+  - le CONTENU sur DASHBOARD_COMBINED = DASHBOARD_HTML + dashboard.js
+    (ce que le navigateur charge reellement au final).
 """
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -29,6 +38,22 @@ try:
     from collector.dashboard import DASHBOARD_HTML
 except ImportError as exc:  # pragma: no cover
     pytest.skip(f"collector.dashboard indisponible: {exc}", allow_module_level=True)
+
+
+_STATIC_DIR = Path(__file__).resolve().parents[1] / "collector" / "static"
+_DASHBOARD_JS_PATH = _STATIC_DIR / "dashboard.js"
+
+# JS externalise (bb413fb) : le contenu a verifier est HTML + JS.
+# Si dashboard.js n'existe pas (V1 monolithique), la combined = HTML seul
+# et le test reste retro-compatible.
+if _DASHBOARD_JS_PATH.exists():
+    DASHBOARD_COMBINED = (
+        DASHBOARD_HTML
+        + "\n"
+        + _DASHBOARD_JS_PATH.read_text(encoding="utf-8")
+    )
+else:
+    DASHBOARD_COMBINED = DASHBOARD_HTML
 
 
 AUTH_HTML_NAMES = ("SUPABASE_LOGIN_HTML", "LOGIN_HTML", "SIGNUP_HTML")
@@ -129,8 +154,10 @@ def test_auth_html_blocks_are_balanced_html():
 
 
 # ---------------------------------------------------------------------------
-# 2. Marqueurs structurels de DASHBOARD_HTML
+# 2. Marqueurs structurels du dashboard (HTML + JS externes)
 # ---------------------------------------------------------------------------
+# Les ids/panneaux vivent dans DASHBOARD_HTML ; les endpoints et fonctions
+# JS vivent dans dashboard.js -> on cherche dans DASHBOARD_COMBINED.
 
 DASHBOARD_MARKERS = [
     'id="approvalsPanel"',
@@ -162,18 +189,32 @@ DASHBOARD_MARKERS = [
 
 @pytest.mark.parametrize("marker", DASHBOARD_MARKERS)
 def test_dashboard_html_contains_marker(marker):
-    """DASHBOARD_HTML doit contenir chaque marqueur structurel."""
-    assert marker in DASHBOARD_HTML, f"DASHBOARD_HTML : marqueur manquant {marker!r}"
+    """Le dashboard (HTML + dashboard.js) doit contenir chaque marqueur."""
+    assert marker in DASHBOARD_COMBINED, (
+        f"DASHBOARD_COMBINED : marqueur manquant {marker!r}"
+    )
 
 
 def test_dashboard_html_is_non_empty_and_balanced():
-    """DASHBOARD_HTML doit etre un document HTML complet."""
-    assert len(DASHBOARD_HTML) > 50_000, (
-        f"DASHBOARD_HTML semble tronque ({len(DASHBOARD_HTML)} octets)"
-    )
+    """DASHBOARD_HTML (structure seule) doit etre un document complet,
+    et l'ensemble HTML + JS doit rester substantial."""
+    # Structure : sur le HTML seul (le JS n'est pas un document HTML).
     assert DASHBOARD_HTML.count("<html") == DASHBOARD_HTML.count("</html>")
     assert DASHBOARD_HTML.count("<body") == DASHBOARD_HTML.count("</body>")
     assert DASHBOARD_HTML.count("<script") == DASHBOARD_HTML.count("</script>")
+
+    # Taille : sur le combiné — l'externalisation du JS ne doit pas
+    # correspondre à une perte de contenu. Le HTML structurel seul pèse
+    # ~25 Ko, le JS ~30 Ko : > 50 Ko combiné.
+    assert len(DASHBOARD_COMBINED) > 50_000, (
+        f"Dashboard HTML+JS semble tronque ({len(DASHBOARD_COMBINED)} octets)"
+    )
+
+    # Si le JS est externalisé, le HTML doit y faire reference.
+    if _DASHBOARD_JS_PATH.exists():
+        assert "/static/dashboard.js" in DASHBOARD_HTML, (
+            "dashboard.js existe mais DASHBOARD_HTML ne le charge pas"
+        )
 
 
 def test_dashboard_html_has_no_unresolved_jinja():
@@ -244,7 +285,7 @@ def test_dashboard_module_exports_single_html_constant():
 
 
 def test_dashboard_html_has_no_duplicate_ids():
-    """Aucun id HTML ne doit etre duplique dans DASHBOARD_HTML."""
+    """Aucun id HTML ne doit etre duplique (HTML seul — le JS n'a pas d'id)."""
     ids = re.findall(r'(?<![-\w])id="([^"]+)"', DASHBOARD_HTML)
     duplicates = {i for i in ids if ids.count(i) > 1}
     assert not duplicates, f"IDs HTML dupliques dans DASHBOARD_HTML : {duplicates}"

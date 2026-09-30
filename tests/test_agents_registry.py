@@ -45,7 +45,14 @@ def _as_human(api, monkeypatch, org="org-a", email="ciso@acme.io"):
         from flask import g
         g.org_id, g.human_email = org, email
         return True
+
     monkeypatch.setattr(api, "require_human_auth", fake)
+
+    import collector.api.agents as agents
+    import collector.api.approvals as approvals
+
+    monkeypatch.setattr(agents, "require_human_auth", fake)
+    monkeypatch.setattr(approvals, "require_human_auth", fake)
 
 
 def test_agent_registers_on_first_request(app_client):
