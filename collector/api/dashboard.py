@@ -2,11 +2,13 @@
 
 import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 from flask import jsonify, g, request
 
 from collector.db import get_db, is_postgres, _get_db_path, sql_placeholder
-from collector.api.helpers import api_bp, _sqlite_connect
+from collector.api.helpers import api_bp, _sqlite_connect, _as_json, _iso_utc
+from collector.auth import require_auth
 
 
 @api_bp.route("/api/heatmap")
@@ -49,10 +51,11 @@ def api_heatmap():
 
 @api_bp.route("/api/checks/breakdown")
 def api_checks_breakdown():
+    p = sql_placeholder()
     conn = get_db() if is_postgres() else _sqlite_connect()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT security_checks FROM spans WHERE org_id = ? AND security_checks IS NOT NULL",
+        cur.execute(f"SELECT security_checks FROM spans WHERE org_id = {p} AND security_checks IS NOT NULL",
                     (g.org_id,))
         rows = cur.fetchall()
     finally:
@@ -230,10 +233,11 @@ def api_cost_trend():
 
 @api_bp.route("/api/latency/distribution")
 def api_latency_distribution():
+    p = sql_placeholder()
     conn = get_db() if is_postgres() else _sqlite_connect()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT latency_ms FROM spans WHERE org_id = ? AND latency_ms > 0 ORDER BY latency_ms",
+        cur.execute(f"SELECT latency_ms FROM spans WHERE org_id = {p} AND latency_ms > 0 ORDER BY latency_ms",
                     (g.org_id,))
         values = [r[0] for r in cur.fetchall()]
     finally:
@@ -256,12 +260,13 @@ def api_latency_distribution():
 
 @api_bp.route("/api/events/recent")
 def api_recent_events():
+    p = sql_placeholder()
     conn = get_db() if is_postgres() else _sqlite_connect()
     cur = conn.cursor()
     try:
-        cur.execute("""
+        cur.execute(f"""
             SELECT span_type, detection_layer, blocked, block_reason, created_at, security_checks
-            FROM spans WHERE org_id = ? ORDER BY created_at DESC LIMIT 8
+            FROM spans WHERE org_id = {p} ORDER BY created_at DESC LIMIT 8
         """, (g.org_id,))
         events = []
         for r in cur.fetchall():
@@ -312,38 +317,155 @@ def api_trend_daily():
     return jsonify(rows)
 
 
+# ═══════════════════════════════════════════════════════════════
+# AUDIT : trail / summary / event (forme attendue par dashboard.js)
+# ═══════════════════════════════════════════════════════════════
+
+_RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+_AUDIT_COLS = (
+    "span_id, trace_id, span_type, model, blocked, block_reason, detection_layer, "
+    "ml_score, llm_score, llm_reason, security_checks, input_data, agent_id, created_at"
+)
+
+
+def _provider_from_model(model):
+    m = (model or "").lower()
+    for prefix, name in (("gpt", "openai"), ("o1", "openai"), ("o3", "openai"),
+                         ("claude", "anthropic"), ("gemini", "google"),
+                         ("deepseek", "deepseek"), ("llama", "meta"),
+                         ("mistral", "mistral")):
+        if m.startswith(prefix):
+            return name
+    return None
+
+
+def _span_to_event(r, full=False):
+    """Ligne `spans` -> événement d'audit (mêmes clés que celles lues par dashboard.js)."""
+    (span_id, trace_id, span_type, model, blocked, block_reason, layer,
+     ml_score, llm_score, llm_reason, checks_raw, input_raw, agent_id, created_at) = r
+    checks = [c for c in _as_json(checks_raw, []) if isinstance(c, dict)]
+    inp = _as_json(input_raw, {})
+    if not isinstance(inp, dict):
+        inp = {}
+    failed = [c for c in checks if not c.get("passed", True)]
+    risk = "low"
+    for c in failed:
+        lvl = str(c.get("risk_level") or "medium").lower()
+        if _RISK_ORDER.get(lvl, 1) > _RISK_ORDER[risk]:
+            risk = lvl
+    if blocked and _RISK_ORDER[risk] < _RISK_ORDER["high"]:
+        risk = "high"
+    decision = "blocked" if blocked else ("flagged" if failed else "allowed")
+    tool = inp.get("tool") or inp.get("tool_name")
+    first = failed[0] if failed else {}
+    ev = {
+        "event_id": span_id or trace_id,
+        "timestamp": _iso_utc(created_at),
+        "agent": agent_id,
+        "provider": _provider_from_model(model),
+        "event_type": span_type,
+        "model": model,
+        "tool": tool,
+        "risk": risk,
+        "detection": first.get("check_name") or layer,
+        "decision": decision,
+        "policy": (block_reason or "")[:80] or None,
+        "role": None,
+        "ai_type": "LLM" if model else "Tool",
+        "trace_id": trace_id,
+        "span_id": span_id,
+        "prompt": str(inp.get("prompt") or inp.get("tool") or "")[:500],
+    }
+    if full:
+        scores = [x for x in (ml_score, llm_score) if isinstance(x, (int, float))]
+        ev.update({
+            "detection_type": first.get("check_name"),
+            "detection_rule": (first.get("metadata") or {}).get("pattern") if isinstance(first.get("metadata"), dict) else None,
+            "risk_score": max(scores) if scores else None,
+            "detection_reason": llm_reason or first.get("details") or block_reason,
+            "enforcement_action": "block" if blocked else ("flag" if failed else "allow"),
+            "require_approval": False,
+            "execution_status": "prevented" if blocked else "executed",
+            "system_prompt": inp.get("system_prompt"),
+            "tool_args": inp.get("params") or inp.get("arguments") or inp.get("args"),
+            "security_checks": checks,
+        })
+    return ev
+
+
 @api_bp.route("/api/audit/trail")
 def api_audit_trail():
-    if is_postgres():
-        conn = get_db()
+    if not require_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+    p = sql_placeholder()
+    limit = max(1, min(request.args.get("limit", default=200, type=int), 500))
+    conn = get_db() if is_postgres() else _sqlite_connect()
+    try:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT created_at, trace_id, span_id, span_type, detection_layer, model, blocked,
-                   COALESCE(input_data->>'prompt', input_data->>'tool', '') AS prompt
-            FROM spans WHERE org_id = %s ORDER BY created_at DESC LIMIT 50
-        """, (g.org_id,))
-        rows = [
-            {"timestamp": str(r[0]), "trace_id": r[1], "span_id": r[2],
-             "span_type": r[3], "layer": r[4] or "regex", "model": r[5] or "—",
-             "blocked": bool(r[6]), "prompt": (r[7] or "")[:120]}
-            for r in cur.fetchall()
-        ]
+        cur.execute(f"SELECT {_AUDIT_COLS} FROM spans WHERE org_id = {p} "
+                    f"ORDER BY created_at DESC LIMIT {limit}", (g.org_id,))
+        rows = cur.fetchall()
+    finally:
         conn.close()
-    else:
-        conn = _sqlite_connect()
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT created_at, trace_id, span_id, span_type, detection_layer, model, blocked,
-                       COALESCE(json_extract(input_data, '$.prompt'), json_extract(input_data, '$.tool'), '') AS prompt
-                FROM spans WHERE org_id = ? ORDER BY created_at DESC LIMIT 50
-            """, (g.org_id,))
-            rows = [
-                {"timestamp": str(r[0]), "trace_id": r[1], "span_id": r[2],
-                 "span_type": r[3], "layer": r[4] or "regex", "model": r[5] or "—",
-                 "blocked": bool(r[6]), "prompt": (r[7] or "")[:120]}
-                for r in cur.fetchall()
-            ]
-        finally:
-            conn.close()
-    return jsonify(rows)
+    return jsonify([_span_to_event(r) for r in rows])
+
+
+@api_bp.route("/api/audit/summary")
+def api_audit_summary():
+    """Compteurs de l'écran Audit sur 14 jours, calculés depuis les vrais spans."""
+    if not require_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+    p = sql_placeholder()
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=14)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db() if is_postgres() else _sqlite_connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"SELECT blocked, security_checks, agent_id FROM spans "
+                    f"WHERE org_id = {p} AND created_at > {p} LIMIT 50000", (g.org_id, cutoff))
+        rows = cur.fetchall()
+        cur.execute(f"SELECT COUNT(*) FROM approval_requests WHERE org_id = {p} "
+                    f"AND created_at > {p}", (g.org_id, cutoff))
+        approvals = (cur.fetchone() or [0])[0] or 0
+    finally:
+        conn.close()
+
+    out = {"total": len(rows), "blocked": 0, "flagged": 0, "high_risk": 0,
+           "allowed": 0, "critical": 0, "require_approval": int(approvals)}
+    affected = set()
+    for blocked, checks_raw, agent_id in rows:
+        failed = [c for c in _as_json(checks_raw, []) if isinstance(c, dict) and not c.get("passed", True)]
+        worst = max((_RISK_ORDER.get(str(c.get("risk_level") or "medium").lower(), 1) for c in failed), default=0)
+        if blocked:
+            out["blocked"] += 1
+            worst = max(worst, 2)
+        elif failed:
+            out["flagged"] += 1
+        else:
+            out["allowed"] += 1
+        if worst >= 2:
+            out["high_risk"] += 1
+        if worst >= 3:
+            out["critical"] += 1
+        if (blocked or failed) and agent_id:
+            affected.add(agent_id)
+    out["affected_agents"] = len(affected)
+    return jsonify(out)
+
+
+@api_bp.route("/api/audit/event/<event_id>")
+def api_audit_event(event_id):
+    if not require_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+    p = sql_placeholder()
+    conn = get_db() if is_postgres() else _sqlite_connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"SELECT {_AUDIT_COLS} FROM spans WHERE org_id = {p} "
+                    f"AND (span_id = {p} OR trace_id = {p}) ORDER BY created_at DESC LIMIT 1",
+                    (g.org_id, event_id, event_id))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(_span_to_event(row, full=True))
