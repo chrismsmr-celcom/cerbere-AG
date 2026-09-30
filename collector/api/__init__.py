@@ -13,6 +13,7 @@ Découpage de l'ancien api.py monolithique :
   approvals      : HITL — file d'approbations
   health         : health / readiness
   alert_rules    : CRUD alert rules
+  settings       : budgets par agent, règles de politique, destinations d'alertes
 """
 
 from collector.api.helpers import api_bp  # noqa: F401
@@ -54,3 +55,4 @@ import collector.api.agents         # noqa: F401,E402
 import collector.api.approvals      # noqa: F401,E402
 import collector.api.health         # noqa: F401,E402
 import collector.api.alert_rules    # noqa: F401,E402
+import collector.api.settings       # noqa: F401,E402
