@@ -131,6 +131,17 @@ def _db_run(sql, params=(), fetch=None, commit=False):
         conn.close()
 
 
+def _human_auth():
+    """Appelle collector.api.require_human_auth AU MOMENT DE L'APPEL.
+
+    Les modules de routes ne doivent pas importer require_human_auth
+    directement : leur copie locale ne verrait pas le monkeypatch des tests
+    (collector.api.require_human_auth) et les routes humaines repondraient 401.
+    """
+    import collector.api as _pkg
+    return _pkg.require_human_auth()
+
+
 # ── Sérialisation des events (Trajectory Timeline) ──────────────────────────
 
 _EVENT_JSON_FIELDS = ["arguments", "arguments_sanitized", "result", "policy_chain", "risk_contributors"]
