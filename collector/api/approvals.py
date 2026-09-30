@@ -4,9 +4,9 @@ import json
 
 from flask import jsonify, g, request
 
-from collector.auth import require_auth, require_human_auth
+from collector.auth import require_auth
 from collector.api.helpers import (
-    api_bp, logger, _db_run, _as_json, _iso_utc, _audit_human_action,
+    api_bp, logger, _db_run, _as_json, _iso_utc, _audit_human_action, _human_auth,
     _request_agent_id, _reject_if_agent_disconnected,
 )
 
@@ -67,7 +67,7 @@ def api_list_approvals():
 
 def _resolve_approval(approval_id, new_status):
     # Un agent (clé API) ne doit JAMAIS pouvoir valider sa propre demande.
-    if not require_human_auth():
+    if not _human_auth():
         return jsonify({"error": "Human session required"}), 401
 
     org_id = g.org_id
