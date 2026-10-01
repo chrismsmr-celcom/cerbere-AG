@@ -5,15 +5,21 @@ Application factory and Flask configuration for Cerbere / AgentGuard.
 import os
 import secrets
 import time
+
 import structlog
-from flask import Flask
-from mcp_routes import mcp_bp
-from flask_cors import CORS
-from collector.extensions import limiter
-from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime
+
 from flask import Flask, jsonify
-from .db import get_db
+from flask_cors import CORS
+from itsdangerous import URLSafeTimedSerializer
+
+from collector.extensions import limiter
+from collector.db import get_db
+
+
+# ==============================================================
+# STRUCTLOG
+# ==============================================================
 
 structlog.configure(
     processors=[
@@ -26,10 +32,18 @@ structlog.configure(
 
 logger = structlog.get_logger("agentguard.collector")
 
+
+# ==============================================================
+# APPLICATION FACTORY
+# ==============================================================
+
 def create_app() -> Flask:
     """Create and configure the Flask application."""
 
-    static_folder = os.path.join(os.path.dirname(__file__), "static")
+    static_folder = os.path.join(
+        os.path.dirname(__file__),
+        "static",
+    )
 
     app = Flask(
         __name__,
@@ -37,16 +51,18 @@ def create_app() -> Flask:
         static_url_path="/static",
     )
 
-    # ==============================================================
+    # ==========================================================
     # ENVIRONMENT
-    # ==============================================================
+    # ==========================================================
 
     app.config["ENVIRONMENT"] = os.environ.get(
         "AGENTGUARD_ENVIRONMENT",
         "development",
     )
 
-    is_production = app.config["ENVIRONMENT"] == "production"
+    is_production = (
+        app.config["ENVIRONMENT"].lower() == "production"
+    )
 
     app.config["ALLOW_LEGACY_SYSTEM_KEY"] = (
         os.environ.get(
@@ -56,18 +72,21 @@ def create_app() -> Flask:
         == "true"
     )
 
-    # ==============================================================
+    # ==========================================================
     # FLASK SECRET
-    # ==============================================================
+    # ==========================================================
 
-    flask_secret = os.environ.get("AGENTGUARD_FLASK_SECRET")
+    flask_secret = os.environ.get(
+        "AGENTGUARD_FLASK_SECRET"
+    )
 
     if not flask_secret:
         if is_production:
             raise RuntimeError(
-                "AGENTGUARD_FLASK_SECRET must be configured in production. "
-                "Generate one with: "
-                "python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                "AGENTGUARD_FLASK_SECRET must be configured "
+                "in production. Generate one with: "
+                "python -c "
+                "\"import secrets; print(secrets.token_urlsafe(32))\""
             )
 
         flask_secret = secrets.token_urlsafe(32)
@@ -78,9 +97,9 @@ def create_app() -> Flask:
 
     app.secret_key = flask_secret
 
-    # ==============================================================
+    # ==========================================================
     # REQUEST LIMITS
-    # ==============================================================
+    # ==========================================================
 
     app.config["MAX_CONTENT_LENGTH"] = int(
         os.environ.get(
@@ -89,25 +108,26 @@ def create_app() -> Flask:
         )
     )
 
-    # ==============================================================
+    # ==========================================================
     # CORS
-    # ==============================================================
+    # ==========================================================
 
     cors_origins = [
-        x.strip()
-        for x in os.environ.get(
+        origin.strip()
+        for origin in os.environ.get(
             "AGENTGUARD_CORS_ORIGINS",
             "",
         ).split(",")
-        if x.strip()
+        if origin.strip()
     ]
 
     if is_production:
         if not cors_origins:
             raise RuntimeError(
-                "AGENTGUARD_CORS_ORIGINS must be configured in production. "
-                "Example: "
-                "AGENTGUARD_CORS_ORIGINS=https://dashboard.example.com"
+                "AGENTGUARD_CORS_ORIGINS must be configured "
+                "in production. Example: "
+                "AGENTGUARD_CORS_ORIGINS="
+                "https://dashboard.example.com"
             )
 
         CORS(
@@ -120,6 +140,7 @@ def create_app() -> Flask:
             "cors_strict_mode",
             origins=cors_origins,
         )
+
     else:
         CORS(
             app,
@@ -127,9 +148,9 @@ def create_app() -> Flask:
             supports_credentials=True,
         )
 
-    # ==============================================================
+    # ==========================================================
     # RATE LIMITING
-    # ==============================================================
+    # ==========================================================
 
     limiter_storage = os.environ.get(
         "AGENTGUARD_LIMITER_STORAGE",
@@ -144,33 +165,35 @@ def create_app() -> Flask:
     )
 
     if is_production:
+
         if (
             limiter_storage == "memory://"
             and web_concurrency > 1
         ):
             raise RuntimeError(
-                "AGENTGUARD_LIMITER_STORAGE must be 'redis://...' "
-                "in production when "
+                "AGENTGUARD_LIMITER_STORAGE must be "
+                "'redis://...' in production when "
                 f"WEB_CONCURRENCY={web_concurrency} > 1. "
-                "memory:// allows rate-limit bypass via replica hopping. "
-                "Example: "
-                "AGENTGUARD_LIMITER_STORAGE=redis://your-redis:6379/0"
+                "memory:// allows rate-limit bypass via "
+                "replica hopping."
             )
 
         if limiter_storage == "memory://":
             logger.warning(
                 "rate_limiter_memory_single_worker",
                 note=(
-                    "Safe with WEB_CONCURRENCY=1, but switch to Redis "
-                    "for multi-replica deployments"
+                    "Safe with WEB_CONCURRENCY=1, but switch "
+                    "to Redis for multi-replica deployments"
                 ),
                 web_concurrency=web_concurrency,
             )
+
         else:
             logger.info(
                 "rate_limiter_redis_mode",
                 storage=limiter_storage,
             )
+
     else:
         logger.info(
             "rate_limiter_mode",
@@ -181,13 +204,17 @@ def create_app() -> Flask:
         "AGENTGUARD_RATE_LIMIT",
         "120 per minute",
     )
-    app.config["RATELIMIT_STORAGE_URI"] = limiter_storage
-    limiter.init_app(app)
-    app.limiter = limiter  # garde l'attribut pour compat avec le code existant
 
-    # ==============================================================
+    app.config["RATELIMIT_STORAGE_URI"] = limiter_storage
+
+    limiter.init_app(app)
+
+    # Compatibility with existing code.
+    app.limiter = limiter
+
+    # ==========================================================
     # AUTHENTICATION SERIALIZERS
-    # ==============================================================
+    # ==========================================================
 
     app.auth_serializer = URLSafeTimedSerializer(
         app.secret_key,
@@ -209,7 +236,10 @@ def create_app() -> Flask:
         == "true"
     )
 
-    # Human authentication / magic-link configuration.
+    # ==========================================================
+    # HUMAN AUTHENTICATION
+    # ==========================================================
+
     app.config["MAGIC_LINK_ENABLED"] = (
         os.environ.get(
             "AGENTGUARD_MAGIC_LINK_ENABLED",
@@ -285,11 +315,13 @@ def create_app() -> Flask:
         == "true"
     )
 
-    app.config["HUMAN_AUTH_COOKIE"] = "cerbere_session"
+    app.config["HUMAN_AUTH_COOKIE"] = (
+        "cerbere_session"
+    )
 
-    # ==============================================================
+    # ==========================================================
     # DATABASE
-    # ==============================================================
+    # ==========================================================
 
     app.config["DB_TYPE"] = os.environ.get(
         "AGENTGUARD_DB_TYPE",
@@ -301,9 +333,9 @@ def create_app() -> Flask:
         "",
     )
 
-    # ==============================================================
+    # ==========================================================
     # MACHINE AUTHENTICATION
-    # ==============================================================
+    # ==========================================================
 
     app.config["API_KEY"] = os.environ.get(
         "AGENTGUARD_API_KEY",
@@ -322,33 +354,35 @@ def create_app() -> Flask:
         "30 per minute",
     )
 
-    # ==============================================================
+    # ==========================================================
     # PRODUCTION FAIL-CLOSED
-    # ==============================================================
+    # ==========================================================
 
     if is_production:
+
         if not app.config["API_KEY"]:
             raise RuntimeError(
-                "AGENTGUARD_API_KEY must be configured in production. "
-                "Set it via environment variable. "
-                "Refusing to start without it."
+                "AGENTGUARD_API_KEY must be configured "
+                "in production. Refusing to start without it."
             )
 
         if not app.config["ADMIN_SECRET"]:
             raise RuntimeError(
-                "AGENTGUARD_ADMIN_SECRET must be configured in production. "
-                "Admin endpoints (/admin/*, /api/key) require this secret. "
-                "Refusing to start with partial security configuration. "
-                "Generate one with: "
-                "python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                "AGENTGUARD_ADMIN_SECRET must be configured "
+                "in production. Admin endpoints require this "
+                "secret. Refusing to start."
             )
 
-    # ==============================================================
+    # ==========================================================
     # DEVELOPMENT API KEY
-    # ==============================================================
+    # ==========================================================
 
     if not app.config["API_KEY"]:
-        if app.config["ENVIRONMENT"] == "development":
+
+        if (
+            app.config["ENVIRONMENT"].lower()
+            == "development"
+        ):
             app.config["API_KEY"] = (
                 "ag-" + secrets.token_urlsafe(32)
             )
@@ -358,10 +392,13 @@ def create_app() -> Flask:
             logger.warning(
                 "api_key_generated_in_memory_dev_only"
             )
+
         else:
             raise RuntimeError(
-                "AGENTGUARD_API_KEY required in non-development environments"
+                "AGENTGUARD_API_KEY required in "
+                "non-development environments"
             )
+
     else:
         app.config["_API_KEY_WAS_GENERATED"] = False
 
@@ -377,28 +414,27 @@ def create_app() -> Flask:
             ),
         )
 
-    # ==============================================================
+    # ==========================================================
     # BLUEPRINTS
-    # ==============================================================
+    # ==========================================================
 
     _register_blueprints(app)
 
-    # ==============================================================
+    # ==========================================================
     # GLOBAL ERROR HANDLER
-    # ==============================================================
+    # ==========================================================
 
     @app.errorhandler(Exception)
-    def handle_unexpected_error(e):
+    def handle_unexpected_error(error):
         from werkzeug.exceptions import HTTPException
 
-        if isinstance(e, HTTPException):
-            return e
+        if isinstance(error, HTTPException):
+            return error
 
-        app.logger.exception(
-            "Unhandled error"
+        logger.exception(
+            "unhandled_application_error",
+            error_type=type(error).__name__,
         )
-
-        from flask import jsonify
 
         return jsonify(
             {
@@ -406,9 +442,9 @@ def create_app() -> Flask:
             }
         ), 500
 
-    # ==============================================================
+    # ==========================================================
     # FINAL LOG
-    # ==============================================================
+    # ==========================================================
 
     logger.info(
         "app_created",
@@ -440,8 +476,13 @@ def create_app() -> Flask:
     return app
 
 
+# ==============================================================
+# BLUEPRINT REGISTRATION
+# ==============================================================
+
 def _register_blueprints(app: Flask):
     """Register all application blueprints."""
+
     from collector.auth import auth_bp
     from collector.api import api_bp
     from collector.admin import admin_bp
@@ -455,50 +496,130 @@ def _register_blueprints(app: Flask):
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
-    app.register_blueprint(mcp_bp)
+
+    # ==========================================================
+    # SECURITY P0:
+    #
+    # DO NOT register the legacy mcp_bp here.
+    #
+    # The previous /mcp/* implementation had its own execution
+    # path and could bypass the main authentication/policy/
+    # ToolGuard/audit pipeline.
+    #
+    # MCP must be reintroduced only through the same security
+    # enforcement path as every other tool execution.
+    # ==========================================================
+
     app.register_blueprint(admin_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(trace_bp)
     app.register_blueprint(identity_bp)
-    app.register_blueprint(legal_bp)  
+    app.register_blueprint(legal_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(devtools_bp)
- # ═══════════════════════════════════════════════════════════
-    # ENDPOINTS DE SANTÉ (Requis pour Render / Production)
-    # ═══════════════════════════════════════════════════════════
+
+    # ==========================================================
+    # HEALTH
+    # ==========================================================
+
     @app.route("/health", methods=["GET"])
     def health_check():
-        """Vérification complète pour les load balancers."""
+        """
+        Full health check for load balancers and production
+        monitoring.
+
+        Does not require authentication so infrastructure can
+        check service availability.
+        """
+
         checks = {}
         is_healthy = True
-        
-        # 1. Check DB
+
+        # ------------------------------------------------------
+        # DATABASE
+        # ------------------------------------------------------
+
         try:
             start = time.time()
+
             db = get_db()
             cursor = db.cursor()
+
             cursor.execute("SELECT 1")
             cursor.fetchone()
-            checks["database"] = {"status": "ok", "latency_ms": round((time.time() - start) * 1000, 2)}
-        except Exception as e:
-            checks["database"] = {"status": "error", "message": str(e)}
+
+            latency_ms = round(
+                (time.time() - start) * 1000,
+                2,
+            )
+
+            checks["database"] = {
+                "status": "ok",
+                "latency_ms": latency_ms,
+            }
+
+        except Exception:
+            logger.exception(
+                "health_database_check_failed"
+            )
+
+            checks["database"] = {
+                "status": "error",
+            }
+
             is_healthy = False
-            
-        status_code = 200 if is_healthy else 503
-        return jsonify({
-            "status": "healthy" if is_healthy else "unhealthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "version": "0.2.1",
-            "checks": checks
-        }), status_code
+
+        # ------------------------------------------------------
+        # RESPONSE
+        # ------------------------------------------------------
+
+        status_code = (
+            200
+            if is_healthy
+            else 503
+        )
+
+        return jsonify(
+            {
+                "status": (
+                    "healthy"
+                    if is_healthy
+                    else "unhealthy"
+                ),
+                "timestamp": datetime.utcnow().isoformat(),
+                "version": os.environ.get(
+                    "AGENTGUARD_VERSION",
+                    "unknown",
+                ),
+                "checks": checks,
+            }
+        ), status_code
+
+    # ==========================================================
+    # READINESS
+    # ==========================================================
 
     @app.route("/readiness", methods=["GET"])
     def readiness_check():
-        """Vérification simple : le service est-il prêt à recevoir du trafic ?"""
-        return jsonify({"ready": True, "timestamp": datetime.utcnow().isoformat()}), 200
+        """
+        Lightweight readiness check.
 
-    return app
+        This intentionally does not perform a database query.
+        Use /health when dependency health must be verified.
+        """
+
+        return jsonify(
+            {
+                "ready": True,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        ), 200
+
+
+# ==============================================================
+# DATABASE INITIALIZATION
+# ==============================================================
 
 def init_db():
     """Initialize the database at boot."""
@@ -506,4 +627,3 @@ def init_db():
     from collector.db import init_db as _init_db
 
     _init_db()
-
