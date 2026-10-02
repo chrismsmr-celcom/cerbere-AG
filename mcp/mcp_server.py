@@ -69,7 +69,7 @@ def authorize_tool_call(tool_name: str, params_json: str, agent_id: Optional[str
     try:
         params = json.loads(params_json)
         budget_remaining = guard.max_budget - guard.total_spent
-        check = guard.policy_engine.check_tool_policy(tool_name, params, budget_remaining)
+        check = guard.policy_engine.check_tool_policy(tool_name, params, budget_remaining, agent_id=getattr(guard, "agent_id", None))
         
         return json.dumps({
             "is_allowed": check.passed,
@@ -196,4 +196,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
