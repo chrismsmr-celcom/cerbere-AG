@@ -20,6 +20,7 @@ Traditional application security does not fully understand these interactions.
 AgentGuard provides a runtime security layer designed specifically for agentic workflows:
 
 ```
+[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/chrismsmr-celcom/cerbere-ag?utm_source=readme&utm_medium=badge)
                      ┌──────────────────────┐
                      │       AI AGENT       │
                      └──────────┬───────────┘
