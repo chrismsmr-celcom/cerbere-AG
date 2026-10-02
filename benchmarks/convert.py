@@ -63,7 +63,7 @@ def convert_local_attacks() -> list[dict]:
     PROMPT_KEYS = ("prompt", "text", "payload", "injection", "content", "message", "instruction")
     out, skipped = [], []
     idx = 0
-        for category, entries in raw.items():
+    for category, entries in raw.items():
         if category == "metadata" or not isinstance(entries, list):
             continue
         for e in entries:
@@ -86,7 +86,7 @@ def convert_local_attacks() -> list[dict]:
                     "lang": e.get("lang", "en"),
                     "category": e.get("category", category),
                 },
-                attack_type=e.get("category", category) if not is_benign else None,
+                attack_type=None if is_benign else e.get("category", category),
             ))
             idx += 1
     if skipped:
