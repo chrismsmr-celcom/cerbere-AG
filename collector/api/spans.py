@@ -36,8 +36,8 @@ from collector.api.helpers import (
 #
 # v1 : dérive un Event du même payload de span déjà validé/redacté par
 # receive_span. Le `policy_chain` n'est encore que la liste des
-# security_checks, et `taint_level` reste NULL tant que track_input()
-# n'est pas câblé côté SDK. But : de la vraie donnée qui coule dans
+# security_checks ; `taint_level` et `risk_score` viennent du SDK (FlowTracker +
+# moteur de risque runtime) et restent NULL pour les spans llm_call. But : de la vraie donnée qui coule dans
 # `events` dès maintenant pour brancher la Trajectory Timeline.
 
 def _next_sequence_no(cur, p, session_id):
@@ -75,6 +75,21 @@ def _write_canonical_event(data, org_id, agent_id):
     decision = "BLOCK" if data["blocked"] else "ALLOW"
     model = data.get("input_data", {}).get("model") if isinstance(data.get("input_data"), dict) else None
 
+    # Le SDK envoie {"tool": ...} ; "tool_name" reste accepté (anciens clients).
+    input_data = data.get("input_data") if isinstance(data.get("input_data"), dict) else {}
+    tool_name = input_data.get("tool_name") or input_data.get("tool")
+
+    # taint_level / risk_score viennent du SDK (track_input + moteur de risque runtime).
+    # On n'accepte que des valeurs connues : le champ est affiché tel quel dans la timeline.
+    _TAINT = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "SECRET", "UNTRUSTED", "MALICIOUS"}
+    taint_level = str(data.get("taint_level") or "").upper()
+    taint_level = taint_level if taint_level in _TAINT else None
+    try:
+        risk_score = data.get("risk_score")
+        risk_score = max(0.0, min(float(risk_score), 100.0)) if risk_score is not None else None
+    except (TypeError, ValueError):
+        risk_score = None
+
     p = sql_placeholder()
     conn = get_db() if is_postgres() else _sqlite_connect()
     try:
@@ -91,13 +106,15 @@ def _write_canonical_event(data, org_id, agent_id):
             f"""INSERT INTO events (
                     id, trace_id, session_id, agent_id, org_id, sequence_no,
                     actor, type, tool_name, arguments, result,
-                    policy_chain, risk_contributors, decision, reason
-                ) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})""",
+                    policy_chain, risk_contributors, decision, reason,
+                    taint_level, risk_score
+                ) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})""",
             (
                 event_id, data["trace_id"], session_id, agent_id or "unknown", org_id, seq,
-                actor, span_type, data.get("input_data", {}).get("tool_name") if isinstance(data.get("input_data"), dict) else None,
+                actor, span_type, tool_name,
                 json.dumps(data.get("input_data", {})), json.dumps(data.get("output_data", {})),
                 json.dumps(checks), json.dumps(risk_contributors), decision, data.get("block_reason"),
+                taint_level, risk_score,
             ),
         )
         cur.execute(f"UPDATE agent_sessions SET last_event_id = {p}, status = {p} WHERE id = {p}",
