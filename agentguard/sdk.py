@@ -17,6 +17,7 @@ from .models import (
 )
 from .policy import PolicyEngine
 from .runtime import TrajectoryAnalyzer, RuntimeRiskEngine
+from .taint import FlowTracker, TaintLevel
 
 logger = structlog.get_logger("agentguard.sdk")
 
@@ -88,6 +89,13 @@ class AgentGuard:
         self._trajectory = TrajectoryAnalyzer(max_events=100) if self._runtime_enabled else None
         self._runtime_risk = RuntimeRiskEngine(fail_closed=self._runtime_fail_closed) if self._runtime_enabled else None
 
+        # Taint tracking : mémorise (en RAM, jamais envoyé au collector) les secrets/PII vus
+        # dans les résultats d'outils et via track_input(), et bloque leur sortie vers un sink externe.
+        self._taint_enabled = os.getenv("AGENTGUARD_TAINT_ENABLED", "true").lower() == "true"
+        self._flow = FlowTracker(
+            session_mode=os.getenv("AGENTGUARD_TAINT_SESSION_MODE", "false").lower() == "true"
+        )
+
         logger.info("agentguard_initialized", agent_id=self.agent_id, runtime_risk=self._runtime_enabled)
 
     @staticmethod
@@ -146,6 +154,7 @@ class AgentGuard:
                 blocked=span.blocked, block_reason=span.block_reason,
                 cost_usd=span.cost_usd, input_tokens=span.input_tokens,
                 output_tokens=span.output_tokens,
+                taint_level=span.taint_level, risk_score=span.risk_score,
             ).model_dump()
             resp = requests.post(
                 f"{self.collector_url}/span",
@@ -197,7 +206,21 @@ class AgentGuard:
                 ),
             )
 
-    def track_input(self, value: Any, source: str = "user") -> Any:
+    def track_input(self, value: Any, source: str = "user", level: Optional[str] = None) -> Any:
+        """Déclare une donnée que l'agent vient de lire (fichier, DB, variable d'env, réponse API...).
+
+        Les secrets/PII qu'elle contient sont mémorisés pour la session : s'ils réapparaissent
+        ensuite dans les paramètres d'un outil externe (tel quel, base64, hex ou URL-encodé),
+        l'appel est bloqué. `level` force la classification : "SECRET", "CONFIDENTIAL"...
+        Renvoie `value` inchangée, donc utilisable en ligne : `data = guard.track_input(read(...))`.
+        """
+        if not self._taint_enabled:
+            return value
+        try:
+            forced = TaintLevel[str(level).upper()] if level else None
+        except KeyError:
+            raise ValueError(f"Unknown taint level: {level!r}")
+        self._flow.track(value, source=source, level=forced)
         return value
 
     @staticmethod
@@ -351,18 +374,31 @@ class AgentGuard:
 
         raise TypeError("Usage invalide de guard_tool_call.")
 
+    @staticmethod
+    def _tag_span(span: GuardSpan, taint_level: Optional[str], decision: RuntimeRiskDecision) -> None:
+        span.taint_level = taint_level
+        span.risk_score = decision.risk_score
+
     def _execute_guarded_tool(self, tool_name: str, params: Dict[str, Any], func: Callable):
         self._ensure_connected()
         span_id = hashlib.sha256(f"{time.time_ns()}".encode()).hexdigest()[:16]
         start = time.time()
         budget_remaining = self.max_budget - self.total_spent
 
-        check = self.policy_engine.check_tool_policy(tool_name, params, budget_remaining)
-        runtime_decision = (
-            self._runtime_risk.evaluate(tool_name, params)
-            if self._runtime_enabled
-            else RuntimeRiskDecision("ALLOW", 0.0, RiskLevel.LOW)
-        )
+        check = self.policy_engine.check_tool_policy(tool_name, params, budget_remaining, agent_id=self.agent_id)
+
+        taint_level = None
+        if self._taint_enabled:
+            taint_level = self._flow.level_in(params).level.name
+        if self._runtime_enabled:
+            traj_score, traj_reasons, traj_meta = self._trajectory.analyze(
+                self.agent_id, tool_name, params, taint_level=taint_level
+            )
+            runtime_decision = self._runtime_risk.evaluate(
+                tool_name, params, traj_score, traj_reasons, traj_meta, taint_level=taint_level
+            )
+        else:
+            runtime_decision = RuntimeRiskDecision("ALLOW", 0.0, RiskLevel.LOW)
         runtime_check = SecurityCheck(
             "runtime_risk",
             runtime_decision.allowed,
@@ -380,6 +416,7 @@ class AgentGuard:
                 True,
                 f"[RUNTIME {runtime_decision.action}] {runtime_decision.reasons[0] if runtime_decision.reasons else 'blocked'}",
             )
+            self._tag_span(span, taint_level, runtime_decision)
             self.spans.append(span)
             self._send_to_collector(span)
             self._record_trajectory_tool(tool_name, runtime_decision)
@@ -401,6 +438,7 @@ class AgentGuard:
                     True,
                     "[SECURITY] Signed server decision unavailable",
                 )
+                self._tag_span(span, taint_level, runtime_decision)
                 self.spans.append(span)
                 self._send_to_collector(span)
                 self._record_trajectory_tool(
@@ -526,6 +564,7 @@ class AgentGuard:
                         True,
                         f"[POLICY] {check.details}",
                     )
+                    self._tag_span(span, taint_level, runtime_decision)
                     self.spans.append(span)
                     self._send_to_collector(span)
                     self._record_trajectory_tool(tool_name, runtime_decision)
@@ -542,6 +581,7 @@ class AgentGuard:
                 {"error": str(exc)[:1000]},
                 [check, runtime_check],
             )
+            self._tag_span(span, taint_level, runtime_decision)
             self.spans.append(span)
             self._send_to_collector(span)
             raise
@@ -553,6 +593,11 @@ class AgentGuard:
             {"result": str(result)[:500]},
             [check, runtime_check],
         )
+        if self._taint_enabled:
+            # Ce que l'outil vient de lire peut contenir des secrets : on le mémorise
+            # pour bloquer sa réapparition dans un appel externe ultérieur.
+            self._flow.track(result, source=f"tool:{tool_name}")
+        self._tag_span(span, taint_level, runtime_decision)
         self.spans.append(span)
         self._send_to_collector(span)
         self._record_trajectory_tool(tool_name, runtime_decision)
@@ -572,3 +617,4 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     logger.info("Starting CerbereAG MCP Server (v1.x) on stdio...")
     from mcp.server.fastmcp import FastMCP
+
