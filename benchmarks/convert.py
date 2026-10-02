@@ -63,7 +63,7 @@ def convert_local_attacks() -> list[dict]:
     PROMPT_KEYS = ("prompt", "text", "payload", "injection", "content", "message", "instruction")
     out, skipped = [], []
     idx = 0
-    for category, entries in raw.items():
+        for category, entries in raw.items():
         if category == "metadata" or not isinstance(entries, list):
             continue
         for e in entries:
@@ -74,15 +74,19 @@ def convert_local_attacks() -> list[dict]:
                 skipped.append({**e, "_category": category})
                 continue
             tool_name, tool_args = _extract_tool(prompt)
+            is_benign = (category == "benign" or e.get("category") == "benign")
             out.append(_make_span(
-                idx, "attack", "injecagent", "block",
+                idx,
+                "benign" if is_benign else "attack",
+                "injecagent",
+                "allow" if is_benign else "block",
                 prompt, tool_name, tool_args,
                 context={
                     "severity": e.get("severity"),
                     "lang": e.get("lang", "en"),
                     "category": e.get("category", category),
                 },
-                attack_type=e.get("category", category),
+                attack_type=e.get("category", category) if not is_benign else None,
             ))
             idx += 1
     if skipped:
