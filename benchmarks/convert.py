@@ -54,43 +54,39 @@ def _make_span(idx: int, label: str, source: str, expected: str,
 
 # ---------------------------------------------------------------- injecagent (maison)
 def convert_local_attacks() -> list[dict]:
-    """Convertit benchmarks/corpus/attacks.json — tolérant à la structure."""
+    """Convertit benchmarks/corpus/attacks.json (dict: catégories -> liste d'entrées)."""
     if not OUT_ATTACKS.exists():
         print(f"[convert] {OUT_ATTACKS} absent, source ignorée")
         return []
     raw = json.loads(OUT_ATTACKS.read_text(encoding="utf-8"))
 
-    # Normalise en liste d'entrées exploitables
-    entries: list[tuple[str, dict]] = []  # (clé/id, dict-de-champs)
-    if isinstance(raw, list):
-        for i, e in enumerate(raw):
-            entries.append((f"attack_{i:04d}", e if isinstance(e, dict) else {"prompt": str(e)}))
-    elif isinstance(raw, dict):
-        for k, v in raw.items():
-            if isinstance(v, dict):
-                entries.append((k, v))
-            elif isinstance(v, str):
-                entries.append((k, {"prompt": v}))
-            elif isinstance(v, list):  # {"category": [prompts...]}
-                for j, item in enumerate(v):
-                    entries.append((f"{k}_{j}", item if isinstance(item, dict) else {"prompt": str(item), "category": k}))
-    else:
-        print(f"[convert] type non supporté dans attacks.json: {type(raw).__name__}")
-        return []
-
-    out = []
-    for i, (key, e) in enumerate(entries):
-        prompt = (e.get("prompt") or e.get("text") or e.get("payload")
-                  or e.get("injection") or e.get("content") or "")
-        if not prompt:
+    PROMPT_KEYS = ("prompt", "text", "payload", "injection", "content", "message", "instruction")
+    out, skipped = [], []
+    idx = 0
+    for category, entries in raw.items():
+        if category == "metadata" or not isinstance(entries, list):
             continue
-        tool_name, tool_args = _extract_tool(str(prompt))
-        out.append(_make_span(
-            i, "attack", "injecagent", e.get("expected", "block"),
-            str(prompt), tool_name, tool_args,
-            attack_type=e.get("category") or e.get("type")
-                or e.get("attack_type") or "unknown",
-        ))
+        for e in entries:
+            if not isinstance(e, dict):
+                e = {"prompt": str(e)}
+            prompt = next((str(e[k]) for k in PROMPT_KEYS if e.get(k)), "")
+            if not prompt:
+                skipped.append({**e, "_category": category})
+                continue
+            tool_name, tool_args = _extract_tool(prompt)
+            out.append(_make_span(
+                idx, "attack", "injecagent", "block",
+                prompt, tool_name, tool_args,
+                context={
+                    "severity": e.get("severity"),
+                    "lang": e.get("lang", "en"),
+                    "category": e.get("category", category),
+                },
+                attack_type=e.get("category", category),
+            ))
+            idx += 1
+    if skipped:
+        print(f"[convert] ⚠ {len(skipped)} entrées sans prompt — 1er exemple : {skipped[0]}")
     return out
 
 _TOOL_PATTERNS = [
