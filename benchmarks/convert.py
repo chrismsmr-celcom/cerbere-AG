@@ -113,46 +113,63 @@ def _extract_tool(prompt: str) -> tuple[str | None, dict | None]:
 
 # ---------------------------------------------------------------- agentdojo
 def convert_agentdojo(max_items: int = 10000) -> list[dict]:
-    """Extrait injections + prompts bénins d'AgentDojo (clone ou HF)."""
+    """Attaques AgentDojo via le package officiel (injection_tasks par suite)."""
     try:
-        from datasets import load_dataset
+        from agentdojo.task_suite import get_suite
     except ImportError:
-        print("[convert] `pip install datasets` requis pour agentdojo — ignorée")
+        print("[convert] `pip install agentdojo` requis — source ignorée")
         return []
-    out = []
-    suites = ["workspace", "banking", "slack", "travel", "file_system"]
-    idx = 0
-    for suite in suites:
+
+    out, idx = [], 0
+    for suite_name in ("workspace", "banking", "slack", "travel", "file_system"):
         try:
-            ds = load_dataset("ethz-spylab/agentdojo", suite, trust_remote_code=True)
+            suite = get_suite(suite_name, "")
         except Exception as e:  # noqa: BLE001
-            print(f"[convert] suite {suite} indisponible: {e}")
+            print(f"[convert] suite {suite_name} indisponible: {e}")
             continue
-        for split in ds:
-            for row in ds[split]:
-                if idx >= max_items:
-                    break
-                inj = row.get("injection") or row.get("injections") or {}
-                goal = row.get("goal") or row.get("prompt") or ""
-                if not goal:
-                    continue
-                if inj:
-                    # Cas d'attaque : contenu d'outil piégé
-                    for _, payload in (inj.items() if isinstance(inj, dict) else []):
-                        out.append(_make_span(
-                            idx, "attack", "agentdojo", "block",
-                            str(payload), tool_name="get_email",
-                            tool_arguments={"body": str(payload)},
-                            context={"domain": suite, "injection": True},
-                            attack_type="indirect_prompt_injection",
-                        ))
-                        idx += 1
-                else:
-                    out.append(_make_span(
-                        idx, "benign", "agentdojo", "allow", str(goal),
-                        context={"domain": suite, "injection": False},
-                    ))
-                    idx += 1
+
+        # Introspection initiale (à retirer après validation)
+        if idx == 0:
+            print(f"[convert][debug] attributs suite: {[a for a in dir(suite) if 'inject' in a.lower() or 'task' in a.lower()]}")
+
+        # Injection tasks (attaques)
+        try:
+            injections = list(suite.get_injection_tasks() if callable(getattr(suite, "get_injection_tasks", None))
+                              else suite.injection_tasks)
+        except Exception as e:  # noqa: BLE001
+            print(f"[convert] injections {suite_name}: {e}")
+            injections = []
+        for inj in injections:
+            if idx >= max_items:
+                break
+            goal = getattr(inj, "goal", "") or ""
+            payload = getattr(inj, "injection", None)
+            if not payload:
+                # les payloads sont souvent dans un attribut complémentaire
+                payload = goal
+            out.append(_make_span(
+                idx, "attack", "agentdojo", "block",
+                str(payload),
+                tool_name="get_email",
+                tool_arguments={"body": str(payload)},
+                context={"domain": suite_name, "goal": str(goal)[:300]},
+                attack_type="indirect_prompt_injection",
+            ))
+            idx += 1
+
+        # User tasks bénins (goal légitime)
+        try:
+            user_tasks = list(suite.user_tasks.values()) if isinstance(suite.user_tasks, dict) else list(suite.user_tasks)
+        except Exception:  # noqa: BLE001
+            user_tasks = []
+        for t in user_tasks:
+            goal = getattr(t, "goal", "") or getattr(t, "prompt", "")
+            if goal and idx < max_items:
+                out.append(_make_span(
+                    idx, "benign", "agentdojo", "allow", str(goal),
+                    context={"domain": suite_name},
+                ))
+                idx += 1
     return out[:max_items]
 
 # ---------------------------------------------------------------- benign (function-calling)
