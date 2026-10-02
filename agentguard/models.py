@@ -50,6 +50,8 @@ class SpanPayload(BaseModel):
     cost_usd: float = Field(..., ge=0)
     input_tokens: int = Field(0, ge=0)
     output_tokens: int = Field(0, ge=0)
+    taint_level: Optional[str] = None
+    risk_score: Optional[float] = None
 
 # ==============================================================================
 # DATACLASSES (Pour la logique interne du SDK)
@@ -112,6 +114,8 @@ class GuardSpan:
     cost_usd: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
+    taint_level: Optional[str] = None
+    risk_score: Optional[float] = None
 
 # ==============================================================================
 # EXCEPTIONS
@@ -144,5 +148,3 @@ class ApprovalRejectedException(SecurityException):
         super().__init__(message)
         self.approval_id = approval_id
         self.resolved_by = resolved_by
-
-
