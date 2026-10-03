@@ -2,7 +2,7 @@
 
 <img src="docs/logo.png" alt="Cerbere AG" width="140" />
 
-# Cerbère
+# Cerbere AG
 
 **The three-headed guardian of AI agents.**<br/>
 Runtime security & observability for autonomous agents: it sits between the model's decision and the real-world side effect.
