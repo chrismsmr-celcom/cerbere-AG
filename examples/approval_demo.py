@@ -65,7 +65,7 @@ def fail(msg: str) -> None:
 if not api_key:
     fail("AGENTGUARD_API_KEY is not set (the approval request must reach your dashboard).")
 try:
-    requests.get(f"{url}/health", timeout=5).raise_for_status()
+    requests.get(f"{url}/health", timeout=15).raise_for_status()
 except Exception as exc:
     fail(f"Collector not reachable at {url} ({exc.__class__.__name__}).")
 
