@@ -20,46 +20,13 @@ Traditional application security does not fully understand these interactions.
 AgentGuard provides a runtime security layer designed specifically for agentic workflows:
 
 ```
-[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/chrismsmr-celcom/cerbere-ag?utm_source=readme&utm_medium=badge)
-                     ┌──────────────────────┐
-                     │       AI AGENT       │
-                     └──────────┬───────────┘
-                                │
-                     ┌──────────▼───────────┐
-                     │    AgentGuard SDK    │
-                     │                      │
-                     │  Policy Enforcement  │
-                     │  Security Checks     │
-                     │  Budget Controls     │
-                     │  Tool Controls       │
-                     └──────────┬───────────┘
-                                │
-                     ┌──────────▼───────────┐
-                     │   3-Layer Detection  │
-                     │                      │
-                     │  1. Regex / Rules    │
-                     │  2. ML Classifier    │
-                     │  3. LLM Judge        │
-                     └──────────┬───────────┘
-                                │
-                     ┌──────────▼───────────┐
-                     │  ✅ ALLOW   /  🚫 BLOCK │
-                     └──────────┬───────────┘
-                                │
-                     ┌──────────▼───────────┐
-                     │    Collector         │
-                     │                      │
-                     │ Traces               │
-                     │ Metrics              │
-                     │ Security Events      │
-                     │ Cost / Usage         │
-                     └──────────┬───────────┘
-                                │
-                     ┌──────────▼───────────┐
-                     │      📊 Dashboard    │
-                     └──────────────────────┘
-```
+## Architecture
 
+Cerbere-AG provides a security and observability layer around AI agent execution.
+
+The architecture combines runtime checks, policy enforcement, taint tracking, detection, risk scoring, observability, identity, and audit.
+
+![Cerbere-AG Architecture](docs/architecture.png)
 ⸻
 
 ## ✨ Core Capabilities
