@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.png" alt="Cerbère" width="140" />
+<img src="docs/logo.png" alt="Cerbere AG" width="140" />
 
 # Cerbère
 
