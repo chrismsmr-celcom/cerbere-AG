@@ -190,3 +190,21 @@ class TestGetReport:
         assert "total_spans" in report
         assert "blocked_operations" in report
         assert "total_cost_usd" in report
+
+
+class TestTokenCountingOffline:
+    """tiktoken télécharge son fichier BPE à la volée : sans réseau, le SDK ne doit pas planter."""
+
+    def test_token_counting_survives_tiktoken_network_failure(self, monkeypatch):
+        import requests
+        from agentguard import sdk as sdk_module
+
+        def boom(*args, **kwargs):
+            raise requests.exceptions.HTTPError("403 Client Error: Forbidden")
+
+        monkeypatch.setattr(sdk_module.tiktoken, "encoding_for_model", boom)
+        monkeypatch.setattr(sdk_module.tiktoken, "get_encoding", boom)
+        monkeypatch.setattr(sdk_module, "_ENCODING_CACHE", {})
+
+        assert sdk_module._count_text_tokens("gpt-4o", "hello world, this is a test") > 0
+        assert sdk_module._count_text_tokens("gpt-4o", "") == 0
