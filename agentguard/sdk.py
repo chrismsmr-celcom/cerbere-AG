@@ -21,7 +21,45 @@ from .taint import FlowTracker, TaintLevel
 
 logger = structlog.get_logger("agentguard.sdk")
 
-SDK_VERSION = "0.5.0"
+SDK_VERSION = "0.6.0"
+
+
+_ENCODING_CACHE: Dict[str, Any] = {}
+
+
+def _get_encoding(model: str):
+    """Renvoie l'encodeur tiktoken pour `model`, ou None s'il est indisponible.
+
+    tiktoken télécharge son fichier BPE à la première utilisation. Hors-ligne (réseau
+    filtré, conteneur isolé, CI), ce téléchargement lève une erreur réseau : elle ne doit
+    jamais faire planter l'agent protégé. On met le résultat en cache, y compris l'échec,
+    pour ne pas retenter un téléchargement à chaque appel.
+    """
+    if model in _ENCODING_CACHE:
+        return _ENCODING_CACHE[model]
+    encoding = None
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except Exception:
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            encoding = None
+    _ENCODING_CACHE[model] = encoding
+    return encoding
+
+
+def _count_text_tokens(model: str, text: str) -> int:
+    """Nombre de tokens de `text`. Repli sur ~4 caractères/token si tiktoken est indisponible."""
+    if not text:
+        return 0
+    encoding = _get_encoding(model)
+    if encoding is not None:
+        try:
+            return len(encoding.encode(text))
+        except Exception:
+            pass
+    return max(1, len(text) // 4)
 
 
 class AgentGuard:
@@ -255,19 +293,7 @@ class AgentGuard:
         model = str(kwargs.get("model", "gpt-4o"))
         input_text = self._extract_input([], kwargs) or ""
         output_text = self._extract_output(result) or ""
-        try:
-            encoding = tiktoken.encoding_for_model(model)
-        except KeyError:
-            encoding = tiktoken.get_encoding("cl100k_base")
-        try:
-            input_tokens = len(encoding.encode(input_text))
-        except Exception:
-            input_tokens = 0
-        try:
-            output_tokens = len(encoding.encode(output_text))
-        except Exception:
-            output_tokens = 0
-        return input_tokens, output_tokens
+        return _count_text_tokens(model, input_text), _count_text_tokens(model, output_text)
 
     def _estimate_cost(self, kwargs, result) -> Tuple[float, int, int]:
         model = str(kwargs.get("model", "gpt-4o"))
@@ -617,4 +643,3 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     logger.info("Starting CerbereAG MCP Server (v1.x) on stdio...")
     from mcp.server.fastmcp import FastMCP
-
