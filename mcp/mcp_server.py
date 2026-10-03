@@ -145,12 +145,15 @@ def calculate_token_cost(model: str, text: str) -> str:
     Aide l'agent à respecter son budget avant d'envoyer une requête.
     """
     try:
+        # tiktoken télécharge son fichier BPE au premier usage : hors-ligne, repli sur ~4 car./token.
         try:
-            encoding = tiktoken.encoding_for_model(model)
-        except KeyError:
-            encoding = tiktoken.get_encoding("cl100k_base") # Fallback standard (GPT-4/Claude)
-        
-        tokens = len(encoding.encode(text))
+            try:
+                encoding = tiktoken.encoding_for_model(model)
+            except KeyError:
+                encoding = tiktoken.get_encoding("cl100k_base") # Fallback standard (GPT-4/Claude)
+            tokens = len(encoding.encode(text))
+        except Exception:
+            tokens = max(1, len(text) // 4) if text else 0
         
         # Prix approximatifs pour 1000 tokens (Input)
         pricing_map = {
