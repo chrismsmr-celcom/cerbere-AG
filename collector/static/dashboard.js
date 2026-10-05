@@ -1495,7 +1495,7 @@ function openAgentsPanel() {
     _openDrawer('agentsPanel');
     loadAgents();
     if (_ag.timer) clearInterval(_ag.timer);
-    _ag.timer = setInterval(loadAgents, 5000);
+    _ag.timer = setInterval(loadAgents, 2000);
 }
 function closeAgentsPanel() {
     _closeDrawer('agentsPanel');
@@ -1563,7 +1563,7 @@ async function loadAgents() {
         _ag.list = data.agents || [];
         _ag.counts = data.counts || {};
         _syncAgentsBadge();
-        if ($('agentsPanel').classList.contains('open')) renderAgents();
+        if ($('agentsPanel').classList.contains('open') && !Object.keys(_ag.armed).length) renderAgents();
     } catch (e) {
         if ($('agentsPanel').classList.contains('open')) {
             $('agentsList').innerHTML = '<div class="d-empty"><h4>Could not load agents</h4><p>' + esc(e.message) + '. It will retry automatically.</p></div>';
@@ -1833,9 +1833,9 @@ async function deleteDestination(destId) {
 // ═══════════════════════════════════════════════════════════
 // INITIALIZATION
 // ═══════════════════════════════════════════════════════════
-setInterval(checkApprovals, 10000);
+setInterval(checkApprovals, 2000);
 setInterval(function() { 
     if (!document.hidden && !$('agentsPanel').classList.contains('open')) loadAgents(); 
-}, 15000);
+}, 3000);
 checkApprovals();
 loadAgents();
