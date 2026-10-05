@@ -53,14 +53,16 @@ def get_decision_signer():
 
     from signing import DecisionSigner
 
+    # AGENTGUARD_SIGNING_KEY est le nom canonique (documenté dans env.example).
+    # CERBERE_SIGNING_KEY reste accepté comme alias legacy.
     signing_key = (
-        os.environ.get("CERBERE_SIGNING_KEY")
-        or os.environ.get("AGENTGUARD_SIGNING_KEY")
+        os.environ.get("AGENTGUARD_SIGNING_KEY")
+        or os.environ.get("CERBERE_SIGNING_KEY")
     )
 
     if not signing_key:
         raise RuntimeError(
-            "CERBERE_SIGNING_KEY or AGENTGUARD_SIGNING_KEY is required"
+            "AGENTGUARD_SIGNING_KEY (or legacy CERBERE_SIGNING_KEY) is required"
         )
 
     signer = DecisionSigner(signing_key)
@@ -222,7 +224,7 @@ def _reject_if_agent_disconnected():
 
 
 def _touch_agent(org_id, agent_id, sdk_version=None, name=None):
-    """Enregistre / rafraîchit l'agent (upsert), au plus une fois par _AGENT_TOUCH_EVERY s."""
+    """Enregistre / rafraîchit l'agent (upsert), au plus une fois par _AGENT_TOUCH_EVERY."""
     key = (org_id, agent_id)
     now = time.time()
     if now - _AGENT_SEEN.get(key, 0) < _AGENT_TOUCH_EVERY:

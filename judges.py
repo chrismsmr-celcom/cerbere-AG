@@ -17,7 +17,7 @@ Fixes v4 (benchmark 2026-09-26, layer regex,ml,llm) :
   au lieu de 2 : DIDACTIC -> REVIEW (revue humaine), AMBIGUOUS -> REVIEW.
   C'est ce qui aligne le juge sur le downgrader didactique du regex.
 - Pinning des modeles (env overridable) : la ligne llm du benchmark n'est
-  reproductible que si le modele juge est figé. Le nom + la version du
+  reproductible que si le modele juge est fige. Le nom + la version du
   modele utilise sont renvoyes dans le JudgeResult.
 - Cache Redis des verdicts par sha256 du texte scrube : sur un corpus
   statique, ~140 appels se reduisent a N uniques. Fail-open du cache.
@@ -318,6 +318,9 @@ class LLMCascadeJudge:
 
     # v4: modeles PINNES (overridables par env). Le benchmark ne peut être
     # reproductible que si le modele juge est fige et journalise.
+    # env_key = nom de la variable d'environnement qui porte la clé API du
+    # provider. Le provider deepseek lit AGENTGUARD_JUDGE_API_KEY (nom
+    # canonique Cerbere, indépendant du fournisseur).
     PROVIDERS = [
         {
             "name": "openrouter", "env_key": "OPENROUTER_API_KEY",
@@ -332,7 +335,7 @@ class LLMCascadeJudge:
             "extra_headers": {}
         },
         {
-            "name": "deepseek", "env_key": "DEEPSEEK_API_KEY",
+            "name": "deepseek", "env_key": "AGENTGUARD_JUDGE_API_KEY",
             "base_url": "https://api.deepseek.com/v1",
             "model": "deepseek-chat",
             "extra_headers": {}

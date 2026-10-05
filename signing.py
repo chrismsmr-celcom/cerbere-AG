@@ -49,8 +49,8 @@ class DecisionSigner:
         else:
             raise RuntimeError(
                 "Persistent signing key is required. "
-                "Set CERBERE_SIGNING_KEY or "
-                "AGENTGUARD_SIGNING_KEY. "
+                "Set AGENTGUARD_SIGNING_KEY (or legacy "
+                "CERBERE_SIGNING_KEY). "
                 "For local development only, explicitly set "
                 "AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY=true."
             )
@@ -69,7 +69,7 @@ class DecisionSigner:
         Export private key.
 
         WARNING:
-        Store this only in CERBERE_SIGNING_KEY or a secret manager.
+        Store this only in AGENTGUARD_SIGNING_KEY or a secret manager.
         """
         return self._key.private_bytes(
             serialization.Encoding.PEM,

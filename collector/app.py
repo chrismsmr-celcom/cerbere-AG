@@ -273,7 +273,7 @@ def create_app() -> Flask:
 
     app.config["EMAIL_FROM"] = (
         os.environ.get(
-            "AGENTGUARD_EMAIL_FROM",
+            "AGENTGUARD_SMTP_FROM",
             "",
         )
         .strip()
@@ -296,14 +296,14 @@ def create_app() -> Flask:
 
     app.config["SMTP_USERNAME"] = (
         os.environ.get(
-            "AGENTGUARD_SMTP_USERNAME",
+            "AGENTGUARD_SMTP_USER",
             "",
         )
         .strip()
     )
 
     app.config["SMTP_PASSWORD"] = os.environ.get(
-        "AGENTGUARD_SMTP_PASSWORD",
+        "AGENTGUARD_SMTP_PASS",
         "",
     )
 
