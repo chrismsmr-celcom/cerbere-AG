@@ -3,13 +3,16 @@
 NB : les appels à resolve_org_id / _resolve_human_session passent par le package
 `collector.auth` (via _auth_pkg) afin que monkeypatch.setattr(collector.auth, ...)
 continue de fonctionner dans les tests.
+
+Politique FAIL-CLOSED : toute route est protégée par défaut. Seules les routes listées
+dans PUBLIC_ENDPOINTS (collector/auth/config.py) sont accessibles sans authentification.
 """
 
 import structlog
 from flask import current_app, g, jsonify, redirect, request, url_for
 
 from .blueprint import auth_bp
-from .config import MAGIC_LINK_COOKIE, PROTECTED_ENDPOINTS
+from .config import HTML_ENDPOINTS, MAGIC_LINK_COOKIE, PUBLIC_ENDPOINTS
 from .identity_resolution import resolve_full_identity
 from .sessions import _session_org_id
 from .utils import safe_compare
@@ -180,45 +183,19 @@ def check_auth():
     if request.method == "OPTIONS":
         return None
 
-    public_endpoints = {
-        "auth.login",
-        "auth.signup",
-        "auth.healthz",
-        "auth.auth_login",
-        "auth.verify_magic_link",
-        "auth.logout",
-    }
-
-    if request.endpoint in public_endpoints:
-        return None
-
-    if request.endpoint not in PROTECTED_ENDPOINTS:
+    endpoint = request.endpoint
+    # None = URL inconnue : Flask renverra son 404 normal
+    if endpoint is None or endpoint in PUBLIC_ENDPOINTS:
         return None
 
     try:
         if not require_auth():
-            if request.endpoint in {
-                "auth.dashboard",
-                "trace.trace_detail",
-            }:
-                return redirect(
-                    url_for("auth.login")
-                )
-
-            return jsonify(
-                {
-                    "error": "Unauthorized"
-                }
-            ), 401
-
+            if endpoint in HTML_ENDPOINTS:
+                return redirect(url_for("auth.login"))
+            return jsonify({"error": "Unauthorized"}), 401
     except Exception as exc:
-        logger.error(
-            "auth_middleware_error",
-            error=str(exc),
-        )
-
-        return jsonify(
-            {
-                "error": "Unauthorized"
-            }
-        ), 401
+        logger.error("auth_middleware_error", error=str(exc))
+        if endpoint in HTML_ENDPOINTS:
+            return redirect(url_for("auth.login"))
+        return jsonify({"error": "Unauthorized"}), 401
+    return None

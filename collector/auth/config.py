@@ -76,3 +76,27 @@ PROTECTED_ENDPOINTS = {
     "identity.list_agents",
     "identity.get_me",
 }
+# Routes accessibles sans session ni clé. TOUT LE RESTE est protégé par défaut (fail-closed).
+PUBLIC_ENDPOINTS = frozenset({
+    # pages et flux d'authentification
+    "auth.login", "auth.signup", "auth.logout", "auth.verify_magic_link",
+    "auth.auth_login", "auth.supabase_public_config", "auth.supabase_session",
+    # auth.auth_me gère lui-même le cas non authentifié (renvoie authenticated: false)
+    "auth.auth_me",
+    # santé et sondes
+    "auth.healthz", "api.health_check", "api.readiness_check",
+    "health_check", "readiness_check",
+    # clé publique de vérification des décisions signées (publique par nature)
+    "api.public_key",
+    # assets et pages publiques
+    "static", "api.serve_favicon", "api.serve_logo",
+    "legal.legal_index", "legal.privacy", "legal.terms",
+    "docs.documentation_page", "docs.documentation_markdown",
+    # ces routes vérifient elles-mêmes le secret admin (pas de session)
+    "admin.create_customer", "admin.revoke_customer", "admin.show_key",
+})
+
+# Pages HTML : redirection vers /login au lieu d'un JSON 401.
+HTML_ENDPOINTS = frozenset({
+    "auth.dashboard", "trace.trace_detail", "billing.billing_page", "devtools.devtools_page",
+})
