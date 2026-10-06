@@ -25,11 +25,21 @@ Topologie :
         │  tools/list  -> forward tel quel
         │  tools/call  -> guard.guard_tool_call() AVANT forward
         ▼
-    Serveur MCP réel (subprocess stdio, ex: @modelcontextprotocol/server-github)
+    Serveur MCP réel (subprocess stdio, ex: @modelcontextprotocol/server-filesystem)
 
 Installer : pip install mcp
 Lancer    : python mcp_gateway.py -- npx -y @modelcontextprotocol/server-filesystem /tmp
             (tout ce qui suit "--" est la commande du serveur MCP réel à protéger)
+
+WHITELIST DES OUTILS :
+    AGENTGUARD_MCP_ALLOWED_TOOLS : liste d'outils séparés par virgules.
+        Ex : AGENTGUARD_MCP_ALLOWED_TOOLS="read_file,write_file,list_directory"
+    La valeur "*" autorise tous les outils du serveur amont (équivalent du
+    comportement historique), mais elle doit être un CHOIX EXPLICITE : un
+    avertissement est loggé au démarrage.
+    Si la variable est absente ou vide, la gateway REFUSE DE DÉMARRER
+    (fail-closed : mieux vaut un échec de config clair qu'une gateway qui
+    bloque tout ou, pire, qui laisserait tout passer par accident de config).
 """
 import asyncio
 import os
@@ -44,14 +54,65 @@ _executor = ThreadPoolExecutor(
 )
 SERVER_LABEL = os.environ.get("AGENTGUARD_MCP_SERVER_LABEL", "upstream")
 
+
+def _build_allowed_tools() -> list[str]:
+    """Construit la whitelist d'outils depuis l'environnement.
+
+    Fail-closed : sans AGENTGUARD_MCP_ALLOWED_TOOLS défini, la gateway
+    refuse de démarrer avec un message explicite plutôt que de tourner
+    avec une whitelist symbolique qui ne protège rien.
+    """
+    raw = os.environ.get("AGENTGUARD_MCP_ALLOWED_TOOLS", "").strip()
+
+    if not raw:
+        sys.stderr.write(
+            "\n❌ AGENTGUARD_MCP_ALLOWED_TOOLS n'est pas défini.\n"
+            "   La gateway refuse de démarrer sans une whitelist explicite.\n\n"
+            "   Définis les outils du serveur MCP autorisés, séparés par virgules :\n"
+            '     export AGENTGUARD_MCP_ALLOWED_TOOLS="read_file,write_file,list_directory"\n\n'
+            "   Pour autoriser explicitement TOUS les outils du serveur (choix conscient) :\n"
+            '     export AGENTGUARD_MCP_ALLOWED_TOOLS="*"\n'
+            "   (dans ce cas, la protection repose sur les autres couches AgentGuard :\n"
+            "    budget, taint tracking, runtime risk — pas sur la whitelist d'outils)\n\n"
+        )
+        sys.exit(2)
+
+    tools = [t.strip() for t in raw.split(",") if t.strip()]
+
+    if not tools:
+        sys.stderr.write("\n❌ AGENTGUARD_MCP_ALLOWED_TOOLS est vide ou mal formé.\n\n")
+        sys.exit(2)
+
+    if "*" in tools:
+        sys.stderr.write(
+            "\n⚠️  AGENTGUARD_MCP_ALLOWED_TOOLS='*' : TOUS les outils du serveur amont "
+            "sont autorisés.\n"
+            "   La protection repose uniquement sur les autres couches AgentGuard "
+            "(budget, taint, runtime risk).\n"
+            "   Assure-toi que c'est un choix délibéré.\n\n"
+        )
+        return [f"mcp:{SERVER_LABEL}:*"]
+
+    # Préfixage : la gateway nomme les outils "mcp:<label>:<tool>"
+    return [f"mcp:{SERVER_LABEL}:{t}" for t in tools]
+
+
+ALLOWED_TOOLS = _build_allowed_tools()
+
 guard = AgentGuard(
     collector_url=os.environ.get("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080"),
     api_key=os.environ.get("AGENTGUARD_API_KEY"),
     policies=[
-        {"type": "tool_whitelist", "allowed_tools": [f"mcp:{SERVER_LABEL}:*"]},
+        {"type": "tool_whitelist", "allowed_tools": ALLOWED_TOOLS},
     ],
     max_budget=float(os.environ.get("AGENTGUARD_MAX_BUDGET", "5.0")),
     block_on_high=True,
+)
+
+sys.stderr.write(
+    f"[agentguard-mcp-gateway] server='{SERVER_LABEL}' "
+    f"allowed_tools={ALLOWED_TOOLS} "
+    f"budget={os.environ.get('AGENTGUARD_MAX_BUDGET', '5.0')}\n"
 )
 
 
@@ -78,77 +139,4 @@ async def run_gateway(upstream_command: list[str]) -> None:
                 # tools/list n'exécute rien côté agent -> pas besoin d'AgentGuard,
                 # on forward tel quel ce que le serveur upstream annonce.
                 result = await upstream.list_tools()
-                return result.tools
-
-            @gateway.call_tool()
-            async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-                tool_name = f"mcp:{SERVER_LABEL}:{name}"
-                arguments = dict(arguments or {})
-
-                async def execute_upstream():
-                    return await upstream.call_tool(name, arguments)
-
-                def run_guarded():
-                    """
-                    AgentGuard est synchrone.
-                    MCP est asyncio.
-                    On exécute donc le guard dans un thread séparé
-                    et on ne crée PAS de nouvelle boucle asyncio dans
-                    la boucle MCP principale.
-                    """
-
-                    def execute_in_thread():
-                        # Le thread possède sa propre event loop.
-                        return asyncio.run(execute_upstream())
-
-                    return guard.guard_tool_call(
-                        tool_name=tool_name,
-                        params=arguments,
-                        func=execute_in_thread,
-                    )
-
-                try:
-                    result = await asyncio.get_running_loop().run_in_executor(
-                        _executor,
-                        run_guarded,
-                    )
-
-                except SecurityException as exc:
-                    return [
-                        TextContent(
-                            type="text",
-                            text=f"🛡️ Bloqué par AgentGuard : {exc}",
-                        )
-                    ]
-
-                return result.content
-
-            async with stdio_server() as (down_read, down_write):
-                await gateway.run(
-                    down_read,
-                    down_write,
-                    gateway.create_initialization_options(),
-                )
-
-
-if __name__ == "__main__":
-    if "--" not in sys.argv:
-        print(
-            "Usage : python mcp_gateway.py -- <commande du serveur MCP réel>\n"
-            "Exemple : python mcp_gateway.py -- npx -y "
-            "@modelcontextprotocol/server-filesystem /tmp"
-        )
-        sys.exit(1)
-
-    sep = sys.argv.index("--")
-    upstream_cmd = sys.argv[sep + 1:]
-
-    if not upstream_cmd:
-        print("Aucune commande upstream fournie après --")
-        sys.exit(1)
-
-    try:
-        asyncio.run(run_gateway(upstream_cmd))
-    except ImportError:
-        print("Le SDK MCP officiel n'est pas installé.\n  pip install mcp")
-        sys.exit(1)
+                return result.sort                                # <-- non, voir note

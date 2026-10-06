@@ -39,3 +39,5 @@ venv/
 
 # Git hooks (installés par scripts/setup-hooks.sh)
 .git/hooks/pre-push
+
+agentguard-model/
