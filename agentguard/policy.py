@@ -19,6 +19,22 @@ except ImportError:
         def predict(self, text):
             return {"score": 0.0, "risk": "UNKNOWN", "confidence": "low"}
 
+def _tool_matches_whitelist(tool_name: str, whitelist) -> bool:
+    """Match exact OU par préfixe.
+
+    Une entrée de whitelist terminant par '*' (et différente de '*')
+    autorise tous les outils dont le nom commence par le préfixe.
+    Ex: "mcp:fs:*" autorise "mcp:fs:read_file".
+    Une entrée '*' seule ne matche RIEN ici : autoriser tout un serveur
+    est un choix explicite de la gateway (AGENTGUARD_MCP_ALLOWED_TOOLS="*"),
+    jamais un effet de bord du moteur de policy.
+    """
+    if tool_name in whitelist:
+        return True
+    for entry in whitelist:
+        if entry.endswith("*") and entry != "*" and tool_name.startswith(entry[:-1]):
+            return True
+    return False
 
 class PolicyEngine:
     _STRONG_PATTERNS = None
@@ -32,6 +48,14 @@ class PolicyEngine:
         self.block_on_ambiguous = os.getenv("AGENTGUARD_BLOCK_ON_AMBIGUOUS", "false").lower() in ("true", "1", "on", "yes")
         self.judge_timeout = max(0.5, float(os.getenv("AGENTGUARD_JUDGE_TIMEOUT", "15.0")))
 
+        # Fail mode de la whitelist scoped :
+        #   "open" (défaut, historique)   : un agent non couvert par une
+        #                                   whitelist n'est PAS restreint.
+        #   "closed" (recommandé en prod)  : si des policies whitelist
+        #                                   existent, un agent non couvert
+        #                                   est BLOQUÉ (fail-closed).
+        self._whitelist_fail_closed = os.getenv("AGENTGUARD_WHITELIST_FAIL_MODE", "open").strip().lower() in ("closed", "fail_closed", "true", "1")
+
         self._redis_client = None
         if redis_url and self.use_llm_judge:
             try:
@@ -43,8 +67,10 @@ class PolicyEngine:
 
         self._allowed_tools_global = set()
         self._allowed_tools_by_agent: Dict[str, set] = {}
+        self._has_whitelist_policies = False
         for policy in self.policies:
             if policy.get("type") == "tool_whitelist":
+                self._has_whitelist_policies = True
                 tools = set(policy.get("allowed_tools", []))
                 scoped_agents = policy.get("agents")
                 if not scoped_agents and policy.get("agent_id"):
@@ -225,9 +251,22 @@ class PolicyEngine:
 
     def check_tool_policy(self, tool_name: str, params: Dict[str, Any], budget_remaining: float, agent_id: Optional[str] = None) -> SecurityCheck:
         effective_whitelist = self._effective_whitelist(agent_id)
-        if effective_whitelist and tool_name not in effective_whitelist:
+        if effective_whitelist and not _tool_matches_whitelist(tool_name, effective_whitelist):
             scope = f"agent '{agent_id}'" if agent_id else "default scope"
             return SecurityCheck("tool_policy", False, RiskLevel.CRITICAL, f"Tool '{tool_name}' not in whitelist for {scope}", {"agent_id": agent_id}, SecurityAction.BLOCK)
+
+        # Fail-closed (AGENTGUARD_WHITELIST_FAIL_MODE=closed) : des policies
+        # whitelist existent mais aucune ne couvre cet agent -> BLOCK.
+        # En mode "open" (défaut), comportement historique : ALLOW.
+        if self._whitelist_fail_closed and self._has_whitelist_policies and not effective_whitelist:
+            scope = f"agent '{agent_id}'" if agent_id else "default scope"
+            return SecurityCheck(
+                "tool_policy", False, RiskLevel.CRITICAL,
+                f"Tool '{tool_name}' blocked: no whitelist covers {scope} (fail-closed mode)",
+                {"agent_id": agent_id, "fail_mode": "closed"},
+                SecurityAction.BLOCK,
+            )
+
         if budget_remaining < 0:
             return SecurityCheck("budget_policy", False, RiskLevel.HIGH, "Budget exceeded", {}, SecurityAction.BLOCK)
 
