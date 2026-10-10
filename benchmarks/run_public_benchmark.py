@@ -79,8 +79,8 @@ def percentile(sorted_values, p):
     return sorted_values[k]
 
 
-def load_json(name: str) -> list:
-    with open(CORPUS_DIR / name, "r", encoding="utf-8") as f:
+def load_json(name: str, corpus_dir: Path = None) -> list:
+    with open((corpus_dir or CORPUS_DIR) / name, "r", encoding="utf-8") as f:
         data = json.load(f)
     # Accept both {"category": [entries]} and flat [entries]
     if isinstance(data, dict):
@@ -108,6 +108,33 @@ def wilson_ci(successes: int, n: int, z: float = 1.96):
     return [round(max(0.0, center - margin), 4), round(min(1.0, center + margin), 4)]
 
 
+def verify_manifest(corpus_dir: Path):
+    """If the corpus has a MANIFEST.json (frozen external corpus), every listed
+    file must still match its SHA-256, otherwise refuse to run."""
+    mpath = corpus_dir / "MANIFEST.json"
+    if not mpath.exists():
+        return None
+    manifest = json.loads(mpath.read_text(encoding="utf-8"))
+    for name, expected in manifest.get("files", {}).items():
+        f = corpus_dir / name
+        if not f.exists() or sha256_file(f) != expected:
+            raise SystemExit(f"FROZEN CORPUS MODIFIED: {name} does not match MANIFEST.json. "
+                             f"Restore it (git checkout) or regenerate and re-freeze under a new name.")
+    return manifest
+
+
+def git_info():
+    import subprocess
+    def run(*a):
+        try:
+            return subprocess.run(["git", *a], cwd=ROOT_DIR, capture_output=True, text=True, timeout=10).stdout.strip()
+        except Exception:
+            return None
+    commit = run("rev-parse", "HEAD")
+    dirty = run("status", "--porcelain")
+    return {"commit": commit or None, "dirty": bool(dirty) if dirty is not None else None}
+
+
 class LayerUnavailable(SystemExit):
     pass
 
@@ -132,7 +159,7 @@ class Engine:
         ml = getattr(pe, "ml_detector", None)
         if ml is not None and ml.enabled and getattr(ml, "model", None) is not None:
             active.append("ml")
-        if getattr(pe, "_triple_judge", None) is not None:
+        if "ml" in active and getattr(pe, "_ml_arbiter", None) is not None:
             active.append("llm")
         return active
 
@@ -147,12 +174,26 @@ class Engine:
             "dual_pass": getattr(ml, "dual_pass", None),
         }
 
+    def llm_info(self):
+        arb = getattr(self.policy_engine, "_ml_arbiter", None)
+        if arb is None:
+            return None
+        return {
+            "role": "arbiter of ML flags not confirmed by regex",
+            "providers": [p["name"] for p in arb.providers],
+            "models_pinned": {p["name"]: arb._resolve_model(p) for p in arb.providers},
+            "temperature": arb.temperature,
+            "reproducible": False,
+            "note": "External API; verdicts are stored raw per prompt in this report.",
+        }
+
     def check(self, prompt: str):
         check = self.policy_engine.check_injection(prompt)
         return {
             "detected": not check.passed,
             "risk_level": str(getattr(check.risk_level, "value", check.risk_level)),
             "reason": (check.details or "")[:200] if check.details else "",
+            "meta": dict(getattr(check, "metadata", None) or {}),
         }
 
 
@@ -166,8 +207,9 @@ def run_subset(engine, entries, expect_detected: bool, label: str):
             detected = bool(check["detected"])
             risk = check["risk_level"]
             reason = check["reason"]
+            meta = check.get("meta", {})
         except Exception as exc:  # engine crash counts as miss, never hidden
-            detected, risk, reason = False, "error", f"engine error: {exc}"
+            detected, risk, reason, meta = False, "error", f"engine error: {exc}", {}
         latency_ms = (time.perf_counter() - start) * 1000
 
         passed = (detected == expect_detected)
@@ -183,8 +225,42 @@ def run_subset(engine, entries, expect_detected: bool, label: str):
             "risk_level": risk,
             "latency_ms": round(latency_ms, 3),
             "reason": reason,
+            "layer": meta.get("layer"),
+            "ml_score": meta.get("ml_score"),
+            "llm_verdict": meta.get("llm_verdict"),
+            "llm_model": meta.get("llm_model"),
+            "llm_latency_ms": meta.get("llm_latency_ms"),
         })
     return records
+
+
+def llm_effect(records):
+    """Marginal effect of the LLM arbiter on ML flags (over all prompts)."""
+    flagged = [r for r in records if r.get("llm_verdict") is not None]
+    out = {"arbiter_calls": len(flagged), "ml_flags_cleared": 0,
+           "ml_flags_confirmed": 0, "sent_to_review": 0, "kept_fail_closed": 0,
+           "cleared_wrongly_attacks": 0, "cleared_correctly_benign": 0,
+           "cleared_then_caught_by_regex": 0}
+    for r in flagged:
+        v = r["llm_verdict"]
+        if v == "safe" and r["detected"] and r["expected_detected"]:
+            # LLM cleared the ML flag but the deterministic normalized pass
+            # still blocked a real attack: safe, but the LLM was wrong here.
+            out["ml_flags_cleared"] += 1
+            out["cleared_then_caught_by_regex"] += 1
+        elif v == "safe":
+            out["ml_flags_cleared"] += 1
+            if r["expected_detected"]:
+                out["cleared_wrongly_attacks"] += 1
+            else:
+                out["cleared_correctly_benign"] += 1
+        elif v == "attack":
+            out["ml_flags_confirmed"] += 1
+        elif v == "didactic":
+            out["sent_to_review"] += 1
+        else:
+            out["kept_fail_closed"] += 1
+    return out
 
 
 def aggregate(records):
@@ -210,6 +286,10 @@ def main():
     parser.add_argument("--limit", type=int, default=None,
                         help="Limit prompts per subset (smoke runs only; "
                              "results marked non-authoritative)")
+    parser.add_argument("--corpus-dir", default=None,
+                        help="Corpus directory (default: internal dev corpus). "
+                             "A directory with MANIFEST.json is treated as a "
+                             "frozen external corpus and checksum-verified.")
     parser.add_argument("--allow-degraded", action="store_true",
                         help="Do not abort when a requested layer is not "
                              "really active; the run is then marked "
@@ -219,9 +299,15 @@ def main():
     presets = list(LAYER_PRESETS) if args.all_layers else [args.layers]
 
     # --- Load corpora ---
-    attacks = load_json("attacks.json")
-    benign = load_json("benign.json")
-    hard_neg = load_json("hard_negatives.json")
+    corpus_dir = Path(args.corpus_dir).resolve() if args.corpus_dir else CORPUS_DIR
+    manifest = verify_manifest(corpus_dir)
+    external = manifest is not None
+    attacks = load_json("attacks.json", corpus_dir)
+    benign = load_json("benign.json", corpus_dir)
+    hn_path = corpus_dir / "hard_negatives.json"
+    hard_neg = load_json("hard_negatives.json", corpus_dir) if hn_path.exists() else []
+    if not hard_neg:
+        print("NOTE: no hard-negative set in this corpus; hard-negative FPR is not measured.")
 
     # The legacy adversarial corpus mixes benign entries into the attack
     # file. The public benchmark keeps attacks-only here; the benign set
@@ -242,6 +328,11 @@ def main():
         os.environ["AGENTGUARD_USE_ML"] = "true" if "ml" in layers else "false"
         os.environ["AGENTGUARD_USE_LLM_JUDGE"] = "true" if "llm" in layers else "false"
         os.environ.setdefault("AGENTGUARD_DB_TYPE", "sqlite")
+        if "llm" in layers:
+            # Juge = DeepSeek uniquement (cle : AGENTGUARD_JUDGE_API_KEY),
+            # temperature 0, pour limiter la variance d'un run a l'autre.
+            os.environ.setdefault("AGENTGUARD_JUDGE_PROVIDERS", "deepseek")
+            os.environ.setdefault("AGENTGUARD_JUDGE_TEMPERATURE", "0")
 
         print(f"\n=== Layers: {preset} ===")
         engine = Engine()
@@ -252,8 +343,9 @@ def main():
         if degraded:
             msg = (f"Requested layers {layers} but only {actual} are really "
                    f"active (missing: {missing}). Install torch/model for "
-                   f"'ml'; 'llm' is not wired into PolicyEngine if "
-                   f"_triple_judge is None.")
+                   f"'ml'; 'llm' needs the ML layer plus "
+                   f"AGENTGUARD_USE_LLM_JUDGE=true and AGENTGUARD_JUDGE_API_KEY "
+                   f"(DeepSeek).")
             if not args.allow_degraded:
                 raise LayerUnavailable("ERROR: " + msg)
             print("  WARNING (degraded run): " + msg)
@@ -283,20 +375,22 @@ def main():
 
         recall = att_all["detected"] / att_all["count"] if att_all["count"] else 0
         fpr = 1 - (ben_all["passed"] / ben_all["count"]) if ben_all["count"] else 0
-        hn_fpr = 1 - (hn_all["passed"] / hn_all["count"]) if hn_all["count"] else 0
+        hn_fpr = 1 - (hn_all["passed"] / hn_all["count"]) if hn_all["count"] else None
 
         run_report = {
             "layers": layers,
             "layers_active": actual,
             "degraded": degraded,
             "ml": engine.ml_info(),
+            "llm": engine.llm_info(),
+            "llm_effect": llm_effect(attack_rec + benign_rec + hardneg_rec) if "llm" in actual else None,
             "recall_overall": round(recall, 4),
             "recall_per_category": {
                 c: round(s["detected"] / s["count"], 4)
                 for c, s in per_category.items()
             },
             "false_positive_rate_benign": round(fpr, 4),
-            "false_positive_rate_hard_negatives": round(hn_fpr, 4),
+            "false_positive_rate_hard_negatives": round(hn_fpr, 4) if hn_fpr is not None else None,
             "recall_ci95": wilson_ci(att_all["detected"], att_all["count"]),
             "fpr_benign_ci95": wilson_ci(ben_all["count"] - ben_all["passed"], ben_all["count"]),
             "fpr_hard_negatives_ci95": wilson_ci(hn_all["count"] - hn_all["passed"], hn_all["count"]),
@@ -325,7 +419,16 @@ def main():
         for c, s in per_category.items():
             print(f"    - {c:28s} {s['detected']}/{s['count']}")
         print(f"  FPR (benign):          {fpr:.2%}")
-        print(f"  FPR (hard negatives): {hn_fpr:.2%}")
+        print(f"  FPR (hard negatives): {'n/a (no hard-negative set)' if hn_fpr is None else format(hn_fpr, '.2%')}")
+        if "llm" in actual:
+            fx = llm_effect(attack_rec + benign_rec + hardneg_rec)
+            print(f"  LLM arbiter: {fx['arbiter_calls']} ML flags judged -> "
+                  f"{fx['ml_flags_cleared']} cleared "
+                  f"({fx['cleared_correctly_benign']} benign, "
+                  f"{fx['cleared_wrongly_attacks']} ATTACKS wrongly cleared), "
+                  f"{fx['cleared_then_caught_by_regex']} cleared-but-caught-by-regex, "
+                  f"{fx['ml_flags_confirmed']} confirmed, "
+                  f"{fx['sent_to_review']} review, {fx['kept_fail_closed']} kept (fail-closed)")
         print(f"  Active layers:         {actual}"
               f"{'  (DEGRADED)' if degraded else ''}")
         print(f"  Latency (all prompts) p50/p95/p99: "
@@ -344,10 +447,14 @@ def main():
             "python_version": platform.python_version(),
             "platform": platform.platform(),
         },
+        "corpus_name": manifest["name"] if external else "internal-dev",
+        "corpus_role": manifest["role"] if external else "dev_internal (not independent evidence)",
+        "corpus_manifest": manifest,
+        "git": git_info(),
         "corpus": {
-            "attacks_sha256": sha256_file(CORPUS_DIR / "attacks.json"),
-            "benign_sha256": sha256_file(CORPUS_DIR / "benign.json"),
-            "hard_negatives_sha256": sha256_file(CORPUS_DIR / "hard_negatives.json"),
+            "attacks_sha256": sha256_file(corpus_dir / "attacks.json"),
+            "benign_sha256": sha256_file(corpus_dir / "benign.json"),
+            "hard_negatives_sha256": sha256_file(hn_path) if hn_path.exists() else None,
         },
         "note_llm_layer": (
             "The 'llm' layer requires an external API and its results are "
@@ -359,8 +466,12 @@ def main():
     }
 
     RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    out_path = RESULTS_DIR / f"benchmark-{stamp}.json"
+    if external:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S")
+        out_path = RESULTS_DIR / f"benchmark-{manifest['name']}-{stamp}.json"
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        out_path = RESULTS_DIR / f"benchmark-{stamp}.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     print(f"\n📄 Report written to {out_path}")
