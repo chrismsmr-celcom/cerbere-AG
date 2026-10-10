@@ -96,6 +96,22 @@ def load_json(name: str) -> list:
     return data
 
 
+
+def wilson_ci(successes: int, n: int, z: float = 1.96):
+    """95% Wilson score interval for a proportion (robust on small n)."""
+    if n == 0:
+        return [0.0, 0.0]
+    p = successes / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    margin = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return [round(max(0.0, center - margin), 4), round(min(1.0, center + margin), 4)]
+
+
+class LayerUnavailable(SystemExit):
+    pass
+
+
 class Engine:
     """Thin wrapper around PolicyEngine — texte brut, aucun prétraitement.
 
@@ -108,6 +124,28 @@ class Engine:
     def __init__(self):
         from agentguard_sdk import PolicyEngine
         self.policy_engine = PolicyEngine()
+
+    def active_layers(self):
+        """Layers that will REALLY run (not merely requested via env vars)."""
+        pe = self.policy_engine
+        active = ["regex"]
+        ml = getattr(pe, "ml_detector", None)
+        if ml is not None and ml.enabled and getattr(ml, "model", None) is not None:
+            active.append("ml")
+        if getattr(pe, "_triple_judge", None) is not None:
+            active.append("llm")
+        return active
+
+    def ml_info(self):
+        ml = getattr(self.policy_engine, "ml_detector", None)
+        if ml is None or not ml.enabled:
+            return None
+        return {
+            "model_name": getattr(ml, "model_name", None),
+            "model_path": getattr(ml, "model_path", None),
+            "threshold": getattr(ml, "threshold", None),
+            "dual_pass": getattr(ml, "dual_pass", None),
+        }
 
     def check(self, prompt: str):
         check = self.policy_engine.check_injection(prompt)
@@ -172,6 +210,10 @@ def main():
     parser.add_argument("--limit", type=int, default=None,
                         help="Limit prompts per subset (smoke runs only; "
                              "results marked non-authoritative)")
+    parser.add_argument("--allow-degraded", action="store_true",
+                        help="Do not abort when a requested layer is not "
+                             "really active; the run is then marked "
+                             "degraded and records the layers that ran.")
     args = parser.parse_args()
 
     presets = list(LAYER_PRESETS) if args.all_layers else [args.layers]
@@ -204,6 +246,25 @@ def main():
         print(f"\n=== Layers: {preset} ===")
         engine = Engine()
 
+        actual = engine.active_layers()
+        missing = [l for l in layers if l not in actual]
+        degraded = bool(missing)
+        if degraded:
+            msg = (f"Requested layers {layers} but only {actual} are really "
+                   f"active (missing: {missing}). Install torch/model for "
+                   f"'ml'; 'llm' is not wired into PolicyEngine if "
+                   f"_triple_judge is None.")
+            if not args.allow_degraded:
+                raise LayerUnavailable("ERROR: " + msg)
+            print("  WARNING (degraded run): " + msg)
+
+        # Warm-up: exclude model load / first-call cost from latency stats.
+        for _ in range(3):
+            try:
+                engine.check("warm-up request, please ignore")
+            except Exception:
+                pass
+
         attack_rec = run_subset(engine, attacks, True, "attack")
         benign_rec = run_subset(engine, benign, False, "benign")
         hardneg_rec = run_subset(engine, hard_neg, False, "hard_negative")
@@ -216,6 +277,7 @@ def main():
             cat: aggregate(recs) for cat, recs in sorted(by_cat.items())
         }
         att_all = aggregate(attack_rec)
+        all_lat = aggregate(attack_rec + benign_rec + hardneg_rec)["latency_ms"]
         ben_all = aggregate(benign_rec)
         hn_all = aggregate(hardneg_rec)
 
@@ -225,6 +287,9 @@ def main():
 
         run_report = {
             "layers": layers,
+            "layers_active": actual,
+            "degraded": degraded,
+            "ml": engine.ml_info(),
             "recall_overall": round(recall, 4),
             "recall_per_category": {
                 c: round(s["detected"] / s["count"], 4)
@@ -232,7 +297,17 @@ def main():
             },
             "false_positive_rate_benign": round(fpr, 4),
             "false_positive_rate_hard_negatives": round(hn_fpr, 4),
-            "latency_ms": att_all["latency_ms"],
+            "recall_ci95": wilson_ci(att_all["detected"], att_all["count"]),
+            "fpr_benign_ci95": wilson_ci(ben_all["count"] - ben_all["passed"], ben_all["count"]),
+            "fpr_hard_negatives_ci95": wilson_ci(hn_all["count"] - hn_all["passed"], hn_all["count"]),
+            # Latency over ALL prompts: attacks caught by regex exit early,
+            # so attack-only latency hides the cost of the ML path.
+            "latency_ms": all_lat,
+            "latency_ms_by_subset": {
+                "attacks": att_all["latency_ms"],
+                "benign": ben_all["latency_ms"],
+                "hard_negatives": hn_all["latency_ms"],
+            },
             "counts": {
                 "attacks": att_all["count"],
                 "benign": ben_all["count"],
@@ -251,10 +326,14 @@ def main():
             print(f"    - {c:28s} {s['detected']}/{s['count']}")
         print(f"  FPR (benign):          {fpr:.2%}")
         print(f"  FPR (hard negatives): {hn_fpr:.2%}")
-        print(f"  Latency p50/p95/p99:   "
-              f"{att_all['latency_ms']['p50']:.2f} / "
-              f"{att_all['latency_ms']['p95']:.2f} / "
-              f"{att_all['latency_ms']['p99']:.2f} ms")
+        print(f"  Active layers:         {actual}"
+              f"{'  (DEGRADED)' if degraded else ''}")
+        print(f"  Latency (all prompts) p50/p95/p99: "
+              f"{all_lat['p50']:.2f} / {all_lat['p95']:.2f} / {all_lat['p99']:.2f} ms")
+        print(f"  Latency (benign only) p50/p95/p99: "
+              f"{ben_all['latency_ms']['p50']:.2f} / "
+              f"{ben_all['latency_ms']['p95']:.2f} / "
+              f"{ben_all['latency_ms']['p99']:.2f} ms")
 
     report = {
         "benchmark": "cerbere-ag-public-benchmark",
@@ -275,6 +354,7 @@ def main():
             "environment-dependent; only regex/ml runs are fully reproducible."
         ),
         "limited_run": bool(args.limit),
+        "degraded_any": any(r["degraded"] for r in runs),
         "runs": runs,
     }
 
