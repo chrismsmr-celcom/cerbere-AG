@@ -16,7 +16,7 @@ jobs:
       - name: Install SDK (regex layer only — no ML deps, no API keys)
         run: pip install -e .
       - name: Run public benchmark (regex layer)
-        run: python benchmarks/run_public_benchmark.py --layers regex
+        run: python benchmarks/run_public_benchmark.py --all-layers
       - name: Store artifact
         uses: actions/upload-artifact@v4
         with:
