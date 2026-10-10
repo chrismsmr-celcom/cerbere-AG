@@ -9,7 +9,7 @@ from .models import SecurityCheck, RiskLevel, SecurityAction
 logger = structlog.get_logger("agentguard.policy")
 
 try:
-    from agentguard_ml import MLDetector
+    from .ml import MLDetector
 except ImportError:
     class MLDetector:
         def __init__(self):
@@ -18,6 +18,13 @@ except ImportError:
             self.threshold = 0.95
         def predict(self, text):
             return {"score": 0.0, "risk": "UNKNOWN", "confidence": "low"}
+
+try:
+    from .judges import LLMCascadeJudge, JudgeVerdict
+except ImportError:  # pragma: no cover
+    LLMCascadeJudge = None
+    JudgeVerdict = None
+
 
 def _tool_matches_whitelist(tool_name: str, whitelist) -> bool:
     """Match exact OU par préfixe.
@@ -81,6 +88,18 @@ class PolicyEngine:
                 else:
                     self._allowed_tools_global.update(tools)
         self._triple_judge = None
+
+        # Arbitre LLM des flags ML : un flag ML NON confirme par le regex est
+        # soumis au juge (ex. DeepSeek via AGENTGUARD_JUDGE_PROVIDERS=deepseek)
+        # qui peut l'innocenter. Sans cle API / sans USE_LLM_JUDGE : None, le
+        # flag ML reste un BLOCK (fail-closed).
+        self._ml_arbiter = None
+        if self.use_llm_judge and LLMCascadeJudge is not None:
+            arbiter = LLMCascadeJudge()
+            if arbiter.is_configured():
+                self._ml_arbiter = arbiter
+            else:
+                logger.warning("llm_arbiter_unconfigured", detail="USE_LLM_JUDGE=true mais aucune cle API pour les providers autorises")
 
     @property
     def _allowed_tools(self) -> set:
@@ -176,6 +195,7 @@ class PolicyEngine:
             except Exception as e:
                 logger.warning("triple_judge_failed", error=str(e))
 
+        ml_cleared = None  # flag ML innocente par l'arbitre LLM (voir étape 3)
         # ── ÉTAPE 3 : détection ML (texte brut) ──
         # v5: seuil lu depuis le detector (source unique, 0.95 par défaut) ;
         # downgrader didactique aligné sur le comportement du bloc regex.
@@ -189,11 +209,20 @@ class PolicyEngine:
                         {"layer": "ml", "downgraded": True, "ml_score": round(ml_result["score"], 4)},
                         SecurityAction.REVIEW,
                     )
-                return SecurityCheck(
-                    "prompt_injection", False, RiskLevel.HIGH,
-                    f"ML detected threat ({ml_result['score']:.2%})",
-                    {"layer": "ml"}, SecurityAction.BLOCK,
-                )
+                if self._ml_arbiter is not None:
+                    arbitrated = self._arbitrate_ml_flag(text, ml_result["score"])
+                    if arbitrated.metadata.get("ml_overridden"):
+                        # Le LLM peut contredire le ML, JAMAIS les passes regex
+                        # deterministes ci-dessous (normalisee, mots inverses).
+                        ml_cleared = arbitrated
+                    else:
+                        return arbitrated
+                else:
+                    return SecurityCheck(
+                        "prompt_injection", False, RiskLevel.HIGH,
+                        f"ML detected threat ({ml_result['score']:.2%})",
+                        {"layer": "ml", "ml_score": round(ml_result["score"], 4)}, SecurityAction.BLOCK,
+                    )
 
         # ── ÉTAPE 4 : passe NORMALISÉE (fallback anti-obfuscation) ──
         # Early exit : la grande majorité des prompts (bénins ET attaques
@@ -211,7 +240,7 @@ class PolicyEngine:
             return SecurityCheck(
                 "prompt_injection", False, RiskLevel.HIGH,
                 "Obfuscated variant detected",
-                {"layer": "regex+normalizer"}, SecurityAction.BLOCK,
+                {"layer": "regex+normalizer", **self._cleared_flag(ml_cleared)}, SecurityAction.BLOCK,
             )
 
         # ── ÉTAPE 5 : passe MOTS INVERSÉS (générique) ──
@@ -220,10 +249,62 @@ class PolicyEngine:
             return SecurityCheck(
                 "prompt_injection", False, RiskLevel.HIGH,
                 "Reversed-word obfuscation detected",
-                {"layer": "regex+normalizer"}, SecurityAction.BLOCK,
+                {"layer": "regex+normalizer", **self._cleared_flag(ml_cleared)}, SecurityAction.BLOCK,
             )
 
+        if ml_cleared is not None:
+            return ml_cleared  # ML flag cleared by the LLM AND all deterministic passes clean
         return SecurityCheck("prompt_injection", True, RiskLevel.LOW, "No injection detected", {"layer": "all_clear"}, SecurityAction.ALLOW)
+
+    @staticmethod
+    def _cleared_flag(ml_cleared) -> Dict[str, Any]:
+        """Metadata a regex block carries when the LLM had cleared the ML flag first."""
+        if ml_cleared is None:
+            return {}
+        return {"ml_cleared_by_llm": True, "ml_score": ml_cleared.metadata.get("ml_score"),
+                "llm_verdict": ml_cleared.metadata.get("llm_verdict"),
+                "llm_model": ml_cleared.metadata.get("llm_model"),
+                "llm_latency_ms": ml_cleared.metadata.get("llm_latency_ms")}
+
+    def _arbitrate_ml_flag(self, text: str, ml_score: float) -> SecurityCheck:
+        """Soumet un flag ML (non confirme par le regex) au juge LLM.
+
+        SAFE      -> ALLOW  (le ML est contredit)
+        ATTACK    -> BLOCK  (le ML est confirme)
+        DIDACTIC  -> REVIEW (revue humaine, comme le downgrader regex)
+        autre / indisponible (AMBIGUOUS, UNCERTAIN, timeout) -> BLOCK : le
+        flag ML tient (fail-closed), jamais d'ALLOW par defaut du juge.
+        """
+        judged = self._ml_arbiter.evaluate(text)
+        meta = {
+            "layer": "ml+llm", "ml_score": round(ml_score, 4),
+            "llm_verdict": judged.verdict.value, "llm_model": judged.model,
+            "llm_latency_ms": round(judged.latency_ms, 1), "llm_cached": judged.cached,
+        }
+        reason = (judged.reason or "")[:120]
+        if judged.verdict == JudgeVerdict.SAFE:
+            return SecurityCheck(
+                "prompt_injection", True, RiskLevel.LOW,
+                f"ML flag ({ml_score:.2%}) cleared by LLM arbiter: {reason}",
+                {**meta, "ml_overridden": True}, SecurityAction.ALLOW,
+            )
+        if judged.verdict == JudgeVerdict.ATTACK:
+            return SecurityCheck(
+                "prompt_injection", False, RiskLevel.HIGH,
+                f"ML ({ml_score:.2%}) confirmed by LLM arbiter: {reason}",
+                meta, SecurityAction.BLOCK,
+            )
+        if judged.verdict == JudgeVerdict.DIDACTIC:
+            return SecurityCheck(
+                "prompt_injection", True, RiskLevel.MEDIUM,
+                f"ML flag ({ml_score:.2%}), LLM arbiter: didactic context -> review",
+                {**meta, "downgraded": True}, SecurityAction.REVIEW,
+            )
+        return SecurityCheck(
+            "prompt_injection", False, RiskLevel.HIGH,
+            f"ML detected threat ({ml_score:.2%}); LLM arbiter {judged.verdict.value}: block kept (fail-closed)",
+            {**meta, "layer": "ml"}, SecurityAction.BLOCK,
+        )
 
     def check_pii(self, text: str) -> SecurityCheck:
         text = str(text or "")
