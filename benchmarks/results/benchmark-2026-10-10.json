@@ -1,3 +1,121 @@
+<<<<<<< HEAD
+{
+  "benchmark": "cerbere-ag-public-benchmark",
+  "version": "1.0.0",
+  "generated_at": "2026-10-10T10:07:55.965748+00:00",
+  "environment": {
+    "sdk_version": "0.5.0",
+    "python_version": "3.14.2",
+    "platform": "Windows-10-10.0.19045-SP0"
+  },
+  "corpus": {
+    "attacks_sha256": "7775a3e8326df3c71fdd478587e126bc5d733ce5327181305d1d61ec8213c5aa",
+    "benign_sha256": "f967bf6d22d18c4fa764f864286cc0f2e960265066c51ba1039beff0e2a4bf60",
+    "hard_negatives_sha256": "54e96f408e696b8bfda7aaa8cf8dee305af6c678dfdf1a06c924fab3f83dae99"
+  },
+  "note_llm_layer": "The 'llm' layer requires an external API and its results are environment-dependent; only regex/ml runs are fully reproducible.",
+  "limited_run": false,
+  "degraded_any": false,
+  "runs": [
+    {
+      "layers": [
+        "regex",
+        "ml",
+        "llm"
+      ],
+      "layers_active": [
+        "regex",
+        "ml",
+        "llm"
+      ],
+      "degraded": false,
+      "ml": {
+        "model_name": "protectai/deberta-v3-base-prompt-injection-v2",
+        "model_path": "./agentguard-model",
+        "threshold": 0.95,
+        "dual_pass": true
+      },
+      "llm": {
+        "role": "arbiter of ML flags not confirmed by regex",
+        "providers": [
+          "deepseek"
+        ],
+        "models_pinned": {
+          "deepseek": "deepseek-chat"
+        },
+        "temperature": 0.0,
+        "reproducible": false,
+        "note": "External API; verdicts are stored raw per prompt in this report."
+      },
+      "llm_effect": {
+        "arbiter_calls": 6,
+        "ml_flags_cleared": 3,
+        "ml_flags_confirmed": 3,
+        "sent_to_review": 0,
+        "kept_fail_closed": 0,
+        "cleared_wrongly_attacks": 0,
+        "cleared_correctly_benign": 3,
+        "cleared_then_caught_by_regex": 0
+      },
+      "recall_overall": 1.0,
+      "recall_per_category": {
+        "dangerous_commands": 1.0,
+        "direct_injection": 1.0,
+        "encoded_obfuscated": 1.0,
+        "exfiltration": 1.0,
+        "indirect_injection": 1.0,
+        "jailbreak": 1.0,
+        "system_extraction": 1.0
+      },
+      "false_positive_rate_benign": 0.0,
+      "false_positive_rate_hard_negatives": 0.0,
+      "recall_ci95": [
+        0.965,
+        1.0
+      ],
+      "fpr_benign_ci95": [
+        0.0,
+        0.1611
+      ],
+      "fpr_hard_negatives_ci95": [
+        0.0,
+        0.2425
+      ],
+      "latency_ms": {
+        "p50": 0.235,
+        "p95": 469.332,
+        "p99": 2005.688
+      },
+      "latency_ms_by_subset": {
+        "attacks": {
+          "p50": 0.191,
+          "p95": 0.946,
+          "p99": 1961.288
+        },
+        "benign": {
+          "p50": 365.84,
+          "p95": 438.546,
+          "p99": 1782.809
+        },
+        "hard_negatives": {
+          "p50": 211.022,
+          "p95": 1727.593,
+          "p99": 2082.203
+        }
+      },
+      "counts": {
+        "attacks": 106,
+        "benign": 20,
+        "hard_negatives": 12
+      },
+      "failures": {
+        "attacks_missed": [],
+        "benign_blocked": [],
+        "hard_negatives_blocked": []
+      }
+    }
+  ]
+=======
 {
   "benchmark": "cerbere-ag-public-benchmark",
   "version": "1.0.0",
@@ -131,4 +249,5 @@
       }
     }
   ]
+>>>>>>> origin/main
 }
