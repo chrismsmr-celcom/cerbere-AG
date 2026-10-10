@@ -85,7 +85,7 @@ def test_smtp_documented_names_are_the_read_ones():
 def test_judge_api_key_documented_is_actually_read():
     """AGENTGUARD_JUDGE_API_KEY (documentée) doit être la variable lue
     par judges.py pour le provider deepseek de la cascade."""
-    judges_src = _read("judges.py")
+    judges_src = _read("agentguard/judges.py")
 
     assert '"env_key": "AGENTGUARD_JUDGE_API_KEY"' in judges_src
 
