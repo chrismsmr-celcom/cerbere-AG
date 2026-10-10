@@ -54,7 +54,7 @@ multilingual (en/fr/es/de/it).
 
 ### 3.2 External holdout set (required for credibility)
 
-`benchmarks/external_holdout.json` — prompts sourced from **public, independent**
+`benchmarks/external/<name>/` (built by `benchmarks/prepare_external.py`, pinned to a dataset revision and checksum-verified by the runner via `MANIFEST.json`) — prompts sourced from **public, independent**
 datasets, with attribution. This set is **never** used to tune patterns.
 
 Recommended public sources:
