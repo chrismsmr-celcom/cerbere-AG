@@ -39,12 +39,25 @@ def ctx(tmp_path, monkeypatch):
         yield c, api, monkeypatch
 
 
+
 def _as_human(api, monkeypatch, org="org-a"):
-    def fake():
-        from flask import g
-        g.org_id, g.human_email = org, "ciso@acme.io"
+    from flask import g
+    import collector.auth.middleware as middleware
+
+    def fake_human_auth():
+        g.org_id = org
+        g.human_email = "ciso@acme.io"
         return True
-    monkeypatch.setattr(api, "require_human_auth", fake)
+
+    def fake_global_auth():
+        # Simule l'authentification globale uniquement dans les tests.
+        g.org_id = org
+        g.human_email = "ciso@acme.io"
+        return True
+
+    monkeypatch.setattr(api, "require_human_auth", fake_human_auth)
+    monkeypatch.setattr(middleware, "require_auth", fake_global_auth)
+
 
 
 # ── budgets ────────────────────────────────────────────────────────────────
