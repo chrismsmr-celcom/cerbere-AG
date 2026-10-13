@@ -12,7 +12,7 @@ from agentguard import AgentGuard, SecurityException
 from agentguard import ApprovalRequiredException, ApprovalRejectedException
 
 COLLECTOR = os.environ.get("CERBERE_URL", "https://app.cerbereag.site")
-API_KEY = os.environ["CERBERE_API_KEY"]
+API_KEY = os.environ["AGENTGUARD_API_KEY"]
 PAUSE = float(os.environ.get("DEMO_PAUSE", "2.5"))
 import requests
 
