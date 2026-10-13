@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "generated_by": "benchmarks/generate_corpus_10k.py",
+  "description": "Frozen 10k-prompt corpus: 5000 attacks, 3500 benign, 1500 hard negatives. Deterministic and byte-for-byte reproducible. Integrity verified by run_public_benchmark.py.",
+  "counts": {
+    "attacks": {
+      "direct_injection": 1000,
+      "jailbreak": 700,
+      "system_extraction": 600,
+      "exfiltration": 700,
+      "dangerous_commands": 600,
+      "encoded_obfuscated": 700,
+      "indirect_injection": 700
+    },
+    "benign": {
+      "benign_dev": 692,
+      "benign_general": 378,
+      "benign_support": 692,
+      "benign_data": 692,
+      "benign_creative": 691,
+      "benign_fr": 355
+    },
+    "hard_negatives": {
+      "hn_security_writing": 447,
+      "hn_fiction": 160,
+      "hn_test_fixtures": 447,
+      "hn_fr": 446
+    },
+    "total": {
+      "attacks": 5000,
+      "benign": 3500,
+      "hard_negatives": 1500,
+      "all": 10000
+    }
+  },
+  "files": {
+    "attacks.json": "e9abe9464f6b63944b757aadd410f17d8304e544d26ebe5bfb7fb2cbdcf64d9e",
+    "benign.json": "8caffd12629400bbbf8bd0a9bc8a46c8a310ad44f90815c3a66bb7906f5ee9fe",
+    "hard_negatives.json": "02a63cec889d40447a7ca75d079b1f4244bebed97c2435b5aaf275805bac9f03"
+  }
+}
