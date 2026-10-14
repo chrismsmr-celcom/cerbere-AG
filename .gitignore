@@ -45,3 +45,7 @@ agentguard-model/
 # Coverage
 .coverage
 coverage.xml
+
+# Benchmarks générés (en cours de développement)
+benchmarks/corpus_*/
+benchmarks/results/
