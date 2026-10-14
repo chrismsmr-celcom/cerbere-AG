@@ -1,5 +1,5 @@
 # tests/test_triple_judge.py
-from judges import TripleJudge, PromptGuardJudge, LlamaGuardJudge, JudgeVerdict
+from agentguard.judges import TripleJudge, PromptGuardJudge, LlamaGuardJudge, JudgeVerdict
 
 def test_benign_allowed():
     """Un prompt bénin passe tous les juges."""

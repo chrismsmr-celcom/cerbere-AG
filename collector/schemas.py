@@ -51,7 +51,7 @@ class UserCreateRequest(BaseModel):
     @field_validator("role")
     @classmethod
     def validate_role(cls, v):
-        from identity import Role
+        from agentguard.identity import Role
         try:
             Role(v)
         except ValueError:

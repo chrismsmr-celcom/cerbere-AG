@@ -5,7 +5,7 @@ import secrets
 from flask import jsonify, g, request
 
 from collector.auth import require_auth
-from decision_engine import DecisionRequest
+from agentguard.decision_engine import DecisionRequest
 from collector.api.helpers import (
     api_bp, logger, get_decision_signer, is_server_registered_tool,
     _reject_if_agent_disconnected,

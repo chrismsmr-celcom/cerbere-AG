@@ -44,4 +44,4 @@ Repository = "https://github.com/chrismsmr-celcom/cerbere-AG"
 # Voir l'explication ci-dessous.
 
 [tool.setuptools.packages.find]
-include = ["agentguard*"]
+include = ["agentguard*", "collector*", "policy*", "tools*", "mcp*"]

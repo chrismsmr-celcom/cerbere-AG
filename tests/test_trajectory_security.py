@@ -1,4 +1,4 @@
-from trajectory import (
+from agentguard.trajectory import (
     TrajectoryAnalyzer,
     TrajectoryEvent,
 )

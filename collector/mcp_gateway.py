@@ -47,7 +47,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agentguard_sdk import AgentGuard, SecurityException
+from agentguard.sdk import AgentGuard, SecurityException
 from concurrent.futures import ThreadPoolExecutor
 _executor = ThreadPoolExecutor(
     max_workers=int(os.environ.get("AGENTGUARD_MCP_WORKERS", "4"))

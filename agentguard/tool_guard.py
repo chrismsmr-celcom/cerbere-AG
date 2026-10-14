@@ -37,7 +37,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set
 
-from decision_engine import (
+from agentguard.decision_engine import (
     Decision,
     DecisionEngine,
     DecisionRequest,

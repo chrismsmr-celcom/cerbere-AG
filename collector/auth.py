@@ -1273,7 +1273,7 @@ def _session_org_id(token: str):
 
 def _build_user_identity(user):
     try:
-        from identity import (
+        from agentguard.identity import (
             IdentityType,
             ResolvedIdentity,
             Role,
@@ -1361,7 +1361,7 @@ def resolve_full_identity():
     Resolve the complete identity for the current request.
     """
     try:
-        from identity import (
+        from agentguard.identity import (
             IdentityType,
             ResolvedIdentity,
             Role,
@@ -1473,7 +1473,7 @@ def authorize_resource_access(
     allow_cross_org: bool = False,
 ) -> bool:
     try:
-        from identity import (
+        from agentguard.identity import (
             IdentityType,
             Role,
         )
@@ -1514,7 +1514,7 @@ def authorize_resource_access(
 
 def require_role(*required_roles: str):
     try:
-        from identity import Role
+        from agentguard.identity import Role
 
         required = [
             Role(r)
@@ -1598,7 +1598,7 @@ def require_permission(permission: str):
                 ), 401
 
             try:
-                from identity import role_has_permission
+                from agentguard.identity import role_has_permission
 
                 if not role_has_permission(
                     identity.role,

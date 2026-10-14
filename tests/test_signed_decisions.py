@@ -4,7 +4,7 @@ import pytest
 import os
 os.environ["AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY"] = "true" 
 try:
-    from signing import DecisionSigner, DecisionVerifier
+    from agentguard.signing import DecisionSigner, DecisionVerifier
     SIGNING_AVAILABLE = True
 except ImportError:
     SIGNING_AVAILABLE = False

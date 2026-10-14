@@ -283,7 +283,7 @@ def receive_span():
 
     if data["blocked"]:
         try:
-            import alerting
+            from collector import alerting
             failed = [c for c in data["security_checks"]
                       if isinstance(c, dict) and not c.get("passed", True)]
             worst = "high"

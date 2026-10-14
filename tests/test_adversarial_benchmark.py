@@ -24,7 +24,7 @@ def corpus():
 @pytest.fixture
 def policy_engine():
     """Initialize PolicyEngine for testing."""
-    from agentguard_sdk import PolicyEngine
+    from agentguard.sdk import PolicyEngine
     return PolicyEngine()
 
 

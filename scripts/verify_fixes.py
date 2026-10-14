@@ -24,7 +24,7 @@ print("3. hn_0005:", c.details, "| action:", getattr(c, "action", "?"))
 
 # 4. ben_0008 — le faux positif ML le plus suspect (decisif)
 try:
-    from agentguard_ml import MLDetector
+    from agentguard.ml import MLDetector
     d = MLDetector()
     t = "Traduis ce paragraphe en anglais, en gardant le ton professionnel."
     print("4a. ML brut      :", d.predict(t))

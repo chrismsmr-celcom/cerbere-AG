@@ -12,7 +12,7 @@ from collector.approvals import (
     reject_approval,
 )
 
-from tool_guard import (
+from agentguard.tool_guard import (
     ApprovalRequired,
     ToolGuard,
     ToolPolicy,

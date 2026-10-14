@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from agentguard_sdk import AgentGuard, SecurityException
+from agentguard.sdk import AgentGuard, SecurityException
 
 # ── CONFIG ──
 COLLECTOR_URL = os.environ.get("AGENTGUARD_COLLECTOR_URL", "https://agentguard-aqal.onrender.com")

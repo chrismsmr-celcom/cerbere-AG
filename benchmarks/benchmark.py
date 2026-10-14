@@ -103,7 +103,7 @@ class AdversarialBenchmark:
         """Initialize the PolicyEngine for benchmarking."""
         try:
             # Import from SDK (not collector)
-            from agentguard_sdk import PolicyEngine
+            from agentguard.sdk import PolicyEngine
             self.policy_engine = PolicyEngine()
             print("✅ PolicyEngine initialized (regex + basic detection)")
         except ImportError:

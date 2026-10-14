@@ -5,7 +5,7 @@ import tempfile
 import pytest
 
 try:
-    from audit import ImmutableAuditLog, AuditEventType
+    from agentguard.audit import ImmutableAuditLog, AuditEventType
     AUDIT_AVAILABLE = True
 except ImportError:
     AUDIT_AVAILABLE = False
