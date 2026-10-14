@@ -115,7 +115,7 @@ def _load_gateway_module(monkeypatch, allowed_tools, label="fs"):
     if root not in sys.path:
         sys.path.insert(0, root)
 
-    import mcp_gateway
+    from collector import mcp_gateway
     return importlib.reload(mcp_gateway)
 
 
