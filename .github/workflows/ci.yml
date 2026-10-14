@@ -1,0 +1,110 @@
+name: CI/CD Pipeline - Quality & Security
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # ---------------------------------------------------------
+  # JOB 1 : Qualité du code et Sécurité (SAST + Dépendances)
+  # ---------------------------------------------------------
+  quality-and-security:
+    name: Quality & Security Checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"] # Supporte les versions déclarées dans pyproject.toml
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Nécessaire pour que Gitleaks puisse scanner l'historique des commits
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        # Outils de sécurité et de linting (si pas déjà dans requirements-dev.txt)
+        pip install bandit pip-audit ruff
+
+    - name: Lint with Ruff
+      run: |
+        echo "🔍 Running Ruff linter..."
+        ruff check .
+        echo "🎨 Checking code formatting..."
+        ruff format --check .
+
+    - name: Security Scan with Bandit (SAST)
+      run: |
+        echo "🛡️ Running Bandit for Python security vulnerabilities..."
+        # -ll : niveau bas et plus, -ii : ignorer les erreurs d'import non résolues pour les faux positifs
+        bandit -r . -ll -ii -f txt -o bandit-report.txt || true
+        cat bandit-report.txt
+        # Faire échouer le build si des problèmes HIGH/CRITICAL sont trouvés
+        bandit -r . -ll -ii
+
+    - name: Dependency Vulnerability Scan with pip-audit
+      run: |
+        echo "📦 Auditing requirements.txt..."
+        pip-audit -r requirements.txt
+        echo "📦 Auditing requirements-dev.txt..."
+        pip-audit -r requirements-dev.txt
+
+    - name: Run Gitleaks (Secrets Detection)
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ---------------------------------------------------------
+  # JOB 2 : Tests unitaires et d'intégration
+  # ---------------------------------------------------------
+  test:
+    name: Run Pytest Suite
+    runs-on: ubuntu-latest
+    # On peut choisir de lancer les tests en parallèle ou après la qualité. Ici, en parallèle pour la vitesse.
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11" # Version cible principale du Dockerfile
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        # Installer les extras de test si nécessaire (ex: redis, ml pour les tests complets)
+        pip install pytest pytest-cov
+
+    - name: Run Pytest with Coverage
+      run: |
+        echo "🧪 Running tests..."
+        pytest tests/ -v \
+          --cov=agentguard \
+          --cov=collector \
+          --cov-report=xml \
+          --cov-report=term-missing \
+          --tb=short
+
+    - name: Upload coverage to Codecov (Optionnel)
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false # Ne pas faire échouer le CI si l'upload échoue
+        token: ${{ secrets.CODECOV_TOKEN }} # À ajouter dans les secrets GitHub si vous utilisez Codecov
