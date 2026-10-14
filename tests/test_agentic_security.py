@@ -1,7 +1,7 @@
 import pytest
 
-from tool_guard import ToolGuard, ToolPolicy, ToolRequest
-from trajectory import (
+from agentguard.tool_guard import ToolGuard, ToolPolicy, ToolRequest
+from agentguard.trajectory import (
     TrajectoryAnalyzer,
     TrajectoryEvent,
 )

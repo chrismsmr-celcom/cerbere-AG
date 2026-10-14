@@ -231,7 +231,7 @@ class Engine:
     """
 
     def __init__(self):
-        from agentguard_sdk import PolicyEngine
+        from agentguard.sdk import PolicyEngine
 
         self.policy_engine = PolicyEngine()
 

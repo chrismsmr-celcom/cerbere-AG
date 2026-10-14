@@ -83,7 +83,7 @@ class TestPermissionMatrix:
         """Audit service should NOT have write permissions."""
         audit_perms = PLATFORM_PERMISSIONS[PlatformService.AUDIT]
         
-        # These should be ABSENT from audit
+        # These should be ABSENT from agentguard.audit
         forbidden = {
             PlatformPermission.TENANT_CREATE,
             PlatformPermission.TENANT_DELETE,

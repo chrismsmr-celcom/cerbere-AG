@@ -85,7 +85,7 @@ class Decision(str, Enum):
 def _get_role_permissions():
     """Lazy import to avoid circular dependencies."""
     try:
-        from identity import Role
+        from agentguard.identity import Role
     except ImportError:
         return {}
     
@@ -206,7 +206,7 @@ def authorize(
         7. Otherwise → ALLOW
     """
     try:
-        from identity import IdentityType, Role
+        from agentguard.identity import IdentityType, Role
     except ImportError:
         logger.error("authz_identity_module_missing")
         return False

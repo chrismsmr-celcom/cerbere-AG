@@ -41,3 +41,7 @@ venv/
 .git/hooks/pre-push
 
 agentguard-model/
+
+# Coverage
+.coverage
+coverage.xml

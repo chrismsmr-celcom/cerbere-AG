@@ -20,7 +20,7 @@ from collector.db import (
     sql_placeholder,
 )
 
-from decision_engine import DecisionEngine
+from agentguard.decision_engine import DecisionEngine
 
 logger = structlog.get_logger("agentguard.api")
 
@@ -51,7 +51,7 @@ def get_decision_signer():
     if signer is not None:
         return signer
 
-    from signing import DecisionSigner
+    from agentguard.signing import DecisionSigner
 
     # AGENTGUARD_SIGNING_KEY est le nom canonique (documenté dans env.example).
     # CERBERE_SIGNING_KEY reste accepté comme alias legacy.

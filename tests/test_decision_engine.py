@@ -1,6 +1,6 @@
 import pytest
 
-from decision_engine import (
+from agentguard.decision_engine import (
     Decision,
     DecisionEngine,
     DecisionRequest,

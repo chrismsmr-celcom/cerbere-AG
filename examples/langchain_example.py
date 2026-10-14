@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agentguard_sdk import AgentGuard, SecurityException
+from agentguard.sdk import AgentGuard, SecurityException
 
 # ── 1. Init AgentGuard (une fois, au démarrage de ton agent) ──
 guard = AgentGuard(

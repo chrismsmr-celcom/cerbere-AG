@@ -153,7 +153,7 @@ class ImmutableAuditLog:
         self._signer = None
         if signing_key_pem:
             try:
-                from signing import DecisionSigner
+                from agentguard.signing import DecisionSigner
                 self._signer = DecisionSigner(signing_key_pem)
             except Exception as e:
                 print(f"[AuditLog] Signing unavailable: {e}")
@@ -216,7 +216,7 @@ class ImmutableAuditLog:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT entry_hash FROM audit_log "
+                        "SELECT entry_hash from agentguard.audit_log "
                         "ORDER BY seq_no DESC LIMIT 1"
                     )
                     row = cur.fetchone()
@@ -426,7 +426,7 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-                    query = "SELECT * FROM audit_log ORDER BY seq_no ASC"
+                    query = "SELECT * from agentguard.audit_log ORDER BY seq_no ASC"
                     if limit:
                         query += f" LIMIT {int(limit)}"
                     cur.execute(query)
@@ -466,23 +466,23 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) FROM audit_log")
+                    cur.execute("SELECT COUNT(*) from agentguard.audit_log")
                     stats["total_entries"] = cur.fetchone()[0]
                     
                     cur.execute("""
                         SELECT event_type, COUNT(*) 
-                        FROM audit_log GROUP BY event_type
+                        from agentguard.audit_log GROUP BY event_type
                     """)
                     stats["by_event_type"] = dict(cur.fetchall())
                     
                     cur.execute("""
                         SELECT risk_level, COUNT(*) 
-                        FROM audit_log GROUP BY risk_level
+                        from agentguard.audit_log GROUP BY risk_level
                     """)
                     stats["by_risk_level"] = dict(cur.fetchall())
                     
                     cur.execute("""
-                        SELECT MIN(timestamp), MAX(timestamp) FROM audit_log
+                        SELECT MIN(timestamp), MAX(timestamp) from agentguard.audit_log
                     """)
                     row = cur.fetchone()
                     if row and row[0]:
@@ -571,7 +571,7 @@ class ImmutableAuditLog:
                         conditions.append("timestamp <= %s")
                         params.append(until)
                     
-                    query = "SELECT * FROM audit_log"
+                    query = "SELECT * from agentguard.audit_log"
                     if conditions:
                         query += " WHERE " + " AND ".join(conditions)
                     query += " ORDER BY seq_no DESC LIMIT %s"

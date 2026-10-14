@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional
 
-from risk_engine import RiskEngine, RiskInput, RiskDecision
+from agentguard.risk_engine import RiskEngine, RiskInput, RiskDecision
 
 
 class Decision(str, Enum):

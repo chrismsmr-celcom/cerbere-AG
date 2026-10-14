@@ -32,7 +32,7 @@ from typing import Any, Optional
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agentguard_sdk import AgentGuard, SecurityException
+from agentguard.sdk import AgentGuard, SecurityException
 
 # ── 1. Init AgentGuard — la policy peut whitelister par serveur MCP ──
 # Convention de nommage : "mcp:<server_label>:<tool_name>", ce qui permet

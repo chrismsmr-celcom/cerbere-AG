@@ -4,7 +4,7 @@ import threading
 import pytest
 
 try:
-    from budget import AtomicBudgetManager, BudgetExceededException
+    from agentguard.budget import AtomicBudgetManager, BudgetExceededException
     BUDGET_AVAILABLE = True
 except ImportError:
     BUDGET_AVAILABLE = False

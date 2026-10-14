@@ -34,7 +34,7 @@ import uuid
 from dataclasses import dataclass, asdict
 from typing import Any, Callable, Dict, List
 
-from agentguard_sdk import AgentGuard, SecurityException
+from agentguard.sdk import AgentGuard, SecurityException
 
 
 # ---------------------------------------------------------------------------

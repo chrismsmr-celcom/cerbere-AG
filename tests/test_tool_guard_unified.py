@@ -1,4 +1,4 @@
-from tool_guard import (
+from agentguard.tool_guard import (
     ApprovalRequired,
     ToolBlocked,
     ToolGuard,

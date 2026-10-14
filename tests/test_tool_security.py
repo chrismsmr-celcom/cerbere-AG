@@ -7,7 +7,7 @@ des paramètres légitimes qui contiennent ces sous-chaînes par coïncidence.
 Lancer : pytest test_tool_security.py -v -s
 """
 import pytest
-from agentguard_sdk import PolicyEngine, RiskLevel
+from agentguard.sdk import PolicyEngine, RiskLevel
 
 WHITELIST_POLICY = [{"type": "tool_whitelist", "allowed_tools": ["send_email", "search_web", "read_file"]}]
 

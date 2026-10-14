@@ -10,7 +10,7 @@ logger = structlog.get_logger("agentguard.auth")
 
 def _build_user_identity(user):
     try:
-        from identity import (
+        from agentguard.identity import (
             IdentityType,
             ResolvedIdentity,
             Role,
@@ -98,7 +98,7 @@ def resolve_full_identity():
     Resolve the complete identity for the current request.
     """
     try:
-        from identity import (
+        from agentguard.identity import (
             IdentityType,
             ResolvedIdentity,
             Role,

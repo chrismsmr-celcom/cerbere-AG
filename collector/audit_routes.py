@@ -16,7 +16,7 @@ def get_audit_log():
     global _audit_log_instance
     if _audit_log_instance is None:
         try:
-            from audit import ImmutableAuditLog
+            from agentguard.audit import ImmutableAuditLog
             from collector.db import is_postgres
             db_url = os.environ.get("DATABASE_URL") if is_postgres() else None
             signing_key = os.environ.get("CERBERE_SIGNING_KEY") or os.environ.get("AGENTGUARD_SIGNING_KEY", "")
@@ -33,7 +33,7 @@ def get_audit_log():
 
 # Re-export pour usage dans les autres modules
 try:
-    from audit import AuditEventType
+    from agentguard.audit import AuditEventType
 except ImportError:
     AuditEventType = None
 

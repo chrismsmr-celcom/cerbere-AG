@@ -8,7 +8,7 @@ du jailbreak sans en être).
 Lancer : pytest test_detection.py -v -s
 """
 import pytest
-from agentguard_sdk import PolicyEngine, RiskLevel
+from agentguard.sdk import PolicyEngine, RiskLevel
 
 pe = PolicyEngine([])
 

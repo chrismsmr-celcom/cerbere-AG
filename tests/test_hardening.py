@@ -25,7 +25,7 @@ def test_query_key_is_not_auth():
 
 
 def test_sdk_decorator_api():
-    from agentguard_sdk import AgentGuard
+    from agentguard.sdk import AgentGuard
     guard = AgentGuard(collector_url="http://127.0.0.1:9", debug=False)
 
     @guard.guard_tool_call("echo")

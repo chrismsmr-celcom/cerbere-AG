@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix
-from agentguard_ml import InjectionDetector
+from agentguard.ml import InjectionDetector
 
 # Charger un dataset de test indépendant
 test_dataset = load_dataset('csv', data_files='test_dataset.csv')

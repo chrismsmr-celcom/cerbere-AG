@@ -17,7 +17,7 @@ from flask import Blueprint, request, jsonify, g
 from collector.db import get_pg_conn, is_postgres, get_sqlite_conn
 from collector.auth import require_auth, require_role, resolve_full_identity, authorize_resource_access
 from collector.authz import authorize, Action
-from identity import (
+from agentguard.identity import (
     Role,
     generate_agent_api_key,
     hash_key,
@@ -72,7 +72,7 @@ def _audit_identity_event(
         org_id = identity.org_id
         
         try:
-            from identity import IdentityType
+            from agentguard.identity import IdentityType
             actor_user_id = identity.subject_id if identity.identity_type == IdentityType.USER else None
             actor_agent_id = identity.subject_id if identity.identity_type == IdentityType.AGENT else None
         except ImportError:
@@ -149,7 +149,7 @@ def create_tenant():
     
     # System can create tenants, regular tenant admins cannot (they ARE a tenant)
     try:
-        from identity import IdentityType
+        from agentguard.identity import IdentityType
         if identity.identity_type != IdentityType.SYSTEM:
             return jsonify({
                 "error": "only system administrators can create tenants",

@@ -86,7 +86,7 @@ class TestSystemDeprecation:
     
     def test_system_allowed_by_default_with_warning(self, app):
         """SYSTEM still works in Phase 1/2 but logs deprecation."""
-        from identity import IdentityType, Role
+        from agentguard.identity import IdentityType, Role
         
         actor = MagicMock()
         actor.identity_type = IdentityType.SYSTEM
@@ -101,7 +101,7 @@ class TestSystemDeprecation:
     
     def test_system_blocked_when_toggle_enabled(self, app):
         """SYSTEM blocked when AGENTGUARD_DISABLE_LEGACY_SYSTEM=true."""
-        from identity import IdentityType, Role
+        from agentguard.identity import IdentityType, Role
         
         actor = MagicMock()
         actor.identity_type = IdentityType.SYSTEM

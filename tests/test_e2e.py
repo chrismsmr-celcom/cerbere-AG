@@ -139,7 +139,7 @@ class TestE2ESdkUsage:
     
     def test_sdk_sends_span_to_collector(self, live_server, agent_setup):
         """SDK can send spans to live collector."""
-        from agentguard_sdk import AgentGuard
+        from agentguard.sdk import AgentGuard
         
         guard = AgentGuard(
             collector_url=live_server.url,
@@ -178,7 +178,7 @@ class TestE2EMultiStepExfiltration:
     
     def test_secret_cannot_reach_external_sink(self, live_server, agent_setup):
         """SECRET labeled data cannot be sent via http_request tool."""
-        from agentguard_sdk import AgentGuard, SecurityException
+        from agentguard.sdk import AgentGuard, SecurityException
         
         guard = AgentGuard(
             collector_url=live_server.url,
@@ -221,7 +221,7 @@ class TestE2EBudgetRaceCondition:
         Server-side budget enforcement (Redis-backed) is tested in test_atomic_budget.py.
         This test validates the SDK-side budget flow end-to-end.
         """
-        from agentguard_sdk import AgentGuard, SecurityException
+        from agentguard.sdk import AgentGuard, SecurityException
         
         # Single instance with tiny budget
         guard = AgentGuard(
@@ -438,7 +438,7 @@ class TestE2EInjectionInTools:
     
     def test_injection_in_command_blocked(self, live_server, agent_setup):
         """execute_command with rm -rf is blocked."""
-        from agentguard_sdk import AgentGuard, SecurityException
+        from agentguard.sdk import AgentGuard, SecurityException
         
         guard = AgentGuard(
             collector_url=live_server.url,
@@ -459,7 +459,7 @@ class TestE2EInjectionInTools:
     
     def test_safe_command_allowed(self, live_server, agent_setup):
         """Safe commands pass through."""
-        from agentguard_sdk import AgentGuard
+        from agentguard.sdk import AgentGuard
         
         guard = AgentGuard(
             collector_url=live_server.url,
@@ -577,8 +577,8 @@ class TestE2ESignedDecisions:
     
     def test_forged_signed_decision_rejected(self, live_server, agent_setup):
         """If SDK tries to use a forged signed decision, it's rejected."""
-        from agentguard_sdk import AgentGuard
-        from signing import DecisionSigner
+        from agentguard.sdk import AgentGuard
+        from agentguard.signing import DecisionSigner
         
         guard = AgentGuard(
             collector_url=live_server.url,

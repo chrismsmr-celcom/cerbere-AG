@@ -21,7 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agentguard_sdk import AgentGuard, SecurityException
+from agentguard.sdk import AgentGuard, SecurityException
 
 # ── 1. Init AgentGuard, whitelist d'outils déclarée en policy ──
 guard = AgentGuard(
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     from crewai import Agent, Task, Crew
     from crewai.tools import BaseTool
     from crewai.llm import LLM
-    from agentguard_sdk import RiskLevel
+    from agentguard.sdk import RiskLevel
 
     # ── Interception du LLM ──
     # ATTENTION : crewai.llm.LLM utilise un pattern factory dans __new__ qui
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
         def guarded_call(messages, *args, **kwargs):
             import time as _time
-            from agentguard_sdk import GuardSpan
+            from agentguard.sdk import GuardSpan
 
             start = _time.time()
             text = messages if isinstance(messages, str) else " ".join(
