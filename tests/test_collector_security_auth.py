@@ -5,7 +5,9 @@ sans valeur par défaut, rate-limit sur /span.
 
 Lancer : pytest test_security.py -v
 """
+
 import importlib
+
 import pytest
 
 TEST_API_KEY = "ag-test-key-for-pytest"

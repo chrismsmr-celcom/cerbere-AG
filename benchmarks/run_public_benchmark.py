@@ -32,8 +32,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from agentguard.budget import AtomicBudgetManager
-    
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 if str(ROOT_DIR) not in sys.path:
@@ -233,9 +232,10 @@ class Engine:
         # v5: la couche LLM est portée par l'arbitre ML (mode escalade,
         # LLM appelé uniquement sur flag ML) OU par le TripleJudge (mode
         # haute exigence). L'un des deux suffit.
-        has_llm = getattr(engine, "_ml_arbiter", None) is not None or getattr(
-            engine, "_triple_judge", None
-        ) is not None
+        has_llm = (
+            getattr(engine, "_ml_arbiter", None) is not None
+            or getattr(engine, "_triple_judge", None) is not None
+        )
 
         if has_llm:
             active.append("llm")

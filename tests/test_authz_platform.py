@@ -105,6 +105,9 @@ class TestSystemDeprecation:
         actor.tenant_id = "default"
         actor.org_id = "default"
 
-                with patch.dict(os.environ, {"AGENTGUARD_DISABLE_LEGACY_SYSTEM": "true"}), app.app_context():
-                result = authorize(actor=actor, action=Action.TENANT_CREATE)
-                assert result is False
+        with (
+            patch.dict(os.environ, {"AGENTGUARD_DISABLE_LEGACY_SYSTEM": "true"}),
+            app.app_context(),
+        ):
+            result = authorize(actor=actor, action=Action.TENANT_CREATE)
+            assert result is False
