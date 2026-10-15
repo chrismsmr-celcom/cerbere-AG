@@ -52,7 +52,7 @@ def post_span(
             # Adapter selon la vraie réponse de /span :
             decision = body.get("decision") or body.get("status") or "allow"
         elif r.status_code == 429:
-            decision, lat = "block", lat  # rate-limit = bloque
+            decision = "block"  # rate-limit = bloque
         elif r.status_code == 403:
             decision = "block"
         else:

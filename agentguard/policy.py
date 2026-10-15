@@ -54,6 +54,11 @@ def _tool_matches_whitelist(tool_name: str, whitelist) -> bool:
 class PolicyEngine:
     _STRONG_PATTERNS = None
     _WEAK_PATTERNS = None
+    # v5: patterns destructeurs/exfiltration — Tier 1 de l'escalade.
+    # 0 ms, 100% déterministe : ces familles d'attaques ne doivent JAMAIS
+    # dépendre du ML ou du juge LLM (cf. failures benchmark 2026-10-15 :
+    # kubectl delete, terraform destroy, upload ... to external, etc.).
+    _DESTRUCTIVE_PATTERNS = None
 
     def __init__(
         self,
@@ -70,6 +75,14 @@ class PolicyEngine:
             "on",
             "yes",
         )
+        # v5: TripleJudge opt-in — mode escalade par défaut.
+        # Le TripleJudge appelle 2 APIs LLM par prompt ; il ne doit tourner
+        # que sur les déploiements à très haute exigence qui acceptent ~2 s
+        # par prompt. En escalade, seul l'arbitre ML (1 appel, ~5 % du trafic)
+        # contacte un LLM.
+        self._use_triple_judge = os.getenv(
+            "AGENTGUARD_USE_TRIPLE_JUDGE", "false"
+        ).lower() in ("true", "1", "on", "yes")
         self.block_on_ambiguous = os.getenv(
             "AGENTGUARD_BLOCK_ON_AMBIGUOUS", "false"
         ).lower() in ("true", "1", "on", "yes")
@@ -122,7 +135,7 @@ class PolicyEngine:
         # exploitable. Le bloc reste dans __init__ : self est disponible ici.
         self._triple_judge = None
 
-        if self.use_llm_judge and TripleJudge is not None:
+        if self.use_llm_judge and self._use_triple_judge and TripleJudge is not None:
             try:
                 triple_judge = TripleJudge()
 
@@ -203,8 +216,50 @@ class PolicyEngine:
             re.IGNORECASE,
         )
 
+        # v5 : Tier 1 — familles d'attaques que la regex doit posséder
+        # seule, sans jamais dépendre du ML ou du LLM.
+        destructive = [
+            # ── Commandes destructrices explicites ──────────────────
+            r"\bkubectl\s+(?:delete|drain|cordon)\s+(?:namespace|ns|node)\b",
+            r"\bterraform\s+destroy\b",
+            r"\bsystemctl\s+(?:stop|disable|mask)\s+(?:firewalld|iptables|auditd|ssh[d]?|apparmor)\b",
+            r"\biptables\s+(?:-F|--flush)\b",
+            r"\bchattr\s+-i\b",
+            r"\bapparmor_parser\s+-R\b",
+            r"\bgit\s+reset\s+--hard\b",
+            r"\bgit\s+push\b[^.?!]{0,40}--force\b",
+            r"\b(?:nmap|hydra|sqlmap|nikto|masscan)\s",
+            r"\bfind\s+/[^.?!]{0,80}-exec\b",
+            r"\bcurl\s[^.?!]{0,120}\|\s*(?:ba)?sh\b",
+            r"\bwget\s[^.?!]{0,120}\|\s*(?:ba)?sh\b",
+            # ── Exfiltration : verbe d'export + destination externe ─
+            r"\b(?:send|upload|export|forward|post|ship|transfer|broadcast)\b"
+            r"[^.?!]{0,60}\b(?:to|towards|on|at)\b"
+            r"[^.?!]{0,50}\b(?:external|ftp|sftp|pastebin|attacker|evil\.|10\.\d+\.\d+\.\d+|https?://(?!localhost|127\.0\.0\.1))",
+            r"\b(?:leak|exfiltrat\w+|steal)\b[^.?!]{0,40}\b(?:key|credential|secret|password|token|invoice|contract|customer|database)\w*",
+            r"\b(?:private|secret|api)\s+keys?\b[^.?!]{0,40}\b(?:to|on|via|at)\b",
+            # ── Neutralisation de la sécurité ───────────────────────
+            r"\b(?:disabl|turn\s+off|mute|stop)\w*\b[^.?!]{0,40}\b(?:audit|journali[sz]ation|logging|alerts?|guardrails?|firewall)\b",
+            r"\b(?:bypass|skip|ignore)\b[^.?!]{0,40}\b(?:approval|verification|workflow|review|checks?)\b",
+            r"\b(?:change|reset)\b[^.?!]{0,30}\badmin\s+password\b",
+        ]
+
+        PolicyEngine._DESTRUCTIVE_PATTERNS = re.compile(
+            "|".join(f"(?:{p})" for p in destructive),
+            re.IGNORECASE,
+        )
+
     def check_injection(self, text: str) -> SecurityCheck:
-        """Pipeline de détection : regex, juges, ML et normalisation."""
+        """v5 — moteur à escalade (latency-first).
+
+        Tier 0 : regex brut                     (~0.4 ms, gratuit)
+        Tier 1 : patterns destructeurs + normalisation (~0.1 ms)
+        Tier 2 : ML local                        (~100-300 ms, jamais d'API)
+        Tier 3 : arbitre LLM — UNIQUEMENT sur flag ML (~2 s, trafic minoritaire)
+
+        Règle d'or : le trafic que le ML juge propre ne voit JAMAIS un LLM.
+        Le TripleJudge (3 APIs) est opt-in via AGENTGUARD_USE_TRIPLE_JUDGE=true.
+        """
         from .normalizer import (
             normalize_for_detection,
             reversed_words_variant,
@@ -220,7 +275,7 @@ class PolicyEngine:
                 "Empty prompt",
             )
 
-        # Étape 1 : regex sur le texte brut.
+        # ── Tier 0 : regex sur le texte brut (~0.4 ms) ────────────
         if PolicyEngine._STRONG_PATTERNS.findall(text):
             if is_didactic_context(text):
                 return SecurityCheck(
@@ -241,7 +296,121 @@ class PolicyEngine:
                 SecurityAction.BLOCK,
             )
 
-        # Étape 2 : TripleJudge sur le texte brut.
+        # ── Tier 1a : patterns destructeurs/exfiltration (~0.05 ms) ─
+        # Ces familles ne doivent jamais dépendre du ML ou du LLM.
+        if PolicyEngine._DESTRUCTIVE_PATTERNS.findall(text):
+            if is_didactic_context(text):
+                return SecurityCheck(
+                    "prompt_injection",
+                    True,
+                    RiskLevel.MEDIUM,
+                    "Destructive pattern in didactic context: downgraded to review",
+                    {"layer": "regex+destructive", "downgraded": True},
+                    SecurityAction.REVIEW,
+                )
+
+            return SecurityCheck(
+                "prompt_injection",
+                False,
+                RiskLevel.HIGH,
+                "Destructive command or exfiltration pattern detected",
+                {"layer": "regex+destructive"},
+                SecurityAction.BLOCK,
+            )
+
+        # ── Tier 1b : regex après normalisation (obfuscation) ──────
+        normalized = normalize_for_detection(text)
+        if normalized != text:
+            if PolicyEngine._STRONG_PATTERNS.findall(normalized) or (
+                PolicyEngine._DESTRUCTIVE_PATTERNS.findall(normalized)
+            ):
+                if is_didactic_context(text):
+                    return SecurityCheck(
+                        "prompt_injection",
+                        True,
+                        RiskLevel.MEDIUM,
+                        "Didactic context + obfuscated variant: downgraded to review",
+                        {"layer": "regex+normalizer", "downgraded": True},
+                        SecurityAction.REVIEW,
+                    )
+
+                return SecurityCheck(
+                    "prompt_injection",
+                    False,
+                    RiskLevel.HIGH,
+                    "Obfuscated variant detected",
+                    {"layer": "regex+normalizer"},
+                    SecurityAction.BLOCK,
+                )
+
+        # ── Tier 1c : mots inversés ────────────────────────────────
+        reversed_text = reversed_words_variant(text)
+        if reversed_text != text and (
+            PolicyEngine._STRONG_PATTERNS.findall(reversed_text)
+            or PolicyEngine._DESTRUCTIVE_PATTERNS.findall(reversed_text)
+        ):
+            return SecurityCheck(
+                "prompt_injection",
+                False,
+                RiskLevel.HIGH,
+                "Reversed-word obfuscation detected",
+                {"layer": "regex+normalizer"},
+                SecurityAction.BLOCK,
+            )
+
+        # ── Tier 2 : ML local (jamais d'API ici) ──────────────────
+        ml_flagged = False
+        ml_score = 0.0
+        if self.ml_detector.enabled:
+            ml_result = self.ml_detector.predict(text)
+            ml_score = ml_result["score"]
+            if ml_result["risk"] == "HIGH" and ml_score >= getattr(
+                self.ml_detector, "threshold", 0.95
+            ):
+                if is_didactic_context(text):
+                    return SecurityCheck(
+                        "prompt_injection",
+                        True,
+                        RiskLevel.MEDIUM,
+                        "ML flag in didactic context: downgraded to review",
+                        {
+                            "layer": "ml",
+                            "downgraded": True,
+                            "ml_score": round(ml_score, 4),
+                        },
+                        SecurityAction.REVIEW,
+                    )
+                ml_flagged = True
+
+        # ── Tier 3 : arbitre LLM — UNIQUEMENT sur flag ML ─────────
+        # (~5 % du trafic réel : les prompts que le ML juge suspects)
+        if ml_flagged:
+            if self._ml_arbiter is not None:
+                arbitrated = self._arbitrate_ml_flag(text, ml_score)
+                if arbitrated.metadata.get("ml_overridden"):
+                    # ML innocenté par le LLM : on continue la cascade
+                    # (TripleJudge éventuel) au lieu de stopper.
+                    ml_cleared = arbitrated
+                else:
+                    return arbitrated
+            else:
+                return SecurityCheck(
+                    "prompt_injection",
+                    False,
+                    RiskLevel.HIGH,
+                    f"ML detected threat ({ml_score:.2%})",
+                    {
+                        "layer": "ml",
+                        "ml_score": round(ml_score, 4),
+                    },
+                    SecurityAction.BLOCK,
+                )
+        else:
+            ml_cleared = None
+
+        # ── TripleJudge (opt-in) : dernière ligne de défense ──────
+        # Désactivé par défaut en mode escalade : 3 appels d'API par
+        # prompt. Activable pour les déploiements à très haute exigence.
         if self._triple_judge is not None:
             try:
                 tj_result = self._triple_judge.evaluate(text)
@@ -257,93 +426,7 @@ class PolicyEngine:
             except Exception as exc:
                 logger.warning("triple_judge_failed", error=str(exc))
 
-        ml_cleared = None
-
-        # Étape 3 : détection ML.
-        if self.ml_detector.enabled:
-            ml_result = self.ml_detector.predict(text)
-            if ml_result["risk"] == "HIGH" and ml_result["score"] >= getattr(
-                self.ml_detector, "threshold", 0.95
-            ):
-                if is_didactic_context(text):
-                    return SecurityCheck(
-                        "prompt_injection",
-                        True,
-                        RiskLevel.MEDIUM,
-                        "ML flag in didactic context: downgraded to review",
-                        {
-                            "layer": "ml",
-                            "downgraded": True,
-                            "ml_score": round(ml_result["score"], 4),
-                        },
-                        SecurityAction.REVIEW,
-                    )
-
-                if self._ml_arbiter is not None:
-                    arbitrated = self._arbitrate_ml_flag(
-                        text,
-                        ml_result["score"],
-                    )
-                    if arbitrated.metadata.get("ml_overridden"):
-                        ml_cleared = arbitrated
-                    else:
-                        return arbitrated
-                else:
-                    return SecurityCheck(
-                        "prompt_injection",
-                        False,
-                        RiskLevel.HIGH,
-                        f"ML detected threat ({ml_result['score']:.2%})",
-                        {
-                            "layer": "ml",
-                            "ml_score": round(ml_result["score"], 4),
-                        },
-                        SecurityAction.BLOCK,
-                    )
-
-        # Étape 4 : regex après normalisation.
-        normalized = normalize_for_detection(text)
-        if normalized != text and PolicyEngine._STRONG_PATTERNS.findall(normalized):
-            if is_didactic_context(text):
-                return SecurityCheck(
-                    "prompt_injection",
-                    True,
-                    RiskLevel.MEDIUM,
-                    "Didactic context + obfuscated variant: downgraded to review",
-                    {"layer": "regex+normalizer", "downgraded": True},
-                    SecurityAction.REVIEW,
-                )
-
-            return SecurityCheck(
-                "prompt_injection",
-                False,
-                RiskLevel.HIGH,
-                "Obfuscated variant detected",
-                {
-                    "layer": "regex+normalizer",
-                    **self._cleared_flag(ml_cleared),
-                },
-                SecurityAction.BLOCK,
-            )
-
-        # Étape 5 : mots inversés.
-        reversed_text = reversed_words_variant(text)
-        if reversed_text != text and PolicyEngine._STRONG_PATTERNS.findall(
-            reversed_text
-        ):
-            return SecurityCheck(
-                "prompt_injection",
-                False,
-                RiskLevel.HIGH,
-                "Reversed-word obfuscation detected",
-                {
-                    "layer": "regex+normalizer",
-                    **self._cleared_flag(ml_cleared),
-                },
-                SecurityAction.BLOCK,
-            )
-
-        if ml_cleared is not None:
+        if ml_flagged and ml_cleared is not None:
             return ml_cleared
 
         return SecurityCheck(

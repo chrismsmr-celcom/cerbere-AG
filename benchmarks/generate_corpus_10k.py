@@ -329,11 +329,11 @@ def main():
 
     # ── assign ids and write files ─────────────────────────────────────────
     for i, e in enumerate(attacks, 1):
-        e["id"] = "atk_%04d" % i
+        e["id"] = f"atk_{i:04d}"
     for i, e in enumerate(benign, 1):
-        e["id"] = "ben_%04d" % i
+        e["id"] = f"ben_{i:04d}"
     for i, e in enumerate(hard_negatives, 1):
-        e["id"] = "hn_%04d" % i
+        e["id"] = f"hn_{i:04d}"
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     manifest_files = {}
