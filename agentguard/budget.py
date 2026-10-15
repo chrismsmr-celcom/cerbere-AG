@@ -138,7 +138,6 @@ class AtomicBudgetManager:
                     pipe.incrbyfloat(key, estimated_cost)
                     results = pipe.execute()
 
-                    current = float(results[0]) if results[0] else 0.0
                     new_total = float(results[1])
 
                     if new_total > max_b:
