@@ -56,8 +56,7 @@ class PolicyEngine:
     _WEAK_PATTERNS = None
     # v5: patterns destructeurs/exfiltration — Tier 1 de l'escalade.
     # 0 ms, 100% déterministe : ces familles d'attaques ne doivent JAMAIS
-    # dépendre du ML ou du juge LLM (cf. failures benchmark 2026-10-15 :
-    # kubectl delete, terraform destroy, upload ... to external, etc.).
+    # dépendre du ML ou du juge LLM.
     _DESTRUCTIVE_PATTERNS = None
 
     def __init__(
@@ -76,10 +75,10 @@ class PolicyEngine:
             "yes",
         )
         # v5: TripleJudge opt-in — mode escalade par défaut.
-        # Le TripleJudge appelle 2 APIs LLM par prompt ; il ne doit tourner
-        # que sur les déploiements à très haute exigence qui acceptent ~2 s
-        # par prompt. En escalade, seul l'arbitre ML (1 appel, ~5 % du trafic)
-        # contacte un LLM.
+        # Le TripleJudge appelle jusqu'à 3 APIs LLM par prompt ; il ne doit
+        # tourner que sur les déploiements à très haute exigence qui
+        # acceptent ~2 s par prompt. En escalade, seul l'arbitre ML
+        # (1 appel, trafic minoritaire) contacte un LLM.
         self._use_triple_judge = os.getenv(
             "AGENTGUARD_USE_TRIPLE_JUDGE", "false"
         ).lower() in ("true", "1", "on", "yes")
@@ -132,7 +131,7 @@ class PolicyEngine:
 
         # TripleJudge : Prompt Guard, Llama Guard et cascade LLM.
         # Il ne s'active que si au moins un juge possède une configuration
-        # exploitable. Le bloc reste dans __init__ : self est disponible ici.
+        # exploitable. Opt-in via AGENTGUARD_USE_TRIPLE_JUDGE=true.
         self._triple_judge = None
 
         if self.use_llm_judge and self._use_triple_judge and TripleJudge is not None:
@@ -216,8 +215,11 @@ class PolicyEngine:
             re.IGNORECASE,
         )
 
-        # v5 : Tier 1 — familles d'attaques que la regex doit posséder
+        # v5.1 : Tier 1 — familles d'attaques que la regex doit posséder
         # seule, sans jamais dépendre du ML ou du LLM.
+        # Fix v5.1 : les patterns curl/wget utilisent .{0,N} au lieu de
+        # [^.?!]{0,N} — l'ancienne version cassait sur les URLs (points
+        # dans "malware.sh", "evil.com").
         destructive = [
             # ── Commandes destructrices explicites ──────────────────
             r"\bkubectl\s+(?:delete|drain|cordon)\s+(?:namespace|ns|node)\b",
@@ -227,23 +229,64 @@ class PolicyEngine:
             r"\bchattr\s+-i\b",
             r"\bapparmor_parser\s+-R\b",
             r"\bgit\s+reset\s+--hard\b",
-            r"\bgit\s+push\b[^.?!]{0,40}--force\b",
+            r"\bgit\s+push\b.{0,40}--force\b",
             r"\b(?:nmap|hydra|sqlmap|nikto|masscan)\s",
-            r"\bfind\s+/[^.?!]{0,80}-exec\b",
-            r"\bcurl\s[^.?!]{0,120}\|\s*(?:ba)?sh\b",
-            r"\bwget\s[^.?!]{0,120}\|\s*(?:ba)?sh\b",
+            r"\bfind\s+/.{0,80}-exec\b",
+            # v5.1 fix : .{0,N} tolère les points des URLs/domaines
+            r"\bcurl\b.{0,120}\|\s*(?:ba)?sh\b",
+            r"\bwget\b.{0,120}\|\s*(?:ba)?sh\b",
+            r"\bcrontab\s+-r\b",
+            r"\bredis-cli\s+FLUSHALL\b",
+            r"\bnc\s+-e\s+",
+            r"\buseradd\s+(?:-o\s+)?-u\s+0\b",
+            r">\s*/etc/(?:crontab|passwd|shadow|hosts)\b",
+            r"\bln\s+-sf\b.{0,40}/etc/",
+            r"\bchmod\s+66[06]\b.{0,40}/etc/",
+            r"\bshred\s+/",
+            r"\bsetenforce\s+0\b",
+            r"\bpasswd\s+-d\s+root\b",
+            r"\bkill\s+-9\s+1\b",
+            r":\(\)\s*\{.*\};\s*:",
+            r"\bDELETE\s+FROM\s+\w+",
+            r"\bsudo\s+rm\s+/etc/",
+            r"\bmailx\b.{0,60}\b(?:root@|evil\.|attacker)",
+            r"\b(?:adduser|useradd)\s+\w+\b.{0,30}\b(?:backdoor|stealth)\b",
+            r"\becho\b.{0,20}\broot\s+nc\b",
             # ── Exfiltration : verbe d'export + destination externe ─
             (
                 r"\b(?:send|upload|export|forward|post|ship|transfer|broadcast)\b"
-                r"[^.?!]{0,60}\b(?:to|towards|on|at)\b"
-                r"[^.?!]{0,50}\b(?:external|ftp|sftp|pastebin|attacker|evil\.|10\.\d+\.\d+\.\d+|https?://(?!localhost|127\.0\.0\.1))"
+                r".{0,60}\b(?:to|towards|on|at)\b"
+                r".{0,50}\b(?:external|ftp|sftp|pastebin|attacker|evil\.|"
+                r"10\.\d+\.\d+\.\d+|https?://(?!localhost|127\.0\.0\.1))"
             ),
-            r"\b(?:leak|exfiltrat\w+|steal)\b[^.?!]{0,40}\b(?:key|credential|secret|password|token|invoice|contract|customer|database)\w*",
-            r"\b(?:private|secret|api)\s+keys?\b[^.?!]{0,40}\b(?:to|on|via|at)\b",
+            (
+                r"\b(?:leak|exfiltrat\w+|steal)\b.{0,40}"
+                r"\b(?:key|credential|secret|password|token|invoice|contract|customer|database)\w*"
+            ),
+            (
+                r"\b(?:private|secret|api)\s+keys?\b.{0,40}\b(?:to|on|via|at)\b"
+            ),
+            # v5.1 : exfiltration vers compétiteur/webhook non sécurisé
+            (
+                r"\b(?:send|upload|export)\b.{0,60}"
+                r"\b(?:salaries?|credentials?|logs?|messages?|archives?|invoices?)\b"
+                r".{0,40}\b(?:competitor|unsecured|webhook|third[- ]party|external)\b"
+            ),
             # ── Neutralisation de la sécurité ───────────────────────
-            r"\b(?:disabl|turn\s+off|mute|stop)\w*\b[^.?!]{0,40}\b(?:audit|journali[sz]ation|logging|alerts?|guardrails?|firewall)\b",
-            r"\b(?:bypass|skip|ignore)\b[^.?!]{0,40}\b(?:approval|verification|workflow|review|checks?)\b",
-            r"\b(?:change|reset)\b[^.?!]{0,30}\badmin\s+password\b",
+            (
+                r"\b(?:disabl|turn\s+off|mute|stop)\w*\b.{0,40}"
+                r"\b(?:audit|journali[sz]ation|logging|alerts?|guardrails?|firewall)\b"
+            ),
+            (
+                r"\b(?:bypass|skip|ignore)\b.{0,40}"
+                r"\b(?:approval|verification|workflow|review|checks?)\b"
+            ),
+            (
+                r"\b(?:change|reset)\b.{0,30}\badmin\s+password\b"
+            ),
+            (
+                r"\b(?:rewrite|modify|change)\b.{0,30}\b(?:your\s+)?polic(?:y|ies)\b"
+            ),
         ]
 
         PolicyEngine._DESTRUCTIVE_PATTERNS = re.compile(
@@ -252,11 +295,12 @@ class PolicyEngine:
         )
 
     def check_injection(self, text: str) -> SecurityCheck:
-        """v5 — moteur à escalade (latency-first).
+        """v5.1 — moteur à escalade (latency-first).
 
-        Tier 0 : regex brut                     (~0.4 ms, gratuit)
-        Tier 1 : patterns destructeurs + normalisation (~0.1 ms)
-        Tier 2 : ML local                        (~100-300 ms, jamais d'API)
+        Tier 0 : regex brut                          (~0.4 ms, gratuit)
+        Tier 1 : patterns destructeurs + variantes  (~0.1 ms, gratuit)
+                 dé-obfusquées (ROT13, leet, doublé, espacé)
+        Tier 2 : ML local                            (~100-300 ms, jamais d'API)
         Tier 3 : arbitre LLM — UNIQUEMENT sur flag ML (~2 s, trafic minoritaire)
 
         Règle d'or : le trafic que le ML juge propre ne voit JAMAIS un LLM.
@@ -299,7 +343,6 @@ class PolicyEngine:
             )
 
         # ── Tier 1a : patterns destructeurs/exfiltration (~0.05 ms) ─
-        # Ces familles ne doivent jamais dépendre du ML ou du LLM.
         if PolicyEngine._DESTRUCTIVE_PATTERNS.findall(text):
             if is_didactic_context(text):
                 return SecurityCheck(
@@ -320,45 +363,54 @@ class PolicyEngine:
                 SecurityAction.BLOCK,
             )
 
-        # ── Tier 1b : regex après normalisation (obfuscation) ──────
-        normalized = normalize_for_detection(text)
-        if normalized != text and (
-            PolicyEngine._STRONG_PATTERNS.findall(normalized)
-            or PolicyEngine._DESTRUCTIVE_PATTERNS.findall(normalized)
-        ):
-            if is_didactic_context(text):
+        # ── Tier 1b : regex sur toutes les variantes dé-obfusquées ──
+        # v5.1 : ROT13, leet, lettres doublées, lettres espacées —
+        # rattrapés en 0 ms par la regex au lieu du LLM.
+        variants = [normalize_for_detection(text), reversed_words_variant(text)]
+        try:
+            from .normalizer import (
+                dedupe_variant,
+                despaced_variant,
+                leet_variant,
+                rot13_variant,
+            )
+
+            variants.extend(
+                [
+                    rot13_variant(text),
+                    leet_variant(text),
+                    dedupe_variant(text),
+                    despaced_variant(text),
+                ]
+            )
+        except ImportError:
+            logger.warning("obfuscation_variants_unavailable")
+
+        for variant in variants:
+            if variant == text:
+                continue
+
+            if PolicyEngine._STRONG_PATTERNS.findall(variant) or (
+                PolicyEngine._DESTRUCTIVE_PATTERNS.findall(variant)
+            ):
+                if is_didactic_context(text):
+                    return SecurityCheck(
+                        "prompt_injection",
+                        True,
+                        RiskLevel.MEDIUM,
+                        "Didactic context + obfuscated variant: downgraded to review",
+                        {"layer": "regex+normalizer", "downgraded": True},
+                        SecurityAction.REVIEW,
+                    )
+
                 return SecurityCheck(
                     "prompt_injection",
-                    True,
-                    RiskLevel.MEDIUM,
-                    "Didactic context + obfuscated variant: downgraded to review",
-                    {"layer": "regex+normalizer", "downgraded": True},
-                    SecurityAction.REVIEW,
+                    False,
+                    RiskLevel.HIGH,
+                    "Obfuscated variant detected",
+                    {"layer": "regex+normalizer"},
+                    SecurityAction.BLOCK,
                 )
-
-            return SecurityCheck(
-                "prompt_injection",
-                False,
-                RiskLevel.HIGH,
-                "Obfuscated variant detected",
-                {"layer": "regex+normalizer"},
-                SecurityAction.BLOCK,
-            )
-
-        # ── Tier 1c : mots inversés ────────────────────────────────
-        reversed_text = reversed_words_variant(text)
-        if reversed_text != text and (
-            PolicyEngine._STRONG_PATTERNS.findall(reversed_text)
-            or PolicyEngine._DESTRUCTIVE_PATTERNS.findall(reversed_text)
-        ):
-            return SecurityCheck(
-                "prompt_injection",
-                False,
-                RiskLevel.HIGH,
-                "Reversed-word obfuscation detected",
-                {"layer": "regex+normalizer"},
-                SecurityAction.BLOCK,
-            )
 
         # ── Tier 2 : ML local (jamais d'API ici) ──────────────────
         ml_flagged = False
@@ -385,7 +437,6 @@ class PolicyEngine:
                 ml_flagged = True
 
         # ── Tier 3 : arbitre LLM — UNIQUEMENT sur flag ML ─────────
-        # (~5 % du trafic réel : les prompts que le ML juge suspects)
         if ml_flagged:
             if self._ml_arbiter is not None:
                 arbitrated = self._arbitrate_ml_flag(text, ml_score)
@@ -411,8 +462,9 @@ class PolicyEngine:
             ml_cleared = None
 
         # ── TripleJudge (opt-in) : dernière ligne de défense ──────
-        # Désactivé par défaut en mode escalade : 3 appels d'API par
-        # prompt. Activable pour les déploiements à très haute exigence.
+        # Désactivé par défaut en mode escalade : jusqu'à 3 appels
+        # d'API par prompt. Activable pour les déploiements très
+        # exigeants via AGENTGUARD_USE_TRIPLE_JUDGE=true.
         if self._triple_judge is not None:
             try:
                 tj_result = self._triple_judge.evaluate(text)

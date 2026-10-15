@@ -78,3 +78,69 @@ def reversed_words_variant(text: str) -> str:
     """Return the text with each word reversed ('snoitcurtsni' -> 'instructions').
     Only used as a third fallback pass."""
     return " ".join(w[::-1] for w in text.split())
+    # ─────────────────────────────────────────────────────────────
+# v5.1 : VARIANTES D'OBFUSCATION — Tier 1 de l'escalade (0 ms).
+# ROT13, leet, lettres doublées, lettres espacées : décodées et
+# repassées sous la regex au lieu de dépendre du juge LLM.
+# ─────────────────────────────────────────────────────────────
+import codecs as _codecs
+
+_LEET_MAP = str.maketrans("013457@", "olearha")
+_DOUBLED_RE = re.compile(r"(.)\1")
+_DOT_SPACED_RE = re.compile(r"(?<=[a-zA-Z])\s*\.\s*(?=[a-zA-Z])")
+
+# Mots révélés par un décodage ROT13 : le décodage n'est retenu que
+# s'il fait émerger au moins 2 mots de cette liste (anti faux positifs).
+_ROT13_TRIGGER_WORDS = (
+    "ignore",
+    "previous",
+    "instruction",
+    "system",
+    "prompt",
+    "reveal",
+    "admin",
+    "password",
+    "backdoor",
+    "database",
+    "reverse",
+    "shell",
+    "forget",
+    "everything",
+    "above",
+    "secret",
+    "terminate",
+    "workers",
+    "root",
+    "developer",
+    "override",
+    "directive",
+    "credential",
+)
+
+
+def rot13_variant(text: str) -> str:
+    """Décode une variante ROT13 si elle révèle des mots suspects."""
+    try:
+        decoded = _codecs.decode(text, "rot13")
+    except Exception:
+        return text
+
+    lowered = decoded.lower()
+    hits = sum(1 for word in _ROT13_TRIGGER_WORDS if word in lowered)
+
+    return decoded if hits >= 2 else text
+
+
+def leet_variant(text: str) -> str:
+    """Remplace les chiffres leetspeak par leurs lettres (4→a, 3→e...)."""
+    return text.translate(_LEET_MAP)
+
+
+def dedupe_variant(text: str) -> str:
+    """Réduit les lettres doublées : IIggnnoorree → Ignore."""
+    return _DOUBLED_RE.sub(r"\1", text)
+
+
+def despaced_variant(text: str) -> str:
+    """Retire les points entre lettres : R.u.n. → Run."""
+    return _DOT_SPACED_RE.sub("", text)

@@ -47,7 +47,7 @@ class MLDetector:
             "yes",
         )
         # v4: seuil dur. Le ML est un second filtre, pas un premier filtre.
-        self.threshold = self._float_env("AGENTGUARD_ML_THRESHOLD", 0.95, 0.0, 1.0)
+        self.threshold = self._float_env("AGENTGUARD_ML_THRESHOLD", 0.60, 0.0, 1.0)
         self.model_path = os.getenv("AGENTGUARD_MODEL_PATH", "./agentguard-model")
         self.model_name = os.getenv(
             "AGENTGUARD_MODEL_NAME",
