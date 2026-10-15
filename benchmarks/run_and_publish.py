@@ -77,9 +77,7 @@ def percentile(sorted_values, p):
     """Nearest-rank percentile on a sorted list."""
     if not sorted_values:
         return 0.0
-    k = max(
-        0, min(len(sorted_values) - 1, int(round(p / 100 * len(sorted_values))) - 1)
-    )
+    k = max(0, min(len(sorted_values) - 1, round(p / 100 * len(sorted_values)) - 1))
     return sorted_values[k]
 
 

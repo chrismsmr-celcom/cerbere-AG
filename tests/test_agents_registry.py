@@ -61,7 +61,7 @@ def _as_human(api, monkeypatch, org="org-a", email="ciso@acme.io"):
 
 
 def test_agent_registers_on_first_request(app_client):
-    c, api, _ = app_client
+    c, _api, _ = app_client
     assert c.post("/span", json=SPAN, headers=hdr()).status_code in (200, 201)
 
     agents = c.get("/api/agents", headers={"X-API-Key": "key-a"}).get_json()
@@ -72,14 +72,14 @@ def test_agent_registers_on_first_request(app_client):
 
 
 def test_agents_are_isolated_per_org(app_client):
-    c, api, _ = app_client
+    c, _api, _ = app_client
     c.post("/span", json=SPAN, headers=hdr("key-a", "bot-a"))
     other = c.get("/api/agents", headers={"X-API-Key": "key-b"}).get_json()
     assert other["total"] == 0
 
 
 def test_api_key_cannot_disconnect_or_approve(app_client):
-    c, api, _ = app_client
+    c, _api, _ = app_client
     c.post("/span", json=SPAN, headers=hdr())
     c.post(
         "/api/approvals",

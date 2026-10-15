@@ -45,7 +45,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         return dict(row)
     if hasattr(row, "keys"):
         try:
-            return {key: row[key] for key in row.keys()}
+            return {key: row[key] for key in row}
         except Exception:
             pass
     columns = [

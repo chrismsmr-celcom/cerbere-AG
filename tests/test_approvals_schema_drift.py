@@ -171,7 +171,7 @@ def test_wrong_schema_table_is_renamed_kept_and_recreated(client_wrong_schema):
 
 def test_hitl_module_never_touches_the_api_table(client_wrong_schema):
     """Avant : approvals.ensure_approval_schema() supprimait la table des routes API (et inversement)."""
-    c, db_path = client_wrong_schema
+    c, _db_path = client_wrong_schema
     c.post(
         "/api/approvals",
         headers={"X-API-Key": "key-a"},

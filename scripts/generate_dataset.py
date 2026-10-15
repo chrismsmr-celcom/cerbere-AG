@@ -84,7 +84,7 @@ STYLES = [
 ]
 
 
-def generate_attack(use_llm: bool = False, api_key: str = None) -> str:
+def generate_attack(use_llm: bool = False, api_key: str | None = None) -> str:
     """Génère une attaque, soit par template soit par LLM."""
     if use_llm and api_key:
         try:
@@ -119,7 +119,7 @@ def generate_attack(use_llm: bool = False, api_key: str = None) -> str:
     return template.format(action=action)
 
 
-def generate_benign(use_llm: bool = False, api_key: str = None) -> str:
+def generate_benign(use_llm: bool = False, api_key: str | None = None) -> str:
     """Génère un prompt légitime."""
     if use_llm and api_key:
         try:
@@ -159,7 +159,7 @@ def generate_benign(use_llm: bool = False, api_key: str = None) -> str:
 
 
 def generate_dataset(
-    samples: int, output_file: str, use_llm: bool = False, api_key: str = None
+    samples: int, output_file: str, use_llm: bool = False, api_key: str | None = None
 ):
     """Génère un dataset équilibré."""
     print(f"🔄 Génération de {samples} échantillons...")

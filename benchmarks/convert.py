@@ -155,7 +155,7 @@ def convert_agentdojo(max_items: int = 10000) -> list[dict]:
     for suite_name in ("workspace", "banking", "slack", "travel", "file_system"):
         try:
             suite = get_suite(suite_name, "")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[convert] suite {suite_name} indisponible: {e}")
             continue
 
@@ -172,7 +172,7 @@ def convert_agentdojo(max_items: int = 10000) -> list[dict]:
                 if callable(getattr(suite, "get_injection_tasks", None))
                 else suite.injection_tasks
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[convert] injections {suite_name}: {e}")
             injections = []
         for inj in injections:
@@ -205,7 +205,7 @@ def convert_agentdojo(max_items: int = 10000) -> list[dict]:
                 if isinstance(suite.user_tasks, dict)
                 else list(suite.user_tasks)
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             user_tasks = []
         for t in user_tasks:
             goal = getattr(t, "goal", "") or getattr(t, "prompt", "")
@@ -240,7 +240,7 @@ def convert_benign_tools(max_items: int = 10000) -> list[dict]:
     for name, _cfg in candidates:
         try:
             ds = load_dataset(name, split="train")
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         for i, row in enumerate(ds):
             if i >= max_items:

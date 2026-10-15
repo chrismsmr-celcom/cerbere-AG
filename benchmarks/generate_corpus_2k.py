@@ -42,7 +42,7 @@ def stratified_subset(entries: list) -> list:
     for e in entries:
         groups.setdefault(e.get("category", "uncategorized"), []).append(e)
     out = []
-    for cat, items in groups.items():
+    for items in groups.values():
         out.extend(items[i] for i in range(0, len(items), STRIDE))
     return out
 

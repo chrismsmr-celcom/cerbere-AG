@@ -208,7 +208,7 @@ class TestAuthorizationMatrix:
             json={"name": "Agent1", "org_id": ctx["org_id"]},
             headers=_admin_headers(ctx["api_key"]),
         )
-        resp2 = client.post(
+        client.post(
             "/api/identity/agents",
             json={"name": "Agent2", "org_id": ctx["org_id"]},
             headers=_admin_headers(ctx["api_key"]),

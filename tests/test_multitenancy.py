@@ -61,8 +61,8 @@ def _span(trace_id, prompt="hello"):
 )
 def test_two_customers_are_fully_isolated(client):
     c, _ = client
-    key_a, org_a = _create_customer(c, "Client A")
-    key_b, org_b = _create_customer(c, "Client B")
+    key_a, _org_a = _create_customer(c, "Client A")
+    key_b, _org_b = _create_customer(c, "Client B")
 
     for i in range(5):
         c.post("/span", headers={"X-API-Key": key_a}, json=_span(f"tA{i}"))

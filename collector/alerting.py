@@ -138,8 +138,10 @@ def _dispatch(event):
 def _human_text(event):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines = [
-        f"🚨 [{str(event.get('risk_level', 'high')).upper()}] "
-        f"{event.get('check_name', 'unknown')} — opération bloquée",
+        (
+            f"🚨 [{str(event.get('risk_level', 'high')).upper()}] "
+            f"{event.get('check_name', 'unknown')} — opération bloquée"
+        ),
         f"🕐 {now}",
         f"🏢 org: {event.get('org_id', 'default')}",
         f"🤖 modèle: {event.get('model') or '—'}",

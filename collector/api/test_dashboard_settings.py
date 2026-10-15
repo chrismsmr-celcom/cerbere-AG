@@ -234,7 +234,7 @@ def test_destination_test_sends_real_request(ctx):
 
 
 def test_audit_trail_summary_event_use_real_spans(ctx):
-    c, api, _ = ctx
+    c, _api, _ = ctx
     bad = [
         {
             "check_name": "prompt_injection",

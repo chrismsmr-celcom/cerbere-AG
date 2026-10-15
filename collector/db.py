@@ -1111,7 +1111,7 @@ def resolve_agent_identity(api_key: str) -> dict | None:
     if len(parts) != 5:
         return None
 
-    _, tenant_id, org_id, agent_id, _ = parts
+    _, _tenant_id, _org_id, _agent_id, _ = parts
     key_hash = _hash_key(api_key)
 
     try:
@@ -1177,7 +1177,7 @@ def dict_from_row(row, cursor=None) -> dict:
     if hasattr(row, "_fields"):
         return dict(zip(row._fields, row))
     if hasattr(row, "keys"):
-        return {key: row[key] for key in row.keys()}
+        return {key: row[key] for key in row}
     if cursor is not None and hasattr(cursor, "description"):
         return {col[0]: value for col, value in zip(cursor.description, row)}
     if isinstance(row, dict):

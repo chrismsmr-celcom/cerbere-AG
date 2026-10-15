@@ -135,7 +135,7 @@ def internal_prompts():
         data = json.loads(p.read_text(encoding="utf-8"))
         items = []
         if isinstance(data, dict):
-            for k, v in data.items():
+            for v in data.values():
                 if isinstance(v, list):
                     items += v
         else:

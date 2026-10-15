@@ -92,7 +92,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     if row is None:
         return {}
     if hasattr(row, "keys"):
-        data = {key: row[key] for key in row.keys()}
+        data = {key: row[key] for key in row}
     else:
         columns = [
             "approval_id",
@@ -122,7 +122,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 
 def _ensure_arguments_hash_column() -> None:
     db = get_db()
-    placeholder = sql_placeholder()
+    sql_placeholder()
 
     if is_postgres():
         db.execute(

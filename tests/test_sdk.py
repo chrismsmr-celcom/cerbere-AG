@@ -145,7 +145,7 @@ class TestCostEstimation:
         result = Mock(choices=[Mock(message=Mock(content="This is a response"))])
         kwargs = {"model": "gpt-4o", "messages": [{"content": "Hello there"}]}
 
-        cost, in_tok, out_tok = guard._estimate_cost(kwargs, result)
+        _cost, in_tok, out_tok = guard._estimate_cost(kwargs, result)
 
         # Les tokens doivent être > 0 pour des textes non vides
         assert in_tok > 0

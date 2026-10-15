@@ -206,7 +206,7 @@ def get_or_provision_user(payload: dict):
     tenant_id = str(uuid.uuid4())
     tenant_name = f"{display_name}'s Workspace"
 
-    ph = "%s" if is_postgres() else "?"
+    "%s" if is_postgres() else "?"
 
     if is_postgres():
         conn = get_pg_conn()

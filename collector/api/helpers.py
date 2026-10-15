@@ -50,7 +50,7 @@ def get_decision_signer():
 
     from agentguard.signing import DecisionSigner
 
-        # AGENTGUARD_SIGNING_KEY est le nom canonique (documenté dans env.example).
+    # AGENTGUARD_SIGNING_KEY est le nom canonique (documenté dans env.example).
     # CERBERE_SIGNING_KEY reste accepté comme alias legacy.
     canonical = os.environ.get("AGENTGUARD_SIGNING_KEY")
     legacy = os.environ.get("CERBERE_SIGNING_KEY")

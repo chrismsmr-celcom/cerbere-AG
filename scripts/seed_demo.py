@@ -214,8 +214,9 @@ def reset(org_id):
         )
         run(
             cur,
-            "DELETE FROM connected_agents WHERE org_id = ? AND agent_id IN (%s)"
-            % ",".join("?" * len(AGENTS)),
+            "DELETE FROM connected_agents WHERE org_id = ? AND agent_id IN ({})".format(
+                ",".join("?" * len(AGENTS))
+            ),
             (org_id, *[a[0] for a in AGENTS]),
         )
         conn.commit()

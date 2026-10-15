@@ -373,7 +373,7 @@ class TestRBACWithAgentKey:
             json={"name": "Bot1", "org_id": ctx["org_id"]},
             headers=_admin_headers(),
         )
-        resp2 = client.post(
+        client.post(
             "/api/identity/agents",
             json={"name": "Bot2", "org_id": ctx["org_id"]},
             headers=_admin_headers(),

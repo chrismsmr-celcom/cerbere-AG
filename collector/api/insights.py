@@ -201,7 +201,7 @@ def _p95(values):
     if not values:
         return 0.0
     s = sorted(values)
-    return s[min(len(s) - 1, int(round(0.95 * (len(s) - 1))))]
+    return s[min(len(s) - 1, round(0.95 * (len(s) - 1)))]
 
 
 @api_bp.route("/api/insights/tools")

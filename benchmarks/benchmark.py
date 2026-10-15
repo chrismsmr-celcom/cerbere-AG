@@ -92,7 +92,10 @@ class AdversarialBenchmark:
     """Runs adversarial prompts against the detection engine."""
 
     def __init__(
-        self, corpus_path: str = None, verbose: bool = False, layers: list[str] = None
+        self,
+        corpus_path: str | None = None,
+        verbose: bool = False,
+        layers: list[str] | None = None,
     ):
         self.verbose = verbose
         self.layers = layers or ["regex"]
@@ -122,7 +125,7 @@ class AdversarialBenchmark:
                 print("⚠️  No PolicyEngine available. Using minimal regex fallback.")
                 self.policy_engine = self._MinimalPolicyEngine()
 
-    def _load_corpus(self, category_filter: str = None) -> list[dict]:
+    def _load_corpus(self, category_filter: str | None = None) -> list[dict]:
         """Load adversarial corpus from JSON."""
         with open(self.corpus_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -139,7 +142,7 @@ class AdversarialBenchmark:
         return prompts
 
     def run(
-        self, category_filter: str = None, limit: int = None
+        self, category_filter: str | None = None, limit: int | None = None
     ) -> list[BenchmarkResult]:
         """Run all prompts and collect results."""
         prompts = self._load_corpus(category_filter)

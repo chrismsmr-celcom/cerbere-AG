@@ -78,7 +78,7 @@ def percentile(sorted_values, p):
         0,
         min(
             len(sorted_values) - 1,
-            int(round(p / 100 * len(sorted_values))) - 1,
+            round(p / 100 * len(sorted_values)) - 1,
         ),
     )
     return sorted_values[index]

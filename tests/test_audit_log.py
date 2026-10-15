@@ -186,7 +186,7 @@ class TestAuditLogTampering:
         with open(backup, "w") as f:
             f.writelines(lines)
 
-        is_valid, report = log.verify_chain()
+        is_valid, _report = log.verify_chain()
         assert is_valid is False
 
 

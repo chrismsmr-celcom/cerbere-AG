@@ -257,7 +257,7 @@ def get_usage():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        db = get_db()
+        get_db()
 
         # Multi-tenant isolation
         org_id = getattr(g, "org_id", None)

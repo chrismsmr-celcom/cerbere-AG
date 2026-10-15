@@ -74,7 +74,4 @@ def _valid_email(email: str) -> bool:
     if "." not in domain:
         return False
 
-    if domain.startswith(".") or domain.endswith("."):
-        return False
-
-    return True
+    return not (domain.startswith(".") or domain.endswith("."))

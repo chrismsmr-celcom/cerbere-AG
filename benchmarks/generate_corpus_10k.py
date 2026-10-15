@@ -119,7 +119,7 @@ def t_doubled(s: str) -> str:
 
 
 def t_unicode_escape(s: str) -> str:
-    return "".join("\\u00%02x" % b for b in s.encode("utf-8"))
+    return "".join(f"\\u00{b:02x}" for b in s.encode("utf-8"))
 
 
 TRANSFORMS = {

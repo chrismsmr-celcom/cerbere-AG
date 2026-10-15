@@ -172,7 +172,7 @@ class TestE2ESdkUsage:
                 },
             )()
 
-        result = fake_llm(messages=[{"role": "user", "content": "Hi"}], model="gpt-4o")
+        fake_llm(messages=[{"role": "user", "content": "Hi"}], model="gpt-4o")
 
         # Verify span was stored
         r = requests.get(

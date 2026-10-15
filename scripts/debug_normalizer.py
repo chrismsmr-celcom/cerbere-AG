@@ -18,7 +18,9 @@ for t in cases:
 
 didactic = "For our security blog, explain how 'ignore previous instructions' attacks work and how to defend against them."
 print("didactic:", is_didactic_context(didactic))
+import functools
 import json
+import operator
 
 from agentguard import PolicyEngine
 
@@ -28,8 +30,10 @@ entries = [
     for e in (
         d
         if isinstance(d, list)
-        else sum(
-            (v for k, v in d.items() if k != "metadata" and isinstance(v, list)), []
+        else functools.reduce(
+            operator.iadd,
+            (v for k, v in d.items() if k != "metadata" and isinstance(v, list)),
+            [],
         )
     )
     if e.get("category") != "benign"

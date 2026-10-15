@@ -170,10 +170,7 @@ def _approval_matches_request(
 
     approved_hash = approval.get("arguments_hash")
 
-    if approved_hash and approved_hash != _arguments_hash(request.arguments):
-        return False
-
-    return True
+    return not (approved_hash and approved_hash != _arguments_hash(request.arguments))
 
 
 class ToolGuard:
