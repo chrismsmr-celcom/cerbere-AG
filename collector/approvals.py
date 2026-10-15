@@ -14,7 +14,7 @@ import json
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 from .db import get_db, is_postgres, sql_placeholder
 
@@ -36,7 +36,7 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
 
 
-def _parse_datetime(value: Any) -> Optional[datetime]:
+def _parse_datetime(value: Any) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -64,7 +64,12 @@ def _serialize_arguments(arguments: Any) -> str:
             default=str,
         )
     except Exception:
-        return json.dumps({"_serialization_error": True}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        return json.dumps(
+            {"_serialization_error": True},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
 
 
 def _arguments_hash(arguments: Any) -> str:
@@ -90,10 +95,25 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         data = {key: row[key] for key in row.keys()}
     else:
         columns = [
-            "approval_id", "org_id", "tenant_id", "agent_id", "session_id",
-            "trace_id", "span_id", "tool_name", "arguments", "arguments_hash",
-            "risk_score", "reason", "policy_name", "status", "requested_at",
-            "expires_at", "decided_at", "decided_by", "decision_reason",
+            "approval_id",
+            "org_id",
+            "tenant_id",
+            "agent_id",
+            "session_id",
+            "trace_id",
+            "span_id",
+            "tool_name",
+            "arguments",
+            "arguments_hash",
+            "risk_score",
+            "reason",
+            "policy_name",
+            "status",
+            "requested_at",
+            "expires_at",
+            "decided_at",
+            "decided_by",
+            "decision_reason",
         ]
         data = dict(zip(columns, row))
     data["arguments"] = _deserialize_arguments(data.get("arguments"))
@@ -103,9 +123,11 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 def _ensure_arguments_hash_column() -> None:
     db = get_db()
     placeholder = sql_placeholder()
-    
+
     if is_postgres():
-        db.execute("ALTER TABLE hitl_approvals ADD COLUMN IF NOT EXISTS arguments_hash TEXT")
+        db.execute(
+            "ALTER TABLE hitl_approvals ADD COLUMN IF NOT EXISTS arguments_hash TEXT"
+        )
         db.commit()
         return
 
@@ -119,7 +141,7 @@ def _ensure_arguments_hash_column() -> None:
 def ensure_approval_schema() -> None:
     """Create the approval table if it does not exist, or fix it if it has the wrong schema."""
     db = get_db()
-    
+
     # Table PROPRE à ce module (hitl_approvals). Elle portait autrefois le nom `hitl_approvals`,
     # déjà utilisé par les routes /api/approvals avec un autre schéma : chaque module supprimait puis
     # recréait la table de l'autre -> erreurs 500 en boucle. Les deux tables sont désormais séparées.
@@ -154,7 +176,9 @@ def ensure_approval_schema() -> None:
     _ensure_arguments_hash_column()
 
     # 4. Backfill hashes for existing records
-    cursor = db.execute("SELECT approval_id, arguments FROM hitl_approvals WHERE arguments_hash IS NULL")
+    cursor = db.execute(
+        "SELECT approval_id, arguments FROM hitl_approvals WHERE arguments_hash IS NULL"
+    )
     rows = cursor.fetchall()
     if rows:
         placeholder = sql_placeholder()
@@ -166,7 +190,7 @@ def ensure_approval_schema() -> None:
             else:
                 approval_id = row[0]
                 arguments = row[1]
-            
+
             parsed_arguments = _deserialize_arguments(arguments)
             db.execute(update_query, (_arguments_hash(parsed_arguments), approval_id))
         db.commit()
@@ -176,16 +200,16 @@ def create_approval(
     *,
     tool_name: str,
     arguments: Any,
-    org_id: Optional[str] = None,
-    tenant_id: Optional[str] = None,
-    agent_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    trace_id: Optional[str] = None,
-    span_id: Optional[str] = None,
-    risk_score: Optional[float] = None,
-    reason: Optional[str] = None,
-    policy_name: Optional[str] = None,
-    ttl_seconds: Optional[int] = None,
+    org_id: str | None = None,
+    tenant_id: str | None = None,
+    agent_id: str | None = None,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+    risk_score: float | None = None,
+    reason: str | None = None,
+    policy_name: str | None = None,
+    ttl_seconds: int | None = None,
 ) -> dict[str, Any]:
     ensure_approval_schema()
     now = _now()
@@ -206,9 +230,25 @@ def create_approval(
         ) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})
     """
     params = (
-        approval_id, org_id, tenant_id, agent_id, session_id, trace_id, span_id,
-        tool_name, serialized_arguments, arguments_hash, risk_score, reason, policy_name,
-        PENDING, _iso(now), _iso(expires_at), None, None, None,
+        approval_id,
+        org_id,
+        tenant_id,
+        agent_id,
+        session_id,
+        trace_id,
+        span_id,
+        tool_name,
+        serialized_arguments,
+        arguments_hash,
+        risk_score,
+        reason,
+        policy_name,
+        PENDING,
+        _iso(now),
+        _iso(expires_at),
+        None,
+        None,
+        None,
     )
     db.execute(query, params)
     db.commit()
@@ -233,35 +273,48 @@ def _expire_if_needed(approval: dict[str, Any]) -> dict[str, Any]:
         SET status = {p}, decided_at = {p}, decision_reason = {p}
         WHERE approval_id = {p} AND status = {p}
     """
-    db.execute(query, (EXPIRED, _iso(_now()), "Approval request expired", approval["approval_id"], PENDING))
+    db.execute(
+        query,
+        (
+            EXPIRED,
+            _iso(_now()),
+            "Approval request expired",
+            approval["approval_id"],
+            PENDING,
+        ),
+    )
     db.commit()
     return get_approval(approval["approval_id"]) or approval
 
 
-def get_approval(approval_id: str, *, org_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+def get_approval(
+    approval_id: str, *, org_id: str | None = None
+) -> dict[str, Any] | None:
     ensure_approval_schema()
     db = get_db()
     p = sql_placeholder()
-    
+
     if org_id is None:
         query = f"SELECT * FROM hitl_approvals WHERE approval_id = {p} LIMIT 1"
         cursor = db.execute(query, (approval_id,))
     else:
         query = f"SELECT * FROM hitl_approvals WHERE approval_id = {p} AND org_id = {p} LIMIT 1"
         cursor = db.execute(query, (approval_id, org_id))
-        
+
     row = cursor.fetchone()
     if row is None:
         return None
     return _expire_if_needed(_row_to_dict(row))
 
 
-def list_approvals(*, org_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_approvals(
+    *, org_id: str | None = None, status: str | None = None, limit: int = 50
+) -> list[dict[str, Any]]:
     ensure_approval_schema()
     limit = max(1, min(int(limit), 200))
     db = get_db()
     p = sql_placeholder()
-    
+
     conditions = []
     params = []
     if org_id is not None:
@@ -275,18 +328,22 @@ def list_approvals(*, org_id: Optional[str] = None, status: Optional[str] = None
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
     query = f"SELECT * FROM hitl_approvals {where_clause} ORDER BY requested_at DESC LIMIT {limit}"
-    
+
     cursor = db.execute(query, tuple(params))
     approvals = [_expire_if_needed(_row_to_dict(row)) for row in cursor.fetchall()]
-    
+
     if status is not None:
         approvals = [a for a in approvals if a.get("status") == status]
     return approvals
 
 
 def decide_approval(
-    approval_id: str, *, decision: str, decided_by: Optional[str] = None,
-    decision_reason: Optional[str] = None, org_id: Optional[str] = None,
+    approval_id: str,
+    *,
+    decision: str,
+    decided_by: str | None = None,
+    decision_reason: str | None = None,
+    org_id: str | None = None,
 ) -> dict[str, Any]:
     ensure_approval_schema()
     normalized = str(decision).strip().lower()
@@ -308,7 +365,14 @@ def decide_approval(
         SET status = {p}, decided_at = {p}, decided_by = {p}, decision_reason = {p}
         WHERE approval_id = {p} AND status = {p}
     """
-    params = (normalized, _iso(_now()), decided_by, decision_reason, approval_id, PENDING)
+    params = (
+        normalized,
+        _iso(_now()),
+        decided_by,
+        decision_reason,
+        approval_id,
+        PENDING,
+    )
     if org_id is not None:
         query += f" AND org_id = {p}"
         params = params + (org_id,)
@@ -330,10 +394,33 @@ def decide_approval(
     return result
 
 
-def approve_approval(approval_id: str, *, decided_by: Optional[str] = None, decision_reason: Optional[str] = None, org_id: Optional[str] = None) -> dict[str, Any]:
-    return decide_approval(approval_id, decision=APPROVED, decided_by=decided_by, decision_reason=decision_reason, org_id=org_id)
+def approve_approval(
+    approval_id: str,
+    *,
+    decided_by: str | None = None,
+    decision_reason: str | None = None,
+    org_id: str | None = None,
+) -> dict[str, Any]:
+    return decide_approval(
+        approval_id,
+        decision=APPROVED,
+        decided_by=decided_by,
+        decision_reason=decision_reason,
+        org_id=org_id,
+    )
 
 
-def reject_approval(approval_id: str, *, decided_by: Optional[str] = None, decision_reason: Optional[str] = None, org_id: Optional[str] = None) -> dict[str, Any]:
-    return decide_approval(approval_id, decision=REJECTED, decided_by=decided_by, decision_reason=decision_reason, org_id=org_id)
-
+def reject_approval(
+    approval_id: str,
+    *,
+    decided_by: str | None = None,
+    decision_reason: str | None = None,
+    org_id: str | None = None,
+) -> dict[str, Any]:
+    return decide_approval(
+        approval_id,
+        decision=REJECTED,
+        decided_by=decided_by,
+        decision_reason=decision_reason,
+        org_id=org_id,
+    )

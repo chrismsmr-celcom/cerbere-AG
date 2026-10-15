@@ -38,24 +38,16 @@ def test_trajectory_detects_escalation():
 
     analysis = trajectory.analyze()
 
-    assert analysis[
-        "trajectory_escalation"
-    ] is True
+    assert analysis["trajectory_escalation"] is True
 
-    assert analysis[
-        "trajectory_risk_score"
-    ] >= 80
+    assert analysis["trajectory_risk_score"] >= 80
 
-    assert analysis[
-        "decision"
-    ] == "block"
+    assert analysis["decision"] == "block"
 
 
 def test_trajectory_detects_privilege_escalation():
 
-    trajectory = TrajectoryAnalyzer(
-        agent_id="agent-1"
-    )
+    trajectory = TrajectoryAnalyzer(agent_id="agent-1")
 
     trajectory.add(
         TrajectoryEvent(
@@ -70,24 +62,18 @@ def test_trajectory_detects_privilege_escalation():
             event_type="tool_call",
             tool_name="admin_panel",
             risk_score=90,
-            metadata={
-                "tool_category": "admin"
-            },
+            metadata={"tool_category": "admin"},
         )
     )
 
     analysis = trajectory.analyze()
 
-    assert analysis[
-        "privilege_escalation"
-    ] is True
+    assert analysis["privilege_escalation"] is True
 
 
 def test_safe_trajectory_is_allowed():
 
-    trajectory = TrajectoryAnalyzer(
-        agent_id="agent-1"
-    )
+    trajectory = TrajectoryAnalyzer(agent_id="agent-1")
 
     trajectory.add(
         TrajectoryEvent(
@@ -100,9 +86,7 @@ def test_safe_trajectory_is_allowed():
 
     analysis = trajectory.analyze()
 
-    assert analysis[
-        "decision"
-    ] == "allow"
+    assert analysis["decision"] == "allow"
 
 
 def test_blocked_actions_are_counted():
@@ -121,23 +105,16 @@ def test_blocked_actions_are_counted():
 
     analysis = trajectory.analyze()
 
-    assert analysis[
-        "blocked_actions"
-    ] == 1
+    assert analysis["blocked_actions"] == 1
 
-    assert analysis[
-        "risky_actions"
-    ] == 1
+    assert analysis["risky_actions"] == 1
 
 
 def test_trajectory_memory_is_bounded():
 
-    trajectory = TrajectoryAnalyzer(
-        max_events=3
-    )
+    trajectory = TrajectoryAnalyzer(max_events=3)
 
     for i in range(10):
-
         trajectory.add(
             TrajectoryEvent(
                 event_type="tool_call",
@@ -146,7 +123,4 @@ def test_trajectory_memory_is_bounded():
         )
 
     assert trajectory.length == 3
-    assert (
-        trajectory.last_event.tool_name
-        == "tool-9"
-    )
+    assert trajectory.last_event.tool_name == "tool-9"

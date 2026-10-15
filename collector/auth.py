@@ -9,7 +9,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from functools import wraps
-from typing import Optional
 
 import structlog
 from flask import (
@@ -49,10 +48,9 @@ MAGIC_LINK_TOKEN_BYTES = 32
 
 MAGIC_LINK_COOKIE = "cerbere_session"
 
-MAGIC_LINK_ENABLED = (
-    os.environ.get("AGENTGUARD_MAGIC_LINK_ENABLED", "true").lower()
-    in {"1", "true", "yes", "on"}
-)
+MAGIC_LINK_ENABLED = os.environ.get(
+    "AGENTGUARD_MAGIC_LINK_ENABLED", "true"
+).lower() in {"1", "true", "yes", "on"}
 
 
 def _env_first(*names: str, default: str = "") -> str:
@@ -82,10 +80,9 @@ SMTP_FROM = _env_first(
     "SMTP_FROM",
     default=(SMTP_USERNAME or "security@agentguard.local"),
 ).strip()
-SMTP_USE_TLS = (
-    _env_first("AGENTGUARD_SMTP_USE_TLS", "SMTP_USE_TLS", default="true").lower()
-    in {"1", "true", "yes", "on"}
-)
+SMTP_USE_TLS = _env_first(
+    "AGENTGUARD_SMTP_USE_TLS", "SMTP_USE_TLS", default="true"
+).lower() in {"1", "true", "yes", "on"}
 
 APP_BASE_URL = os.environ.get(
     "APP_BASE_URL",
@@ -137,6 +134,7 @@ PROTECTED_ENDPOINTS = {
 # BASIC CRYPTO HELPERS
 # ═══════════════════════════════════════════════════════════════
 
+
 def safe_compare(a: str, b: str) -> bool:
     if not a or not b:
         return False
@@ -151,15 +149,11 @@ def safe_compare(a: str, b: str) -> bool:
 
 
 def hash_key(key: str) -> str:
-    return hashlib.sha256(
-        str(key).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(str(key).encode("utf-8")).hexdigest()
 
 
 def _hash_magic_token(token: str) -> str:
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _utcnow() -> datetime:
@@ -182,9 +176,9 @@ def _parse_datetime(value):
     value = str(value)
 
     try:
-        return datetime.fromisoformat(
-            value.replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
     except Exception:
         return None
 
@@ -219,6 +213,7 @@ def _valid_email(email: str) -> bool:
 # ═══════════════════════════════════════════════════════════════
 # DATABASE HELPERS
 # ═══════════════════════════════════════════════════════════════
+
 
 def _db_execute(query: str, params=(), fetchone=False, fetchall=False):
     """
@@ -384,6 +379,7 @@ def _user_is_active(user_id: str) -> bool:
 # MAGIC LINK STORAGE
 # ═══════════════════════════════════════════════════════════════
 
+
 def _ensure_magic_link_table():
     """
     Defensive migration.
@@ -468,6 +464,7 @@ def _ensure_magic_link_table():
     finally:
         conn.close()
 
+
 def _ensure_api_keys_table():
     """Crée la table api_keys si elle n'existe pas encore."""
     if is_postgres():
@@ -503,7 +500,8 @@ def _ensure_api_keys_table():
             """)
             conn.commit()
         finally:
-            conn.close()    
+            conn.close()
+
 
 def _invalidate_existing_magic_links(user_id: str):
     p = sql_placeholder()
@@ -795,11 +793,9 @@ def _consume_magic_link(token: str):
 # MAGIC LINK EMAIL
 # ═══════════════════════════════════════════════════════════════
 
+
 def _build_magic_link(token: str) -> str:
-    return (
-        f"{APP_BASE_URL}/auth/verify"
-        f"?token={token}"
-    )
+    return f"{APP_BASE_URL}/auth/verify?token={token}"
 
 
 def _send_magic_link_email(email: str, link: str):
@@ -905,8 +901,7 @@ If you did not request this email, you can safely ignore it.
 
         if environment == "production":
             raise RuntimeError(
-                "SMTP_HOST must be configured in production "
-                "to send magic-link emails."
+                "SMTP_HOST must be configured in production to send magic-link emails."
             )
 
         logger.warning(
@@ -954,6 +949,7 @@ If you did not request this email, you can safely ignore it.
 # ═══════════════════════════════════════════════════════════════
 # HUMAN SESSION
 # ═══════════════════════════════════════════════════════════════
+
 
 def _human_session_token(user_id: str) -> str:
     """
@@ -1046,6 +1042,7 @@ def _clear_human_session(response):
 # LEGACY API-KEY SESSION
 # ═══════════════════════════════════════════════════════════════
 
+
 def _lookup_org_by_key(key: str):
     """Résout une clé API en organisation.
 
@@ -1080,7 +1077,9 @@ def _lookup_org_by_key(key: str):
         if row:
             if has_name:
                 try:
-                    g.api_key_name = str(row[1])   # sert à nommer les agents des anciens SDK
+                    g.api_key_name = str(
+                        row[1]
+                    )  # sert à nommer les agents des anciens SDK
                 except RuntimeError:
                     pass
             return row[0]
@@ -1116,9 +1115,7 @@ def resolve_org_id(key: str):
 
                 logger.info(
                     "platform_identity_resolved",
-                    service=platform_identity.get(
-                        "service_name"
-                    ),
+                    service=platform_identity.get("service_name"),
                 )
 
                 return "platform"
@@ -1233,11 +1230,7 @@ def _session_org_id(token: str):
                 ),
             )
 
-            return (
-                org_id
-                if cur.fetchone()
-                else None
-            )
+            return org_id if cur.fetchone() else None
         finally:
             conn.close()
 
@@ -1260,16 +1253,15 @@ def _session_org_id(token: str):
             ),
         )
 
-        return (
-            org_id
-            if cur.fetchone()
-            else None
-        )
+        return org_id if cur.fetchone() else None
     finally:
         conn.close()
-  # ═══════════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════════
 # IDENTITY RESOLUTION
 # ═══════════════════════════════════════════════════════════════
+
 
 def _build_user_identity(user):
     try:
@@ -1387,9 +1379,7 @@ def resolve_full_identity():
                 org_id=agent_info["org_id"],
                 subject_id=agent_info["agent_id"],
                 role=Role.DEVELOPER,
-                agent_name=agent_info.get(
-                    "agent_name"
-                ),
+                agent_name=agent_info.get("agent_name"),
             )
 
             g.identity = identity
@@ -1424,11 +1414,7 @@ def resolve_full_identity():
         "",
     ).strip()
 
-    if (
-        api_key
-        and key
-        and safe_compare(key, api_key)
-    ):
+    if api_key and key and safe_compare(key, api_key):
         environment = current_app.config.get(
             "ENVIRONMENT",
             "development",
@@ -1439,10 +1425,7 @@ def resolve_full_identity():
             False,
         )
 
-        if (
-            environment == "production"
-            and not allow_legacy
-        ):
+        if environment == "production" and not allow_legacy:
             return None
 
         try:
@@ -1467,9 +1450,10 @@ def resolve_full_identity():
 # RESOURCE AUTHORIZATION
 # ═══════════════════════════════════════════════════════════════
 
+
 def authorize_resource_access(
     target_tenant_id: str,
-    target_org_id: Optional[str] = None,
+    target_org_id: str | None = None,
     allow_cross_org: bool = False,
 ) -> bool:
     try:
@@ -1512,14 +1496,12 @@ def authorize_resource_access(
 # RBAC
 # ═══════════════════════════════════════════════════════════════
 
+
 def require_role(*required_roles: str):
     try:
         from agentguard.identity import Role
 
-        required = [
-            Role(r)
-            for r in required_roles
-        ]
+        required = [Role(r) for r in required_roles]
 
     except (ImportError, ValueError):
         required = []
@@ -1528,9 +1510,7 @@ def require_role(*required_roles: str):
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not require_auth():
-                return jsonify(
-                    {"error": "Unauthorized"}
-                ), 401
+                return jsonify({"error": "Unauthorized"}), 401
 
             if not required:
                 return func(*args, **kwargs)
@@ -1538,9 +1518,7 @@ def require_role(*required_roles: str):
             identity = resolve_full_identity()
 
             if not identity:
-                return jsonify(
-                    {"error": "Identity not resolved"}
-                ), 401
+                return jsonify({"error": "Identity not resolved"}), 401
 
             for role in required:
                 try:
@@ -1560,10 +1538,7 @@ def require_role(*required_roles: str):
                 {
                     "error": "Forbidden",
                     "required_roles": [
-                        r.value
-                        if hasattr(r, "value")
-                        else str(r)
-                        for r in required
+                        r.value if hasattr(r, "value") else str(r) for r in required
                     ],
                     "your_role": (
                         identity.role.value
@@ -1586,16 +1561,12 @@ def require_permission(permission: str):
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not require_auth():
-                return jsonify(
-                    {"error": "Unauthorized"}
-                ), 401
+                return jsonify({"error": "Unauthorized"}), 401
 
             identity = resolve_full_identity()
 
             if not identity:
-                return jsonify(
-                    {"error": "Identity not resolved"}
-                ), 401
+                return jsonify({"error": "Identity not resolved"}), 401
 
             try:
                 from agentguard.identity import role_has_permission
@@ -1614,9 +1585,7 @@ def require_permission(permission: str):
                                     identity.role,
                                     "value",
                                 )
-                                else str(
-                                    identity.role
-                                )
+                                else str(identity.role)
                             ),
                         }
                     ), 403
@@ -1637,6 +1606,7 @@ def require_permission(permission: str):
 # ═══════════════════════════════════════════════════════════════
 # AUTHENTICATION MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════
+
 
 def require_auth():
     """
@@ -1662,10 +1632,7 @@ def require_auth():
 
     if key:
         # Explicitly reject global legacy key in production
-        if (
-            api_key
-            and safe_compare(key, api_key)
-        ):
+        if api_key and safe_compare(key, api_key):
             environment = current_app.config.get(
                 "ENVIRONMENT",
                 "development",
@@ -1676,10 +1643,7 @@ def require_auth():
                 False,
             )
 
-            if (
-                environment == "production"
-                and not allow_legacy
-            ):
+            if environment == "production" and not allow_legacy:
                 logger.warning(
                     "legacy_system_key_rejected_in_production",
                     ip=request.remote_addr,
@@ -1714,9 +1678,7 @@ def require_auth():
         "",
     )
 
-    user = _resolve_human_session(
-        cookie_value
-    )
+    user = _resolve_human_session(cookie_value)
 
     if user:
         g.authenticated_user = user
@@ -1734,9 +1696,7 @@ def require_auth():
 
     # ── LEGACY API KEY SESSION ──────────────────────────────
 
-    org_id = _session_org_id(
-        cookie_value
-    )
+    org_id = _session_org_id(cookie_value)
 
     if org_id:
         g.org_id = org_id
@@ -1794,11 +1754,12 @@ def require_human_auth():
 # AUDIT HELPERS
 # ═══════════════════════════════════════════════════════════════
 
+
 def _audit_login(
     success: bool,
-    email: Optional[str] = None,
+    email: str | None = None,
     org_id: str = "unknown",
-    reason: Optional[str] = None,
+    reason: str | None = None,
 ):
     try:
         from collector.audit_routes import (
@@ -1812,9 +1773,7 @@ def _audit_login(
             return
 
         event_type = (
-            AuditEventType.LOGIN_SUCCESS
-            if success
-            else AuditEventType.LOGIN_FAILED
+            AuditEventType.LOGIN_SUCCESS if success else AuditEventType.LOGIN_FAILED
         )
 
         details = {
@@ -1827,23 +1786,11 @@ def _audit_login(
         audit.log_event(
             event_type=event_type,
             org_id=org_id,
-            actor=(
-                f"user:{email}"
-                if email
-                else "unknown"
-            ),
+            actor=(f"user:{email}" if email else "unknown"),
             resource="dashboard",
-            action=(
-                "login"
-                if success
-                else "login_failed"
-            ),
+            action=("login" if success else "login_failed"),
             details=details,
-            risk_level=(
-                "info"
-                if success
-                else "warning"
-            ),
+            risk_level=("info" if success else "warning"),
         )
 
     except Exception:
@@ -2354,11 +2301,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 @auth_bp.get("/api/auth/config")
 def supabase_public_config():
     """Expose la config publique (URL + anon key) au front — jamais le JWT secret."""
-    return jsonify({
-        "supabase_enabled": SUPABASE_ENABLED,
-        "supabase_url": SUPABASE_URL,
-        "supabase_anon_key": SUPABASE_ANON_KEY,
-    })
+    return jsonify(
+        {
+            "supabase_enabled": SUPABASE_ENABLED,
+            "supabase_url": SUPABASE_URL,
+            "supabase_anon_key": SUPABASE_ANON_KEY,
+        }
+    )
 
 
 @auth_bp.post("/api/auth/supabase-session")
@@ -2863,6 +2812,7 @@ LOGIN_HTML = r"""<!DOCTYPE html>
 # AUTH MIDDLEWARE HOOK
 # ═══════════════════════════════════════════════════════════════
 
+
 @auth_bp.before_app_request
 def check_auth():
     if request.method == "OPTIONS":
@@ -2889,15 +2839,9 @@ def check_auth():
                 "auth.dashboard",
                 "trace.trace_detail",
             }:
-                return redirect(
-                    url_for("auth.login")
-                )
+                return redirect(url_for("auth.login"))
 
-            return jsonify(
-                {
-                    "error": "Unauthorized"
-                }
-            ), 401
+            return jsonify({"error": "Unauthorized"}), 401
 
     except Exception as exc:
         logger.error(
@@ -2905,16 +2849,13 @@ def check_auth():
             error=str(exc),
         )
 
-        return jsonify(
-            {
-                "error": "Unauthorized"
-            }
-        ), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
 
 # ═══════════════════════════════════════════════════════════════
 # LOGIN — MAGIC LINK
 # ═══════════════════════════════════════════════════════════════
+
 
 @auth_bp.route(
     "/login",
@@ -2943,9 +2884,7 @@ def login():
             success=None,
         ), 503
 
-    email = _normalize_email(
-        request.form.get("email", "")
-    )
+    email = _normalize_email(request.form.get("email", ""))
 
     if not _valid_email(email):
         return render_template_string(
@@ -2995,24 +2934,13 @@ def login():
         user_id = user[0]
 
         # Invalidate previous links.
-        _invalidate_existing_magic_links(
-            user_id
-        )
+        _invalidate_existing_magic_links(user_id)
 
-        raw_token = secrets.token_urlsafe(
-            MAGIC_LINK_TOKEN_BYTES
-        )
+        raw_token = secrets.token_urlsafe(MAGIC_LINK_TOKEN_BYTES)
 
-        token_hash = _hash_magic_token(
-            raw_token
-        )
+        token_hash = _hash_magic_token(raw_token)
 
-        expires_at = (
-            _utcnow()
-            + timedelta(
-                seconds=MAGIC_LINK_TTL_SECONDS
-            )
-        )
+        expires_at = _utcnow() + timedelta(seconds=MAGIC_LINK_TTL_SECONDS)
 
         _store_magic_link(
             user_id=user_id,
@@ -3020,9 +2948,7 @@ def login():
             expires_at=expires_at,
         )
 
-        link = _build_magic_link(
-            raw_token
-        )
+        link = _build_magic_link(raw_token)
 
         _send_magic_link_email(
             email,
@@ -3040,9 +2966,7 @@ def login():
             LOGIN_HTML,
             error=None,
             success=(
-                "Check your inbox. "
-                "Your secure sign-in link expires in "
-                "10 minutes."
+                "Check your inbox. Your secure sign-in link expires in 10 minutes."
             ),
         )
 
@@ -3054,10 +2978,7 @@ def login():
 
         return render_template_string(
             LOGIN_HTML,
-            error=(
-                "Unable to send the sign-in link. "
-                "Please try again."
-            ),
+            error=("Unable to send the sign-in link. Please try again."),
             success=None,
         ), 500
 
@@ -3288,10 +3209,14 @@ def signup():
     company_name = request.form.get("company", "").strip()
 
     if not _valid_email(email):
-        return render_template_string(SIGNUP_HTML, error="Enter a valid work email address.", success=None), 400
+        return render_template_string(
+            SIGNUP_HTML, error="Enter a valid work email address.", success=None
+        ), 400
 
     if not display_name:
-        return render_template_string(SIGNUP_HTML, error="Full name is required.", success=None), 400
+        return render_template_string(
+            SIGNUP_HTML, error="Full name is required.", success=None
+        ), 400
 
     try:
         _ensure_magic_link_table()
@@ -3302,7 +3227,7 @@ def signup():
             return render_template_string(
                 SIGNUP_HTML,
                 error="An account with this email already exists. Please log in.",
-                success=None
+                success=None,
             ), 400
 
         # 2. Générer les identifiants uniques pour la chaîne Tenant -> Org -> User
@@ -3322,22 +3247,31 @@ def signup():
                 cur = conn.cursor()
 
                 # Étape A : Créer le Tenant
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO tenants (tenant_id, name, created_at)
                     VALUES ({p}, {p}, CURRENT_TIMESTAMP)
-                """, (tenant_id, tenant_name))
+                """,
+                    (tenant_id, tenant_name),
+                )
 
                 # Étape B : Créer l'Organisation liée à ce Tenant
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO orgs (org_id, tenant_id, name, created_at)
                     VALUES ({p}, {p}, {p}, CURRENT_TIMESTAMP)
-                """, (org_id, tenant_id, org_name))
+                """,
+                    (org_id, tenant_id, org_name),
+                )
 
                 # Étape C : Créer l'Utilisateur lié à ce Tenant et cette Organisation
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO users (user_id, org_id, tenant_id, email, display_name, role, active, created_at)
                     VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, CURRENT_TIMESTAMP)
-                """, (user_id, org_id, tenant_id, email, display_name, "admin", True))
+                """,
+                    (user_id, org_id, tenant_id, email, display_name, "admin", True),
+                )
 
                 conn.commit()
             finally:
@@ -3347,20 +3281,29 @@ def signup():
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO tenants (tenant_id, name, created_at)
                     VALUES (?, ?, CURRENT_TIMESTAMP)
-                """, (tenant_id, tenant_name))
+                """,
+                    (tenant_id, tenant_name),
+                )
 
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO orgs (org_id, tenant_id, name, created_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                """, (org_id, tenant_id, org_name))
+                """,
+                    (org_id, tenant_id, org_name),
+                )
 
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO users (user_id, org_id, tenant_id, email, display_name, role, active, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (user_id, org_id, tenant_id, email, display_name, "admin", 1))
+                """,
+                    (user_id, org_id, tenant_id, email, display_name, "admin", 1),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -3384,7 +3327,7 @@ def signup():
         return render_template_string(
             SIGNUP_HTML,
             error=None,
-            success="Account created successfully! A secure sign-in link has been sent to your email."
+            success="Account created successfully! A secure sign-in link has been sent to your email.",
         )
 
     except Exception as exc:
@@ -3392,13 +3335,14 @@ def signup():
         return render_template_string(
             SIGNUP_HTML,
             error="Unable to create account. Please try again.",
-            success=None
+            success=None,
         ), 500
 
 
 # ═══════════════════════════════════════════════════════════════
 # MAGIC LINK VERIFY
 # ═══════════════════════════════════════════════════════════════
+
 
 @auth_bp.get("/auth/verify")
 def verify_magic_link():
@@ -3419,9 +3363,7 @@ def verify_magic_link():
     try:
         _ensure_magic_link_table()
 
-        user = _consume_magic_link(
-            token
-        )
+        user = _consume_magic_link(token)
 
         if not user:
             _audit_login(
@@ -3432,8 +3374,7 @@ def verify_magic_link():
             return render_template_string(
                 LOGIN_HTML,
                 error=(
-                    "This sign-in link is invalid, "
-                    "expired, or has already been used."
+                    "This sign-in link is invalid, expired, or has already been used."
                 ),
                 success=None,
             ), 401
@@ -3442,9 +3383,7 @@ def verify_magic_link():
         org_id = user[1]
         email = user[3]
 
-        response = redirect(
-            url_for("auth.dashboard")
-        )
+        response = redirect(url_for("auth.dashboard"))
 
         _set_human_session(
             response,
@@ -3486,6 +3425,7 @@ def verify_magic_link():
 # JSON AUTH API
 # ═══════════════════════════════════════════════════════════════
 
+
 @auth_bp.post("/api/auth-login")
 def auth_login():
     """
@@ -3497,32 +3437,18 @@ def auth_login():
     Legacy compatibility:
         {"api_key": "..."}
     """
-    data = request.get_json(
-        silent=True
-    ) or {}
+    data = request.get_json(silent=True) or {}
 
-    email = _normalize_email(
-        data.get("email", "")
-    )
+    email = _normalize_email(data.get("email", ""))
 
     # ── Magic link ──────────────────────────────────────────
 
     if email:
         if not MAGIC_LINK_ENABLED:
-            return jsonify(
-                {
-                    "error":
-                    "Magic-link authentication disabled"
-                }
-            ), 503
+            return jsonify({"error": "Magic-link authentication disabled"}), 503
 
         if not _valid_email(email):
-            return jsonify(
-                {
-                    "error":
-                    "Invalid email address"
-                }
-            ), 400
+            return jsonify({"error": "Invalid email address"}), 400
 
         try:
             _ensure_magic_link_table()
@@ -3532,30 +3458,17 @@ def auth_login():
             if user and bool(user[6]):
                 user_id = user[0]
 
-                _invalidate_existing_magic_links(
-                    user_id
-                )
+                _invalidate_existing_magic_links(user_id)
 
-                raw_token = secrets.token_urlsafe(
-                    MAGIC_LINK_TOKEN_BYTES
-                )
+                raw_token = secrets.token_urlsafe(MAGIC_LINK_TOKEN_BYTES)
 
                 _store_magic_link(
                     user_id=user_id,
-                    token_hash=_hash_magic_token(
-                        raw_token
-                    ),
-                    expires_at=(
-                        _utcnow()
-                        + timedelta(
-                            seconds=MAGIC_LINK_TTL_SECONDS
-                        )
-                    ),
+                    token_hash=_hash_magic_token(raw_token),
+                    expires_at=(_utcnow() + timedelta(seconds=MAGIC_LINK_TTL_SECONDS)),
                 )
 
-                link = _build_magic_link(
-                    raw_token
-                )
+                link = _build_magic_link(raw_token)
 
                 _send_magic_link_email(
                     email,
@@ -3586,12 +3499,7 @@ def auth_login():
                 error=str(exc),
             )
 
-            return jsonify(
-                {
-                    "error":
-                    "Unable to process sign-in request"
-                }
-            ), 500
+            return jsonify({"error": "Unable to process sign-in request"}), 500
 
     # ── Legacy API key compatibility ───────────────────────
 
@@ -3603,39 +3511,22 @@ def auth_login():
     ).strip()
 
     if not key:
-        return jsonify(
-            {
-                "error":
-                "Email is required"
-            }
-        ), 400
+        return jsonify({"error": "Email is required"}), 400
 
     org_id = resolve_org_id(key)
 
     if not org_id:
-        return jsonify(
-            {
-                "error":
-                "Unauthorized"
-            }
-        ), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
     if (
         org_id == "default"
-        and current_app.config.get(
-            "ENVIRONMENT"
-        ) == "production"
+        and current_app.config.get("ENVIRONMENT") == "production"
         and not current_app.config.get(
             "ALLOW_LEGACY_SYSTEM_KEY",
             False,
         )
     ):
-        return jsonify(
-            {
-                "error":
-                "Legacy system API key disabled"
-            }
-        ), 401
+        return jsonify({"error": "Legacy system API key disabled"}), 401
 
     response = jsonify(
         {
@@ -3675,14 +3566,11 @@ def auth_login():
 # CURRENT USER
 # ═══════════════════════════════════════════════════════════════
 
+
 @auth_bp.get("/api/auth/me")
 def auth_me():
     if not require_auth():
-        return jsonify(
-            {
-                "authenticated": False
-            }
-        ), 401
+        return jsonify({"authenticated": False}), 401
 
     identity = resolve_full_identity()
 
@@ -3742,18 +3630,15 @@ def auth_me():
 # LOGOUT
 # ═══════════════════════════════════════════════════════════════
 
+
 @auth_bp.route(
     "/logout",
     methods=["GET", "POST"],
 )
 def logout():
-    response = redirect(
-        url_for("auth.login")
-    )
+    response = redirect(url_for("auth.login"))
 
-    _clear_human_session(
-        response
-    )
+    _clear_human_session(response)
 
     logger.info(
         "logout",
@@ -3766,6 +3651,7 @@ def logout():
 # ═══════════════════════════════════════════════════════════════
 # HEALTH CHECK
 # ═══════════════════════════════════════════════════════════════
+
 
 @auth_bp.get("/healthz")
 def healthz():
@@ -3784,11 +3670,7 @@ def healthz():
         finally:
             conn.close()
 
-        return jsonify(
-            {
-                "status": "ok"
-            }
-        ), 200
+        return jsonify({"status": "ok"}), 200
 
     except Exception as exc:
         return jsonify(
@@ -3803,19 +3685,20 @@ def healthz():
 # DASHBOARD
 # ═══════════════════════════════════════════════════════════════
 
+
 @auth_bp.route("/")
 def dashboard():
-    from collector.dashboard import DASHBOARD_HTML
     from flask import make_response
 
-    return make_response(
-        render_template_string(
-            DASHBOARD_HTML
-        )
-    )
+    from collector.dashboard import DASHBOARD_HTML
+
+    return make_response(render_template_string(DASHBOARD_HTML))
+
+
 # ═══════════════════════════════════════════════════════════════
 # API KEY MANAGEMENT (Version Blindée avec Logs)
 # ═══════════════════════════════════════════════════════════════
+
 
 def _ensure_api_keys_table_safe():
     """Crée la table user_api_keys si elle n'existe pas, de manière sécurisée."""
@@ -3866,7 +3749,9 @@ def create_api_key():
 
         org_id = getattr(g, "org_id", None)
         if not org_id:
-            return jsonify({"error": "Organization ID not found in session. Please log in again."}), 403
+            return jsonify(
+                {"error": "Organization ID not found in session. Please log in again."}
+            ), 403
 
         data = request.get_json(silent=True) or {}
         name = data.get("name", "Default API Key").strip() or "Default API Key"
@@ -3885,10 +3770,13 @@ def create_api_key():
             conn = get_pg_conn()
             try:
                 cur = conn.cursor()
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO user_api_keys (id, org_id, key_hash, name, active, created_at)
                     VALUES ({p}, {p}, {p}, {p}, TRUE, CURRENT_TIMESTAMP)
-                """, (key_id, org_id, key_hash, name))
+                """,
+                    (key_id, org_id, key_hash, name),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -3896,27 +3784,32 @@ def create_api_key():
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO user_api_keys (id, org_id, key_hash, name, active, created_at)
                     VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-                """, (key_id, org_id, key_hash, name))
+                """,
+                    (key_id, org_id, key_hash, name),
+                )
                 conn.commit()
             finally:
                 conn.close()
 
         logger.info("api_key_created", org_id=org_id, key_id=key_id)
 
-        return jsonify({
-            "status": "success",
-            "key": raw_key,
-            "key_id": key_id,
-            "name": name,
-            "message": "⚠️ IMPORTANT : Copiez cette clé maintenant. Elle ne sera plus jamais affichée."
-        }), 201
+        return jsonify(
+            {
+                "status": "success",
+                "key": raw_key,
+                "key_id": key_id,
+                "name": name,
+                "message": "⚠️ IMPORTANT : Copiez cette clé maintenant. Elle ne sera plus jamais affichée.",
+            }
+        ), 201
 
     except Exception as e:
         logger.error("create_api_key_crashed", error=str(e), exc_info=True)
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": f"Internal server error: {e!s}"}), 500
 
 
 @auth_bp.get("/api/keys")
@@ -3936,12 +3829,15 @@ def list_api_keys():
             conn = get_pg_conn()
             try:
                 cur = conn.cursor()
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     SELECT id, name, active, created_at
                     FROM user_api_keys
                     WHERE org_id = {p}
                     ORDER BY created_at DESC
-                """, (org_id,))
+                """,
+                    (org_id,),
+                )
                 rows = cur.fetchall()
             finally:
                 conn.close()
@@ -3949,31 +3845,37 @@ def list_api_keys():
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, name, active, created_at
                     FROM user_api_keys
                     WHERE org_id = ?
                     ORDER BY created_at DESC
-                """, (org_id,))
+                """,
+                    (org_id,),
+                )
                 rows = cur.fetchall()
             finally:
                 conn.close()
 
         keys = []
         for row in rows:
-            keys.append({
-                "id": row[0],
-                "name": row[1],
-                "active": bool(row[2]),
-                "created_at": row[3],
-                "key_preview": "ag_live_..." + (str(row[0])[-4:] if row[0] else "????")
-            })
-        
+            keys.append(
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "active": bool(row[2]),
+                    "created_at": row[3],
+                    "key_preview": "ag_live_..."
+                    + (str(row[0])[-4:] if row[0] else "????"),
+                }
+            )
+
         return jsonify({"keys": keys}), 200
 
     except Exception as e:
         logger.error("list_api_keys_crashed", error=str(e), exc_info=True)
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": f"Internal server error: {e!s}"}), 500
 
 
 @auth_bp.delete("/api/keys/<key_id>")
@@ -3991,11 +3893,14 @@ def revoke_api_key(key_id):
             conn = get_pg_conn()
             try:
                 cur = conn.cursor()
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     UPDATE user_api_keys
                     SET active = FALSE
                     WHERE id = {p} AND org_id = {p}
-                """, (key_id, org_id))
+                """,
+                    (key_id, org_id),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -4003,19 +3908,22 @@ def revoke_api_key(key_id):
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE user_api_keys
                     SET active = 0
                     WHERE id = ? AND org_id = ?
-                """, (key_id, org_id))
+                """,
+                    (key_id, org_id),
+                )
                 conn.commit()
             finally:
                 conn.close()
 
-        return jsonify({"status": "success", "message": "Clé révoquée avec succès"}), 200
+        return jsonify(
+            {"status": "success", "message": "Clé révoquée avec succès"}
+        ), 200
 
     except Exception as e:
         logger.error("revoke_api_key_crashed", error=str(e), exc_info=True)
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-
+        return jsonify({"error": f"Internal server error: {e!s}"}), 500

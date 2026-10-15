@@ -26,6 +26,7 @@ modification ne réintroduise pas silencieusement une divergence.
 Ils lisent les sources (pas d'import de l'app) : rapides, sans DB,
 sans réseau — utilisables dans la CI dès le checkout.
 """
+
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -38,6 +39,7 @@ def _read(path: str) -> str:
 # ==============================================================
 # 1. SMTP — un seul jeu de noms canoniques
 # ==============================================================
+
 
 def test_smtp_app_reads_canonical_names():
     """collector/app.py doit lire les mêmes noms SMTP que
@@ -82,6 +84,7 @@ def test_smtp_documented_names_are_the_read_ones():
 # 2. Juge LLM — AGENTGUARD_JUDGE_API_KEY, sans DeepSeek
 # ==============================================================
 
+
 def test_judge_api_key_documented_is_actually_read():
     """AGENTGUARD_JUDGE_API_KEY (documentée) doit être la variable lue
     par judges.py pour le provider deepseek de la cascade."""
@@ -110,6 +113,7 @@ def test_judge_api_key_wired_through_compose_and_doc():
 # 3. Clé de signature — AGENTGUARD_SIGNING_KEY prioritaire
 # ==============================================================
 
+
 def test_signing_key_priority():
     """helpers.py doit lire AGENTGUARD_SIGNING_KEY avant l'alias
     legacy CERBERE_SIGNING_KEY (ordre = priorité)."""
@@ -131,6 +135,7 @@ def test_signing_key_documented():
 # ==============================================================
 # 4. Garde-fou global — aucune divergence doc / code / compose
 # ==============================================================
+
 
 def test_no_deepseek_env_var_anywhere():
     """Décision d'architecture : le projet ne dépend plus du nom de

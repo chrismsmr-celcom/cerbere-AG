@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 Public reproducible benchmark for CerbereAG detection engine.
@@ -115,29 +114,22 @@ def load_json(
 
             for item in values:
                 if not isinstance(item, dict):
-                    raise ValueError(
-                        f"Invalid entry in {path}, category {category!r}"
-                    )
+                    raise ValueError(f"Invalid entry in {path}, category {category!r}")
 
                 item = dict(item)
                 item.setdefault("category", category)
                 entries.append(item)
     else:
         raise ValueError(
-            f"Unsupported JSON structure in {path}: "
-            f"expected a list or object"
+            f"Unsupported JSON structure in {path}: expected a list or object"
         )
 
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
-            raise ValueError(
-                f"Invalid entry #{index} in {path}: expected an object"
-            )
+            raise ValueError(f"Invalid entry #{index} in {path}: expected an object")
 
         if not isinstance(entry.get("prompt"), str):
-            raise ValueError(
-                f"Entry #{index} in {path} has no string 'prompt' field"
-            )
+            raise ValueError(f"Entry #{index} in {path} has no string 'prompt' field")
 
     return entries
 
@@ -166,17 +158,13 @@ def verify_manifest(corpus_dir: Path) -> dict:
 
     files = manifest.get("files", {})
     if not isinstance(files, dict):
-        raise SystemExit(
-            f"Invalid 'files' field in {manifest_path}"
-        )
+        raise SystemExit(f"Invalid 'files' field in {manifest_path}")
 
     for name in ("attacks.json", "benign.json"):
         expected_hash = files.get(name)
 
         if not expected_hash:
-            raise SystemExit(
-                f"Missing SHA-256 for {name} in {manifest_path}"
-            )
+            raise SystemExit(f"Missing SHA-256 for {name} in {manifest_path}")
 
         path = corpus_dir / name
         if not path.is_file():
@@ -203,14 +191,7 @@ def wilson_ci(successes: int, n: int, z: float = 1.96):
     p = successes / n
     denom = 1 + z * z / n
     center = (p + z * z / (2 * n)) / denom
-    margin = (
-        z
-        * (
-            p * (1 - p) / n
-            + z * z / (4 * n * n)
-        ) ** 0.5
-        / denom
-    )
+    margin = z * (p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5 / denom
 
     return [
         round(max(0.0, center - margin), 4),
@@ -278,11 +259,7 @@ class Engine:
                     result.risk_level,
                 )
             ),
-            "reason": (
-                (result.details or "")[:200]
-                if result.details
-                else ""
-            ),
+            "reason": ((result.details or "")[:200] if result.details else ""),
         }
 
 
@@ -308,19 +285,21 @@ def run_subset(engine, entries, expect_detected: bool, label: str):
         latency_ms = (time.perf_counter() - start) * 1000
         passed = detected == expect_detected
 
-        records.append({
-            "id": entry.get("id", ""),
-            "category": entry.get("category", label),
-            "severity": entry.get("severity", "n/a"),
-            "lang": entry.get("lang", "en"),
-            "prompt": entry["prompt"],
-            "expected_detected": expect_detected,
-            "detected": detected,
-            "passed": passed,
-            "risk_level": risk,
-            "latency_ms": round(latency_ms, 3),
-            "reason": reason,
-        })
+        records.append(
+            {
+                "id": entry.get("id", ""),
+                "category": entry.get("category", label),
+                "severity": entry.get("severity", "n/a"),
+                "lang": entry.get("lang", "en"),
+                "prompt": entry["prompt"],
+                "expected_detected": expect_detected,
+                "detected": detected,
+                "passed": passed,
+                "risk_level": risk,
+                "latency_ms": round(latency_ms, 3),
+                "reason": reason,
+            }
+        )
 
     return records
 
@@ -330,12 +309,8 @@ def aggregate(records):
 
     return {
         "count": len(records),
-        "detected": sum(
-            1 for record in records if record["detected"]
-        ),
-        "passed": sum(
-            1 for record in records if record["passed"]
-        ),
+        "detected": sum(1 for record in records if record["detected"]),
+        "passed": sum(1 for record in records if record["passed"]),
         "latency_ms": {
             "p50": round(percentile(latencies, 50), 3),
             "p95": round(percentile(latencies, 95), 3),
@@ -345,9 +320,7 @@ def aggregate(records):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="CerbereAG public detection benchmark"
-    )
+    parser = argparse.ArgumentParser(description="CerbereAG public detection benchmark")
 
     parser.add_argument(
         "--corpus-dir",
@@ -402,11 +375,7 @@ def main():
     if args.all_layers and args.layers != "regex":
         parser.error("Use either --all-layers or --layers, not both")
 
-    presets = (
-        list(LAYER_PRESETS)
-        if args.all_layers
-        else [args.layers]
-    )
+    presets = list(LAYER_PRESETS) if args.all_layers else [args.layers]
 
     # Validate all requested layers before running.
     for preset in presets:
@@ -421,8 +390,7 @@ def main():
         unknown = [layer for layer in layers if layer not in VALID_LAYERS]
         if unknown:
             parser.error(
-                f"Unknown layers: {unknown}. "
-                f"Valid layers: {list(VALID_LAYERS)}"
+                f"Unknown layers: {unknown}. Valid layers: {list(VALID_LAYERS)}"
             )
 
         if "ml" in layers and "regex" not in layers:
@@ -444,10 +412,7 @@ def main():
 
     # Never silently count benign entries from a legacy attack file
     # as attacks.
-    attacks = [
-        entry for entry in attacks
-        if entry.get("category") != "benign"
-    ]
+    attacks = [entry for entry in attacks if entry.get("category") != "benign"]
 
     if not attacks:
         parser.error("The attack corpus is empty after filtering")
@@ -456,9 +421,9 @@ def main():
         parser.error("The benign corpus is empty")
 
     if args.limit:
-        attacks = attacks[:args.limit]
-        benign = benign[:args.limit]
-        hard_neg = hard_neg[:args.limit]
+        attacks = attacks[: args.limit]
+        benign = benign[: args.limit]
+        hard_neg = hard_neg[: args.limit]
 
     print(f"Corpus directory: {corpus_dir}")
     print(f"Attacks: {len(attacks)}")
@@ -468,17 +433,10 @@ def main():
     runs = []
 
     for preset in presets:
-        layers = [
-            layer.strip().lower()
-            for layer in preset.split(",")
-        ]
+        layers = [layer.strip().lower() for layer in preset.split(",")]
 
-        os.environ["AGENTGUARD_USE_ML"] = (
-            "true" if "ml" in layers else "false"
-        )
-        os.environ["AGENTGUARD_USE_LLM_JUDGE"] = (
-            "true" if "llm" in layers else "false"
-        )
+        os.environ["AGENTGUARD_USE_ML"] = "true" if "ml" in layers else "false"
+        os.environ["AGENTGUARD_USE_LLM_JUDGE"] = "true" if "llm" in layers else "false"
         os.environ.setdefault("AGENTGUARD_DB_TYPE", "sqlite")
 
         print(f"\n=== Layers: {preset} ===")
@@ -506,15 +464,9 @@ def main():
             except Exception:
                 pass
 
-        attack_records = run_subset(
-            engine, attacks, True, "attack"
-        )
-        benign_records = run_subset(
-            engine, benign, False, "benign"
-        )
-        hardneg_records = run_subset(
-            engine, hard_neg, False, "hard_negative"
-        )
+        attack_records = run_subset(engine, attacks, True, "attack")
+        benign_records = run_subset(engine, benign, False, "benign")
+        hardneg_records = run_subset(engine, hard_neg, False, "hard_negative")
 
         by_category = defaultdict(list)
 
@@ -530,25 +482,22 @@ def main():
         benign_summary = aggregate(benign_records)
         hardneg_summary = aggregate(hardneg_records)
 
-        all_summary = aggregate(
-            attack_records + benign_records + hardneg_records
-        )
+        all_summary = aggregate(attack_records + benign_records + hardneg_records)
 
         attack_count = attack_summary["count"]
         benign_count = benign_summary["count"]
         hardneg_count = hardneg_summary["count"]
 
-        recall = (
-            attack_summary["detected"] / attack_count
-            if attack_count else 0.0
-        )
+        recall = attack_summary["detected"] / attack_count if attack_count else 0.0
         benign_fpr = (
             (benign_count - benign_summary["passed"]) / benign_count
-            if benign_count else 0.0
+            if benign_count
+            else 0.0
         )
         hardneg_fpr = (
             (hardneg_count - hardneg_summary["passed"]) / hardneg_count
-            if hardneg_count else 0.0
+            if hardneg_count
+            else 0.0
         )
 
         run_report = {
@@ -558,19 +507,14 @@ def main():
             "ml": engine.ml_info(),
             "recall_overall": round(recall, 4),
             "recall_per_category": {
-                category: round(
-                    summary["detected"] / summary["count"], 4
-                )
-                if summary["count"] else 0.0
+                category: round(summary["detected"] / summary["count"], 4)
+                if summary["count"]
+                else 0.0
                 for category, summary in per_category.items()
             },
             "false_positive_rate_benign": round(benign_fpr, 4),
-            "false_positive_rate_hard_negatives": round(
-                hardneg_fpr, 4
-            ),
-            "recall_ci95": wilson_ci(
-                attack_summary["detected"], attack_count
-            ),
+            "false_positive_rate_hard_negatives": round(hardneg_fpr, 4),
+            "recall_ci95": wilson_ci(attack_summary["detected"], attack_count),
             "fpr_benign_ci95": wilson_ci(
                 benign_count - benign_summary["passed"],
                 benign_count,
@@ -592,16 +536,13 @@ def main():
             },
             "failures": {
                 "attacks_missed": [
-                    record for record in attack_records
-                    if not record["detected"]
+                    record for record in attack_records if not record["detected"]
                 ],
                 "benign_blocked": [
-                    record for record in benign_records
-                    if record["detected"]
+                    record for record in benign_records if record["detected"]
                 ],
                 "hard_negatives_blocked": [
-                    record for record in hardneg_records
-                    if record["detected"]
+                    record for record in hardneg_records if record["detected"]
                 ],
             },
         }
@@ -610,10 +551,7 @@ def main():
 
         print(f"Recall (attacks): {recall:.1%}")
         for category, summary in per_category.items():
-            print(
-                f"  {category:28s} "
-                f"{summary['detected']}/{summary['count']}"
-            )
+            print(f"  {category:28s} {summary['detected']}/{summary['count']}")
 
         print(f"FPR (benign): {benign_fpr:.2%}")
         if hardneg_count:
@@ -621,10 +559,7 @@ def main():
         else:
             print("FPR (hard negatives): N/A (no hard-negative set)")
 
-        print(
-            f"Active layers: {actual}"
-            f"{' (DEGRADED)' if degraded else ''}"
-        )
+        print(f"Active layers: {actual}{' (DEGRADED)' if degraded else ''}")
         print(
             "Latency all prompts p50/p95/p99: "
             f"{all_summary['latency_ms']['p50']:.2f} / "
@@ -650,12 +585,8 @@ def main():
                 if (corpus_dir / "MANIFEST.json").is_file()
                 else None
             ),
-            "attacks_sha256": sha256_file(
-                corpus_dir / "attacks.json"
-            ),
-            "benign_sha256": sha256_file(
-                corpus_dir / "benign.json"
-            ),
+            "attacks_sha256": sha256_file(corpus_dir / "attacks.json"),
+            "benign_sha256": sha256_file(corpus_dir / "benign.json"),
             "hard_negatives_sha256": (
                 sha256_file(corpus_dir / "hard_negatives.json")
                 if (corpus_dir / "hard_negatives.json").is_file()

@@ -16,8 +16,8 @@ from .config import (
     SMTP_HOST,
     SMTP_PASSWORD,
     SMTP_PORT,
-    SMTP_USERNAME,
     SMTP_USE_TLS,
+    SMTP_USERNAME,
 )
 from .utils import _hash_magic_token, _parse_datetime, _utc_iso, _utcnow, safe_compare
 
@@ -396,10 +396,7 @@ def _consume_magic_link(token: str):
 
 
 def _build_magic_link(token: str) -> str:
-    return (
-        f"{APP_BASE_URL}/auth/verify"
-        f"?token={token}"
-    )
+    return f"{APP_BASE_URL}/auth/verify?token={token}"
 
 
 def _send_magic_link_email(email: str, link: str):
@@ -505,8 +502,7 @@ If you did not request this email, you can safely ignore it.
 
         if environment == "production":
             raise RuntimeError(
-                "SMTP_HOST must be configured in production "
-                "to send magic-link emails."
+                "SMTP_HOST must be configured in production to send magic-link emails."
             )
 
         logger.warning(

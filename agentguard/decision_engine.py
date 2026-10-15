@@ -21,11 +21,12 @@ The LLM is never the final authority.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
-from agentguard.risk_engine import RiskEngine, RiskInput, RiskDecision
+from agentguard.risk_engine import RiskEngine, RiskInput
 
 
 class Decision(str, Enum):
@@ -53,7 +54,7 @@ class PolicyRule:
 
     name: str
 
-    allowed_tools: Optional[set[str]] = None
+    allowed_tools: set[str] | None = None
 
     blocked_tools: set[str] = field(default_factory=set)
 
@@ -102,7 +103,7 @@ class DecisionRequest:
 
     tool_registered: bool = True
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -113,19 +114,19 @@ class DecisionResult:
 
     risk_level: str
 
-    reasons: List[str]
+    reasons: list[str]
 
-    reason_codes: List[str]
+    reason_codes: list[str]
 
     policy: str
 
-    factors: Dict[str, float]
+    factors: dict[str, float]
 
     enforcement: str
 
-    audit: Dict[str, Any]
+    audit: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "decision": self.decision.value,
             "risk_score": self.risk_score,
@@ -152,20 +153,17 @@ class DecisionEngine:
 
     def __init__(
         self,
-        policies: Optional[Iterable[PolicyRule]] = None,
-        risk_engine: Optional[RiskEngine] = None,
+        policies: Iterable[PolicyRule] | None = None,
+        risk_engine: RiskEngine | None = None,
     ):
         self.risk_engine = risk_engine or RiskEngine()
 
-        self.policies: Dict[str, PolicyRule] = {
-            policy.name: policy
-            for policy in (policies or [])
+        self.policies: dict[str, PolicyRule] = {
+            policy.name: policy for policy in (policies or [])
         }
 
         if "default" not in self.policies:
-            self.policies["default"] = PolicyRule(
-                name="default"
-            )
+            self.policies["default"] = PolicyRule(name="default")
 
     def register_policy(self, policy: PolicyRule) -> None:
         self.policies[policy.name] = policy
@@ -188,10 +186,10 @@ class DecisionEngine:
         decision: Decision,
         risk_score: float,
         risk_level: str,
-        reasons: List[str],
-        reason_codes: List[str],
+        reasons: list[str],
+        reason_codes: list[str],
         policy: PolicyRule,
-        factors: Dict[str, float],
+        factors: dict[str, float],
         request: DecisionRequest,
     ) -> DecisionResult:
 
@@ -224,15 +222,14 @@ class DecisionEngine:
 
         policy = self._select_policy(request)
 
-        reasons: List[str] = []
-        reason_codes: List[str] = []
+        reasons: list[str] = []
+        reason_codes: list[str] = []
 
         # ---------------------------------------------------------
         # 1. Identity
         # ---------------------------------------------------------
 
         if not request.identity_trusted:
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -249,7 +246,6 @@ class DecisionEngine:
         # ---------------------------------------------------------
 
         if not request.tool_registered and not policy.allow_unknown_tools:
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -266,7 +262,6 @@ class DecisionEngine:
         # ---------------------------------------------------------
 
         if request.tool_name in policy.blocked_tools:
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -286,7 +281,6 @@ class DecisionEngine:
             policy.allowed_tools is not None
             and request.tool_name not in policy.allowed_tools
         ):
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -305,7 +299,6 @@ class DecisionEngine:
         taint = request.taint_level.upper()
 
         if policy.deny_malicious_taint and taint == "MALICIOUS":
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -322,7 +315,6 @@ class DecisionEngine:
             and taint == "SECRET"
             and request.external_side_effect
         ):
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -339,7 +331,6 @@ class DecisionEngine:
             and taint == "UNTRUSTED"
             and request.external_side_effect
         ):
-
             return self._result(
                 Decision.BLOCK,
                 100,
@@ -381,14 +372,9 @@ class DecisionEngine:
         # ---------------------------------------------------------
 
         if request.tool_name in policy.require_approval_for:
+            reasons.append(f"Tool '{request.tool_name}' requires human approval")
 
-            reasons.append(
-                f"Tool '{request.tool_name}' requires human approval"
-            )
-
-            reason_codes.append(
-                DecisionReason.APPROVAL.value
-            )
+            reason_codes.append(DecisionReason.APPROVAL.value)
 
             return self._result(
                 Decision.REQUIRE_APPROVAL,
@@ -406,15 +392,12 @@ class DecisionEngine:
         # ---------------------------------------------------------
 
         if risk.score >= policy.block_risk_score:
-
             reasons.append(
                 f"Risk score {risk.score} exceeds block threshold "
                 f"{policy.block_risk_score}"
             )
 
-            reason_codes.append(
-                DecisionReason.RISK.value
-            )
+            reason_codes.append(DecisionReason.RISK.value)
 
             return self._result(
                 Decision.BLOCK,
@@ -432,14 +415,9 @@ class DecisionEngine:
         # ---------------------------------------------------------
 
         if risk.score > policy.max_risk_score:
+            reasons.append(f"Risk score {risk.score} requires approval")
 
-            reasons.append(
-                f"Risk score {risk.score} requires approval"
-            )
-
-            reason_codes.append(
-                DecisionReason.APPROVAL.value
-            )
+            reason_codes.append(DecisionReason.APPROVAL.value)
 
             return self._result(
                 Decision.REQUIRE_APPROVAL,
@@ -456,9 +434,7 @@ class DecisionEngine:
         # 10. Allow
         # ---------------------------------------------------------
 
-        reasons.append(
-            "Action passed identity, policy, taint and risk checks"
-        )
+        reasons.append("Action passed identity, policy, taint and risk checks")
 
         return self._result(
             Decision.ALLOW,

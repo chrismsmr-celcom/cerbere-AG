@@ -1,31 +1,46 @@
-import os
-from pydantic_settings import BaseSettings
-from pydantic import Field, ValidationError
 import logging
+
+from pydantic import Field, ValidationError
+from pydantic_settings import BaseSettings
 
 logger = logging.getLogger("cerbere.config")
 
+
 class AppConfig(BaseSettings):
     """Configuration centrale validée au démarrage."""
-    
+
     # ENVIRONNEMENT
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
-    
+
     # AUTH & SECRETS
     agentguard_api_key: str = Field(default="", validation_alias="AGENTGUARD_API_KEY")
-    agentguard_admin_secret: str = Field(default="", validation_alias="AGENTGUARD_ADMIN_SECRET")
-    agentguard_flask_secret: str = Field(default="dev-secret-change-me", validation_alias="AGENTGUARD_FLASK_SECRET")
-    
+    agentguard_admin_secret: str = Field(
+        default="", validation_alias="AGENTGUARD_ADMIN_SECRET"
+    )
+    agentguard_flask_secret: str = Field(
+        default="dev-secret-change-me", validation_alias="AGENTGUARD_FLASK_SECRET"
+    )
+
     # SESSIONS & SECURITY
-    magic_link_ttl_seconds: int = Field(default=300, validation_alias="AGENTGUARD_MAGIC_LINK_TTL")
-    auth_session_ttl_seconds: int = Field(default=28800, validation_alias="AGENTGUARD_AUTH_SESSION_TTL")
-    
+    magic_link_ttl_seconds: int = Field(
+        default=300, validation_alias="AGENTGUARD_MAGIC_LINK_TTL"
+    )
+    auth_session_ttl_seconds: int = Field(
+        default=28800, validation_alias="AGENTGUARD_AUTH_SESSION_TTL"
+    )
+
     # DATABASE
-    agentguard_db_type: str = Field(default="sqlite", validation_alias="AGENTGUARD_DB_TYPE")
-    database_url: str = Field(default="sqlite:///./agentguard.db", validation_alias="DATABASE_URL")
-    
+    agentguard_db_type: str = Field(
+        default="sqlite", validation_alias="AGENTGUARD_DB_TYPE"
+    )
+    database_url: str = Field(
+        default="sqlite:///./agentguard.db", validation_alias="DATABASE_URL"
+    )
+
     # CORS & RESEAU
-    agentguard_cors_origins: str = Field(default="*", validation_alias="AGENTGUARD_CORS_ORIGINS")
+    agentguard_cors_origins: str = Field(
+        default="*", validation_alias="AGENTGUARD_CORS_ORIGINS"
+    )
     port: int = Field(default=8080, validation_alias="PORT")
 
     def validate_production(self) -> list[str]:
@@ -39,11 +54,16 @@ class AppConfig(BaseSettings):
             if self.agentguard_flask_secret == "dev-secret-change-me":
                 errors.append("AGENTGUARD_FLASK_SECRET doit être changé en production")
             if self.agentguard_cors_origins == "*":
-                errors.append("AGENTGUARD_CORS_ORIGINS ne peut pas être '*' en production")
+                errors.append(
+                    "AGENTGUARD_CORS_ORIGINS ne peut pas être '*' en production"
+                )
             if self.agentguard_db_type == "sqlite":
-                errors.append("SQLite n'est pas autorisé en production (utilisez PostgreSQL)")
+                errors.append(
+                    "SQLite n'est pas autorisé en production (utilisez PostgreSQL)"
+                )
             return errors
         return []
+
 
 # Instance globale
 try:
@@ -53,7 +73,9 @@ try:
         logger.critical("❌ CONFIGURATION PRODUCTION INVALIDE :")
         for err in prod_errors:
             logger.critical(f"  - {err}")
-        raise RuntimeError("Configuration de production invalide. Voir les logs ci-dessus.")
+        raise RuntimeError(
+            "Configuration de production invalide. Voir les logs ci-dessus."
+        )
     logger.info(f"✅ Configuration chargée avec succès (Env: {config.environment})")
 except ValidationError as e:
     logger.critical(f"❌ Erreur de validation de configuration : {e}")

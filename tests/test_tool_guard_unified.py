@@ -29,9 +29,7 @@ def test_allowed_tool_can_execute():
         policies=[
             ToolPolicy(
                 name="search",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="search",
             )
         ]
@@ -41,9 +39,7 @@ def test_allowed_tool_can_execute():
         ToolRequest(
             tool_name="search",
             identity="agent-1",
-            arguments={
-                "query": "AI security"
-            },
+            arguments={"query": "AI security"},
             agent_id="agent-1",
         )
     )
@@ -58,9 +54,7 @@ def test_wrong_identity_is_blocked():
         policies=[
             ToolPolicy(
                 name="search",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
             )
         ]
     )
@@ -83,9 +77,7 @@ def test_secret_email_is_blocked():
         policies=[
             ToolPolicy(
                 name="send_email",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="email",
                 external_side_effect=True,
             )
@@ -96,9 +88,7 @@ def test_secret_email_is_blocked():
         ToolRequest(
             tool_name="send_email",
             identity="agent-1",
-            arguments={
-                "to": "user@example.com"
-            },
+            arguments={"to": "user@example.com"},
             taint_level="SECRET",
             agent_id="agent-1",
         )
@@ -114,9 +104,7 @@ def test_approval_is_enforced():
         policies=[
             ToolPolicy(
                 name="send_email",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="email",
                 require_approval=True,
             )
@@ -133,10 +121,7 @@ def test_approval_is_enforced():
     )
 
     assert decision.allowed is False
-    assert (
-        decision.decision
-        == "require_approval"
-    )
+    assert decision.decision == "require_approval"
 
     assert decision.requires_approval is True
 
@@ -147,9 +132,7 @@ def test_argument_limit_is_enforced():
         policies=[
             ToolPolicy(
                 name="search",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 max_argument_bytes=10,
             )
         ]
@@ -159,9 +142,7 @@ def test_argument_limit_is_enforced():
         ToolRequest(
             tool_name="search",
             identity="agent-1",
-            arguments={
-                "query": "this is too long"
-            },
+            arguments={"query": "this is too long"},
         )
     )
 
@@ -194,9 +175,7 @@ def test_enforce_raises_on_approval():
         policies=[
             ToolPolicy(
                 name="payment",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="payment",
                 require_approval=True,
             )
@@ -212,9 +191,7 @@ def test_enforce_raises_on_approval():
             )
         )
 
-        assert False, (
-            "Expected ApprovalRequired"
-        )
+        assert False, "Expected ApprovalRequired"
 
     except ApprovalRequired:
         pass

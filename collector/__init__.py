@@ -1,16 +1,24 @@
 """AgentGuard Collector — modular package."""
 
 # ✅ Backward compatibility exports
-from collector.db import init_db, get_db, is_postgres, redact_pii, sql_true, sql_false, sql_placeholder
 from collector.app import create_app
+from collector.db import (
+    get_db,
+    init_db,
+    is_postgres,
+    redact_pii,
+    sql_false,
+    sql_placeholder,
+    sql_true,
+)
 
 __all__ = [
-    "init_db",
+    "create_app",
     "get_db",
+    "init_db",
     "is_postgres",
     "redact_pii",
-    "sql_true",
     "sql_false",
     "sql_placeholder",
-    "create_app",
+    "sql_true",
 ]

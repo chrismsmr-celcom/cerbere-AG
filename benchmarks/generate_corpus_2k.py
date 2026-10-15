@@ -38,7 +38,7 @@ def sha256_file(path: Path) -> str:
 
 def stratified_subset(entries: list) -> list:
     """Garder 1 sur STRIDE dans chaque catégorie, ordre préservé."""
-    groups: "OrderedDict[str, list]" = OrderedDict()
+    groups: OrderedDict[str, list] = OrderedDict()
     for e in entries:
         groups.setdefault(e.get("category", "uncategorized"), []).append(e)
     out = []
@@ -74,14 +74,22 @@ def main() -> None:
 
         dst_path = DST / name
         with dst_path.open("w", encoding="utf-8") as f:
-            f.write(json.dumps(subset, ensure_ascii=False, separators=(",", ":")) + "\n")
+            f.write(
+                json.dumps(subset, ensure_ascii=False, separators=(",", ":")) + "\n"
+            )
 
         manifest_files[name] = sha256_file(dst_path)
 
-        per_cat: "OrderedDict[str, int]" = OrderedDict()
+        per_cat: OrderedDict[str, int] = OrderedDict()
         for e in subset:
-            per_cat[e.get("category", "uncategorized")] = per_cat.get(e.get("category", "uncategorized"), 0) + 1
-        report[name] = {"total": len(subset), "source_total": len(entries), "per_category": dict(per_cat)}
+            per_cat[e.get("category", "uncategorized")] = (
+                per_cat.get(e.get("category", "uncategorized"), 0) + 1
+            )
+        report[name] = {
+            "total": len(subset),
+            "source_total": len(entries),
+            "per_category": dict(per_cat),
+        }
 
     manifest = {
         "name": "cerbere-ag-corpus-2k",
@@ -99,7 +107,9 @@ def main() -> None:
     print("\nMANIFEST :")
     print(json.dumps(manifest["files"], indent=2))
     print(f"\nTotal prompts : {sum(v['total'] for v in report.values())}")
-    print("Vérifiez la reproductibilité : supprimez corpus_2k et relancez ; les SHA-256 doivent être identiques.")
+    print(
+        "Vérifiez la reproductibilité : supprimez corpus_2k et relancez ; les SHA-256 doivent être identiques."
+    )
 
 
 if __name__ == "__main__":

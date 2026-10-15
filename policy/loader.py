@@ -14,7 +14,6 @@ Responsabilités :
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import structlog
 import yaml
@@ -37,23 +36,23 @@ logger = structlog.get_logger("agentguard.policy.loader")
 class PolicyLoader:
     """Charge, valide et indexe les policies AgentGuard depuis YAML."""
 
-    def __init__(self, policies_dir: Optional[str] = None):
+    def __init__(self, policies_dir: str | None = None):
         self.policies_dir = Path(policies_dir) if policies_dir else None
 
         # Index principal : policy.name -> Policy
-        self._policies: Dict[str, Policy] = {}
+        self._policies: dict[str, Policy] = {}
 
         # Index agent : agent_id -> Policy
-        self._agent_policies: Dict[str, Policy] = {}
+        self._agent_policies: dict[str, Policy] = {}
 
         # Policies universelles : policies avec agents=[]
-        self._universal_policies: List[Policy] = []
+        self._universal_policies: list[Policy] = []
 
     # ------------------------------------------------------------------
     # DIRECTORY LOADING
     # ------------------------------------------------------------------
 
-    def load_from_directory(self, directory: Optional[str] = None) -> int:
+    def load_from_directory(self, directory: str | None = None) -> int:
         """
         Charge toutes les policies YAML d'un dossier.
 
@@ -123,7 +122,7 @@ class PolicyLoader:
     # FILE LOADING
     # ------------------------------------------------------------------
 
-    def load_from_file(self, filepath: str) -> Optional[Policy]:
+    def load_from_file(self, filepath: str) -> Policy | None:
         """Charge et valide une policy depuis un fichier YAML."""
 
         path = Path(filepath)
@@ -187,7 +186,7 @@ class PolicyLoader:
         self,
         yaml_content: str,
         name: str = "inline",
-    ) -> Optional[Policy]:
+    ) -> Policy | None:
         """Charge et valide une policy depuis une string YAML."""
 
         if not isinstance(yaml_content, str) or not yaml_content.strip():
@@ -241,7 +240,7 @@ class PolicyLoader:
         self,
         data: object,
         source: str,
-    ) -> Optional[Policy]:
+    ) -> Policy | None:
         """
         Parse un dictionnaire YAML en Policy validée.
 
@@ -250,8 +249,7 @@ class PolicyLoader:
 
         if not isinstance(data, dict):
             raise ValueError(
-                f"Policy in {source} must be a mapping, "
-                f"got {type(data).__name__}"
+                f"Policy in {source} must be a mapping, got {type(data).__name__}"
             )
 
         # --------------------------------------------------------------
@@ -261,9 +259,7 @@ class PolicyLoader:
         name = data.get("name")
 
         if not isinstance(name, str) or not name.strip():
-            raise ValueError(
-                f"Policy in {source} missing valid 'name' field"
-            )
+            raise ValueError(f"Policy in {source} missing valid 'name' field")
 
         name = name.strip()
 
@@ -302,17 +298,14 @@ class PolicyLoader:
             agents = []
 
         if not isinstance(agents, list):
-            raise ValueError(
-                f"Policy '{name}' field 'agents' must be a list"
-            )
+            raise ValueError(f"Policy '{name}' field 'agents' must be a list")
 
-        normalized_agents: List[str] = []
+        normalized_agents: list[str] = []
 
         for agent in agents:
             if not isinstance(agent, str):
                 raise ValueError(
-                    f"Policy '{name}' contains non-string agent ID: "
-                    f"{agent!r}"
+                    f"Policy '{name}' contains non-string agent ID: {agent!r}"
                 )
 
             agent = agent.strip()
@@ -330,9 +323,7 @@ class PolicyLoader:
             caps_data = {}
 
         if not isinstance(caps_data, dict):
-            raise ValueError(
-                f"Policy '{name}' field 'capabilities' must be a mapping"
-            )
+            raise ValueError(f"Policy '{name}' field 'capabilities' must be a mapping")
 
         tools_data = caps_data.get("tools", {})
         filesystem_data = caps_data.get("filesystem", {})
@@ -348,9 +339,7 @@ class PolicyLoader:
             network_data = {}
 
         if not isinstance(tools_data, dict):
-            raise ValueError(
-                f"Policy '{name}' capabilities.tools must be a mapping"
-            )
+            raise ValueError(f"Policy '{name}' capabilities.tools must be a mapping")
 
         if not isinstance(filesystem_data, dict):
             raise ValueError(
@@ -358,9 +347,7 @@ class PolicyLoader:
             )
 
         if not isinstance(network_data, dict):
-            raise ValueError(
-                f"Policy '{name}' capabilities.network must be a mapping"
-            )
+            raise ValueError(f"Policy '{name}' capabilities.network must be a mapping")
 
         tools = ToolCapabilities(**tools_data)
         filesystem = FilesystemCapabilities(**filesystem_data)
@@ -382,17 +369,13 @@ class PolicyLoader:
             rules_data = []
 
         if not isinstance(rules_data, list):
-            raise ValueError(
-                f"Policy '{name}' field 'rules' must be a list"
-            )
+            raise ValueError(f"Policy '{name}' field 'rules' must be a list")
 
-        rules: List[Rule] = []
+        rules: list[Rule] = []
 
         for index, rule_data in enumerate(rules_data):
             if not isinstance(rule_data, dict):
-                raise ValueError(
-                    f"Policy '{name}' rule #{index + 1} must be a mapping"
-                )
+                raise ValueError(f"Policy '{name}' rule #{index + 1} must be a mapping")
 
             rule_name = rule_data.get("name", "unnamed")
 
@@ -406,8 +389,7 @@ class PolicyLoader:
 
             if not isinstance(when, dict):
                 raise ValueError(
-                    f"Policy '{name}' rule '{rule_name}' "
-                    f"field 'when' must be a mapping"
+                    f"Policy '{name}' rule '{rule_name}' field 'when' must be a mapping"
                 )
 
             decision_raw = rule_data.get("decision", "ALLOW")
@@ -466,9 +448,7 @@ class PolicyLoader:
             budget_data = {}
 
         if not isinstance(budget_data, dict):
-            raise ValueError(
-                f"Policy '{name}' field 'budget' must be a mapping"
-            )
+            raise ValueError(f"Policy '{name}' field 'budget' must be a mapping")
 
         budget = BudgetLimits(**budget_data)
 
@@ -490,8 +470,7 @@ class PolicyLoader:
                 failure_mode = FailureMode(failure_mode_str)
             except ValueError:
                 raise ValueError(
-                    f"Policy '{name}' has invalid failure_mode: "
-                    f"{failure_mode_raw!r}"
+                    f"Policy '{name}' has invalid failure_mode: {failure_mode_raw!r}"
                 )
 
         # --------------------------------------------------------------
@@ -565,7 +544,7 @@ class PolicyLoader:
     def get_policy_for_agent(
         self,
         agent_id: str,
-    ) -> Optional[Policy]:
+    ) -> Policy | None:
         """
         Retourne la policy applicable à un agent.
 

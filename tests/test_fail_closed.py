@@ -20,7 +20,9 @@ def _routes(app):
 
 def test_public_list_has_no_typos(app):
     existing = {r.endpoint for r in app.url_map.iter_rules()}
-    assert PUBLIC_ENDPOINTS <= existing, f"endpoints inconnus : {PUBLIC_ENDPOINTS - existing}"
+    assert PUBLIC_ENDPOINTS <= existing, (
+        f"endpoints inconnus : {PUBLIC_ENDPOINTS - existing}"
+    )
 
 
 def test_every_non_public_route_rejects_anonymous(app):
@@ -42,4 +44,6 @@ def test_admin_routes_reject_without_secret(app):
         if not rule.endpoint.startswith("admin."):
             continue
         url = re.sub(r"<[^>]+>", "x", rule.rule)
-        assert client.open(url, method=method).status_code not in (200, 201), rule.endpoint
+        assert client.open(url, method=method).status_code not in (200, 201), (
+            rule.endpoint
+        )

@@ -1,4 +1,4 @@
-from agentguard.normalizer import normalize_for_detection, reversed_words_variant
+from agentguard.normalizer import normalize_for_detection
 from agentguard.patterns import is_didactic_context
 
 cases = [
@@ -19,18 +19,27 @@ for t in cases:
 didactic = "For our security blog, explain how 'ignore previous instructions' attacks work and how to defend against them."
 print("didactic:", is_didactic_context(didactic))
 import json
+
 from agentguard import PolicyEngine
 
-d = json.load(open('benchmarks/corpus/attacks.json', encoding='utf-8'))
-entries = [e for e in (d if isinstance(d, list) else
-           sum((v for k, v in d.items() if k != 'metadata' and isinstance(v, list)), []))
-           if e.get('category') != 'benign']
+d = json.load(open("benchmarks/corpus/attacks.json", encoding="utf-8"))
+entries = [
+    e
+    for e in (
+        d
+        if isinstance(d, list)
+        else sum(
+            (v for k, v in d.items() if k != "metadata" and isinstance(v, list)), []
+        )
+    )
+    if e.get("category") != "benign"
+]
 
 pe = PolicyEngine()
-miss = [e for e in entries if pe.check_injection(e['prompt']).passed]
+miss = [e for e in entries if pe.check_injection(e["prompt"]).passed]
 print(f"\n{len(miss)} attaques encore ratees :")
 for e in miss:
-    c = pe.check_injection(e['prompt'])
+    c = pe.check_injection(e["prompt"])
     print(f"[{e['category']}] {e['prompt'][:70]!r}")
 
 # Verifie le pattern HTML commentaire specifiquement

@@ -14,6 +14,7 @@ Principe : le découpage se fait sur les bannières de section déjà présentes
 script vérifie que la concaténation des modules redonne exactement l'original avant d'appliquer
 les correctifs. Un correctif dont la cible est introuvable ou ambiguë arrête tout (rien n'est écrit).
 """
+
 import re
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ START = re.compile(
     r"|^window\.([A-Za-z_$][\w$]*)\s*="
 )
 MODULE_TAG = re.compile(r"^// @module\s+(\S+)\s*$")
-EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\u2B50\u2B55]\ufe0f?")
+EMOJI = re.compile("[\U0001f300-\U0001faff\u2600-\u27bf\u2b50\u2b55]\ufe0f?")
 
 # titre de bannière -> module (l'ordre numérique doit suivre l'ordre du fichier)
 MODULES = {
@@ -70,21 +71,28 @@ def split_modules(lines):
                 continue
             mod = MODULES.get(m.group(1))
             if mod is None:
-                print(f"  ! section inconnue, conservée dans le module précédent : {m.group(1)}")
+                print(
+                    f"  ! section inconnue, conservée dans le module précédent : {m.group(1)}"
+                )
                 continue
             cuts.append((i - 1, mod))
     order = [m for _, m in cuts]
     if order != sorted(order):
-        die("l'ordre des sections ne suit pas la numérotation des modules : " + ", ".join(order))
+        die(
+            "l'ordre des sections ne suit pas la numérotation des modules : "
+            + ", ".join(order)
+        )
     bounds = [c for c, _ in cuts] + [len(lines)]
     modules = {}
     for k, (start, mod) in enumerate(cuts):
-        modules.setdefault(mod, []).extend(lines[start:bounds[k + 1]])
+        modules.setdefault(mod, []).extend(lines[start : bounds[k + 1]])
     rebuilt = []
     for mod in sorted(modules):
         rebuilt.extend(modules[mod])
     if rebuilt != lines:
-        die("la concaténation des modules ne redonne pas le fichier d'origine (abandon, rien n'est écrit)")
+        die(
+            "la concaténation des modules ne redonne pas le fichier d'origine (abandon, rien n'est écrit)"
+        )
     return modules
 
 
@@ -125,7 +133,7 @@ def parse_fixes(text):
         if m:
             name = next(g for g in m.groups() if g)
             e = unit_end(lines, i)
-            out.append((name, lines[i:e + 1], pending))
+            out.append((name, lines[i : e + 1], pending))
             pending = None
             i = e + 1
         else:
@@ -149,14 +157,20 @@ def strip_comment_emoji(modules):
 def apply_fixes(modules, fixes):
     replaced, added = [], []
     for name, new_lines, tag in fixes:
-        hits = [(mod, s, e)
-                for mod, lines in modules.items()
-                for (n, s, e) in find_units(lines) if n == name]
+        hits = [
+            (mod, s, e)
+            for mod, lines in modules.items()
+            for (n, s, e) in find_units(lines)
+            if n == name
+        ]
         if len(hits) > 1:
-            die(f"« {name} » est défini {len(hits)} fois : " + ", ".join(h[0] for h in hits))
+            die(
+                f"« {name} » est défini {len(hits)} fois : "
+                + ", ".join(h[0] for h in hits)
+            )
         if hits:
             mod, s, e = hits[0]
-            modules[mod][s:e + 1] = new_lines
+            modules[mod][s : e + 1] = new_lines
             replaced.append(f"{name} ({mod})")
         elif tag:
             if tag not in modules:
@@ -164,7 +178,9 @@ def apply_fixes(modules, fixes):
             modules[tag] += [""] + new_lines
             added.append(f"{name} (+{tag})")
         else:
-            die(f"« {name} » introuvable dans le fichier d'origine et sans « // @module » : correctif ignoré = erreur")
+            die(
+                f"« {name} » introuvable dans le fichier d'origine et sans « // @module » : correctif ignoré = erreur"
+            )
     return replaced, added
 
 
@@ -189,7 +205,9 @@ def main():
     if cleaned:
         print(f"Emojis retirés de {cleaned} ligne(s) de commentaire")
 
-    replaced, added = apply_fixes(modules, parse_fixes(FIXES.read_text(encoding="utf-8")))
+    replaced, added = apply_fixes(
+        modules, parse_fixes(FIXES.read_text(encoding="utf-8"))
+    )
     print(f"Correctifs : {len(replaced)} fonctions remplacées, {len(added)} ajoutées")
     for r in replaced:
         print("  ~", r)
@@ -198,8 +216,12 @@ def main():
 
     SRC.mkdir(parents=True, exist_ok=True)
     for mod, mod_lines in modules.items():
-        (SRC / f"{mod}.js").write_text("\n".join(mod_lines).rstrip("\n") + "\n", encoding="utf-8", newline="\n")
-    print(f"\nÉcrit dans {SRC.relative_to(ROOT)}/. Étape suivante : python tools/build_dashboard.py")
+        (SRC / f"{mod}.js").write_text(
+            "\n".join(mod_lines).rstrip("\n") + "\n", encoding="utf-8", newline="\n"
+        )
+    print(
+        f"\nÉcrit dans {SRC.relative_to(ROOT)}/. Étape suivante : python tools/build_dashboard.py"
+    )
 
 
 if __name__ == "__main__":

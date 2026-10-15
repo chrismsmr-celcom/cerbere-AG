@@ -1,7 +1,6 @@
 """RBAC : autorisation de ressource, require_role, require_permission."""
 
 from functools import wraps
-from typing import Optional
 
 import structlog
 from flask import jsonify
@@ -14,7 +13,7 @@ logger = structlog.get_logger("agentguard.auth")
 
 def authorize_resource_access(
     target_tenant_id: str,
-    target_org_id: Optional[str] = None,
+    target_org_id: str | None = None,
     allow_cross_org: bool = False,
 ) -> bool:
     try:
@@ -57,10 +56,7 @@ def require_role(*required_roles: str):
     try:
         from agentguard.identity import Role
 
-        required = [
-            Role(r)
-            for r in required_roles
-        ]
+        required = [Role(r) for r in required_roles]
 
     except (ImportError, ValueError):
         required = []
@@ -69,9 +65,7 @@ def require_role(*required_roles: str):
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not require_auth():
-                return jsonify(
-                    {"error": "Unauthorized"}
-                ), 401
+                return jsonify({"error": "Unauthorized"}), 401
 
             if not required:
                 return func(*args, **kwargs)
@@ -79,9 +73,7 @@ def require_role(*required_roles: str):
             identity = resolve_full_identity()
 
             if not identity:
-                return jsonify(
-                    {"error": "Identity not resolved"}
-                ), 401
+                return jsonify({"error": "Identity not resolved"}), 401
 
             for role in required:
                 try:
@@ -101,10 +93,7 @@ def require_role(*required_roles: str):
                 {
                     "error": "Forbidden",
                     "required_roles": [
-                        r.value
-                        if hasattr(r, "value")
-                        else str(r)
-                        for r in required
+                        r.value if hasattr(r, "value") else str(r) for r in required
                     ],
                     "your_role": (
                         identity.role.value
@@ -127,16 +116,12 @@ def require_permission(permission: str):
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not require_auth():
-                return jsonify(
-                    {"error": "Unauthorized"}
-                ), 401
+                return jsonify({"error": "Unauthorized"}), 401
 
             identity = resolve_full_identity()
 
             if not identity:
-                return jsonify(
-                    {"error": "Identity not resolved"}
-                ), 401
+                return jsonify({"error": "Identity not resolved"}), 401
 
             try:
                 from agentguard.identity import role_has_permission
@@ -155,9 +140,7 @@ def require_permission(permission: str):
                                     identity.role,
                                     "value",
                                 )
-                                else str(
-                                    identity.role
-                                )
+                                else str(identity.role)
                             ),
                         }
                     ), 403

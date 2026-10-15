@@ -5,6 +5,7 @@ Un générateur de configuration MCP côté client (pas de backend impliqué :
 tout se fait en JS dans le navigateur) + les commandes d'installation et
 liens utiles pour un développeur qui intègre CerbereAG.
 """
+
 from flask import Blueprint, render_template_string
 
 devtools_bp = Blueprint("devtools", __name__)

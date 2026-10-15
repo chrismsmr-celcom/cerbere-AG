@@ -25,7 +25,9 @@ def test_dashboard_and_legacy_stay_behind_login(app):
             assert "/login" in resp.headers["Location"]
 
 
-@pytest.mark.skipif(not _BUILT, reason="build du dashboard absent (cd dashboard && npm run build)")
+@pytest.mark.skipif(
+    not _BUILT, reason="build du dashboard absent (cd dashboard && npm run build)"
+)
 def test_root_serves_spa_shell(app):
     from collector.auth.routes_session import dashboard
 

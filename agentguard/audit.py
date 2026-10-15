@@ -14,20 +14,22 @@ Garanties :
   - Non-repudiation : signatures cryptographiques
   - Verifiable : rejouer la chaîne = preuve d'intégrité
 """
-import os
-import json
-import time
+
 import hashlib
+import json
+import os
 import secrets
 import threading
+import time
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from dataclasses import dataclass, asdict
-from typing import Optional, Dict, Any, List
 from enum import Enum
+from typing import Any
 
 try:
     import psycopg
     import psycopg.rows
+
     PSYCOPG_AVAILABLE = True
 except ImportError:
     PSYCOPG_AVAILABLE = False
@@ -35,6 +37,7 @@ except ImportError:
 
 class AuditEventType(str, Enum):
     """Types d'événements auditables."""
+
     # Sécurité
     PROMPT_BLOCKED = "prompt_blocked"
     TOOL_BLOCKED = "tool_blocked"
@@ -43,7 +46,7 @@ class AuditEventType(str, Enum):
     SIGNED_DENY = "signed_deny"
     PII_DETECTED = "pii_detected"
     INJECTION_DETECTED = "injection_detected"
-    
+
     # Accès
     LOGIN_SUCCESS = "login_success"
     LOGIN_FAILED = "login_failed"
@@ -55,12 +58,12 @@ class AuditEventType(str, Enum):
     APPROVAL_REJECTED = "approval_rejected"
     AGENT_DISCONNECTED = "agent_disconnected"
     AGENT_RECONNECTED = "agent_reconnected"
-    
+
     # Système
     POLICY_LOADED = "policy_loaded"
     POLICY_CHANGED = "policy_changed"
     CONFIG_CHANGED = "config_changed"
-    
+
     # Opérations
     LLM_CALL = "llm_call"
     TOOL_CALL = "tool_call"
@@ -70,6 +73,7 @@ class AuditEventType(str, Enum):
 @dataclass
 class AuditEntry:
     """Une entrée dans l'audit log."""
+
     event_id: str
     timestamp: float
     event_type: str
@@ -77,15 +81,15 @@ class AuditEntry:
     actor: str  # user_id, agent_id, ou "system"
     resource: str  # ex: "span:abc123", "policy:finance"
     action: str  # ex: "blocked", "allowed", "created"
-    details: Dict[str, Any]
+    details: dict[str, Any]
     risk_level: str = "info"  # info, warning, critical
     prev_hash: str = ""
     entry_hash: str = ""
-    signature: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    signature: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-    
+
     def canonical_json(self, include_hash: bool = False) -> str:
         """JSON canonique pour calcul de hash (stable, trié)."""
         data = {
@@ -103,7 +107,7 @@ class AuditEntry:
         if include_hash and self.entry_hash:
             data["entry_hash"] = self.entry_hash
         return json.dumps(data, sort_keys=True, separators=(",", ":"))
-    
+
     def compute_hash(self) -> str:
         """Calcule le hash SHA256 de l'entrée."""
         return hashlib.sha256(self.canonical_json().encode()).hexdigest()
@@ -112,7 +116,7 @@ class AuditEntry:
 class ImmutableAuditLog:
     """
     Audit log append-only avec chaînage cryptographique.
-    
+
     Usage:
         log = ImmutableAuditLog(database_url="postgresql://...", signing_key=...)
         log.log_event(
@@ -124,21 +128,21 @@ class ImmutableAuditLog:
             details={"reason": "injection detected", "score": 0.95},
             risk_level="critical",
         )
-        
+
         # Vérification d'intégrité
         is_valid, report = log.verify_chain()
     """
-    
+
     # Signe toutes les N entrées (0 = jamais)
     DEFAULT_SIGN_EVERY = 100
     # Limite de taille par entrée (protection anti-DoS)
     MAX_DETAILS_SIZE = 10_000  # caractères
-    
+
     def __init__(
         self,
-        database_url: Optional[str] = None,
-        backup_file: Optional[str] = None,
-        signing_key_pem: Optional[str] = None,
+        database_url: str | None = None,
+        backup_file: str | None = None,
+        signing_key_pem: str | None = None,
         sign_every: int = DEFAULT_SIGN_EVERY,
     ):
         self.database_url = database_url
@@ -148,19 +152,20 @@ class ImmutableAuditLog:
         self.sign_every = sign_every
         self._entry_counter = 0
         self._write_lock = threading.RLock()
-        
+
         # Signing (optionnel)
         self._signer = None
         if signing_key_pem:
             try:
                 from agentguard.signing import DecisionSigner
+
                 self._signer = DecisionSigner(signing_key_pem)
             except Exception as e:
                 print(f"[AuditLog] Signing unavailable: {e}")
-        
+
         # Initialise le stockage
         self._init_storage()
-    
+
     def _init_storage(self):
         """Initialise la table Postgres et/ou le fichier backup."""
         if self.database_url and PSYCOPG_AVAILABLE:
@@ -203,12 +208,12 @@ class ImmutableAuditLog:
             except Exception as e:
                 print(f"[AuditLog] Postgres init failed, using file backup: {e}")
                 self.database_url = None
-        
+
         # Backup file (toujours actif en parallèle)
         backup_dir = os.path.dirname(self.backup_file)
         if backup_dir and not os.path.exists(backup_dir):
             os.makedirs(backup_dir, exist_ok=True)
-    
+
     def _get_last_hash(self) -> str:
         """Récupère le hash de la dernière entrée (pour chaînage)."""
         if self.database_url and PSYCOPG_AVAILABLE:
@@ -224,7 +229,7 @@ class ImmutableAuditLog:
                 return row[0] if row else "GENESIS"
             except Exception:
                 pass
-        
+
         # Fallback fichier
         if os.path.exists(self.backup_file):
             try:
@@ -235,9 +240,9 @@ class ImmutableAuditLog:
                         return last.get("entry_hash", "GENESIS")
             except Exception:
                 pass
-        
+
         return "GENESIS"
-    
+
     def log_event(
         self,
         event_type: AuditEventType,
@@ -245,7 +250,7 @@ class ImmutableAuditLog:
         actor: str,
         resource: str,
         action: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
         risk_level: str = "info",
     ) -> AuditEntry:
         """
@@ -261,7 +266,7 @@ class ImmutableAuditLog:
                 "_original_size": len(details_str),
                 "_preview": details_str[:500],
             }
-        
+
         # Récupère le hash précédent
         with self._write_lock:
             prev_hash = self._get_last_hash()
@@ -298,10 +303,7 @@ class ImmutableAuditLog:
                         "action": "audit_checkpoint",
                         "policy_name": "audit_chain",
                         "policy_version": 1,
-                        "reason": (
-                            f"Checkpoint at entry "
-                            f"{self._entry_counter}"
-                        ),
+                        "reason": (f"Checkpoint at entry {self._entry_counter}"),
                     }
 
                     signed = self._signer.sign_decision(payload)
@@ -309,14 +311,12 @@ class ImmutableAuditLog:
                     entry.signature = signed.get("signature")
 
                 except Exception as exc:
-                    print(
-                        f"[AuditLog] Signing failed: {exc}"
-                    )
+                    print(f"[AuditLog] Signing failed: {exc}")
 
             self._persist(entry)
 
         return entry
-    
+
     def _persist(self, entry: AuditEntry):
         """Persiste l'entrée dans Postgres ET backup file."""
         # Postgres
@@ -324,41 +324,52 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO audit_log 
                         (event_id, timestamp, event_type, org_id, actor, resource, 
                          action, details, risk_level, prev_hash, entry_hash, signature)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        entry.event_id, entry.timestamp, entry.event_type,
-                        entry.org_id, entry.actor, entry.resource, entry.action,
-                        json.dumps(entry.details), entry.risk_level,
-                        entry.prev_hash, entry.entry_hash, entry.signature,
-                    ))
+                    """,
+                        (
+                            entry.event_id,
+                            entry.timestamp,
+                            entry.event_type,
+                            entry.org_id,
+                            entry.actor,
+                            entry.resource,
+                            entry.action,
+                            json.dumps(entry.details),
+                            entry.risk_level,
+                            entry.prev_hash,
+                            entry.entry_hash,
+                            entry.signature,
+                        ),
+                    )
                 conn.commit()
                 conn.close()
             except Exception as e:
                 print(f"[AuditLog] Postgres persist failed: {e}")
-        
+
         # Backup file (append-only, toujours)
         try:
             with open(self.backup_file, "a") as f:
                 f.write(json.dumps(entry.to_dict()) + "\n")
         except Exception as e:
             print(f"[AuditLog] File backup failed: {e}")
-    
-    def verify_chain(self, limit: Optional[int] = None) -> tuple:
+
+    def verify_chain(self, limit: int | None = None) -> tuple:
         """
         Vérifie l'intégrité de toute la chaîne.
-        
+
         Retourne:
             (is_valid: bool, report: dict)
         """
         entries = self._load_entries(limit=limit)
-        
+
         if not entries:
             return True, {"status": "empty", "entries_checked": 0}
-        
+
         report = {
             "entries_checked": 0,
             "first_entry": entries[0]["event_id"],
@@ -367,22 +378,24 @@ class ImmutableAuditLog:
             "signatures_verified": 0,
             "signatures_failed": 0,
         }
-        
+
         prev_hash = "GENESIS"
-        
+
         for i, entry in enumerate(entries):
             report["entries_checked"] += 1
-            
+
             # Vérifie chaînage
             if entry.get("prev_hash") != prev_hash:
-                report["violations"].append({
-                    "type": "chain_break",
-                    "event_id": entry["event_id"],
-                    "position": i,
-                    "expected_prev": prev_hash,
-                    "actual_prev": entry.get("prev_hash"),
-                })
-            
+                report["violations"].append(
+                    {
+                        "type": "chain_break",
+                        "event_id": entry["event_id"],
+                        "position": i,
+                        "expected_prev": prev_hash,
+                        "actual_prev": entry.get("prev_hash"),
+                    }
+                )
+
             # Vérifie hash
             reconstructed = AuditEntry(
                 event_id=entry["event_id"],
@@ -398,30 +411,32 @@ class ImmutableAuditLog:
             )
             computed = reconstructed.compute_hash()
             if computed != entry.get("entry_hash"):
-                report["violations"].append({
-                    "type": "hash_mismatch",
-                    "event_id": entry["event_id"],
-                    "position": i,
-                    "expected": entry.get("entry_hash"),
-                    "computed": computed,
-                })
-            
+                report["violations"].append(
+                    {
+                        "type": "hash_mismatch",
+                        "event_id": entry["event_id"],
+                        "position": i,
+                        "expected": entry.get("entry_hash"),
+                        "computed": computed,
+                    }
+                )
+
             # Vérifie signature si présente
             if entry.get("signature") and self._signer:
                 # On pourrait vérifier la signature ici
                 report["signatures_verified"] += 1
-            
+
             prev_hash = entry.get("entry_hash")
-        
+
         is_valid = len(report["violations"]) == 0
         report["status"] = "valid" if is_valid else "tampered"
-        
+
         return is_valid, report
-    
-    def _load_entries(self, limit: Optional[int] = None) -> List[Dict]:
+
+    def _load_entries(self, limit: int | None = None) -> list[dict]:
         """Charge les entrées depuis Postgres ou fichier."""
         entries = []
-        
+
         if self.database_url and PSYCOPG_AVAILABLE:
             try:
                 conn = psycopg.connect(self.database_url)
@@ -435,7 +450,7 @@ class ImmutableAuditLog:
                 return entries
             except Exception as e:
                 print(f"[AuditLog] Postgres load failed: {e}")
-        
+
         # Fallback fichier
         if os.path.exists(self.backup_file):
             try:
@@ -448,10 +463,10 @@ class ImmutableAuditLog:
                                 break
             except Exception as e:
                 print(f"[AuditLog] File load failed: {e}")
-        
+
         return entries
-    
-    def get_stats(self) -> Dict[str, Any]:
+
+    def get_stats(self) -> dict[str, Any]:
         """Statistiques de l'audit log."""
         stats = {
             "total_entries": 0,
@@ -461,33 +476,37 @@ class ImmutableAuditLog:
             "newest_entry": None,
             "chain_intact": None,
         }
-        
+
         if self.database_url and PSYCOPG_AVAILABLE:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
                     cur.execute("SELECT COUNT(*) from agentguard.audit_log")
                     stats["total_entries"] = cur.fetchone()[0]
-                    
+
                     cur.execute("""
                         SELECT event_type, COUNT(*) 
                         from agentguard.audit_log GROUP BY event_type
                     """)
                     stats["by_event_type"] = dict(cur.fetchall())
-                    
+
                     cur.execute("""
                         SELECT risk_level, COUNT(*) 
                         from agentguard.audit_log GROUP BY risk_level
                     """)
                     stats["by_risk_level"] = dict(cur.fetchall())
-                    
+
                     cur.execute("""
                         SELECT MIN(timestamp), MAX(timestamp) from agentguard.audit_log
                     """)
                     row = cur.fetchone()
                     if row and row[0]:
-                        stats["oldest_entry"] = datetime.fromtimestamp(row[0]).isoformat()
-                        stats["newest_entry"] = datetime.fromtimestamp(row[1]).isoformat()
+                        stats["oldest_entry"] = datetime.fromtimestamp(
+                            row[0]
+                        ).isoformat()
+                        stats["newest_entry"] = datetime.fromtimestamp(
+                            row[1]
+                        ).isoformat()
                 conn.close()
             except Exception as e:
                 print(f"[AuditLog] Stats failed: {e}")
@@ -503,50 +522,56 @@ class ImmutableAuditLog:
                                 entries.append(json.loads(line))
                             except Exception:
                                 continue
-                
+
                 stats["total_entries"] = len(entries)
-                
+
                 # by_event_type
                 by_type = {}
                 for e in entries:
                     t = e.get("event_type", "unknown")
                     by_type[t] = by_type.get(t, 0) + 1
                 stats["by_event_type"] = by_type
-                
+
                 # by_risk_level
                 by_risk = {}
                 for e in entries:
                     r = e.get("risk_level", "info")
                     by_risk[r] = by_risk.get(r, 0) + 1
                 stats["by_risk_level"] = by_risk
-                
+
                 # oldest/newest
                 if entries:
-                    timestamps = [e.get("timestamp", 0) for e in entries if e.get("timestamp")]
+                    timestamps = [
+                        e.get("timestamp", 0) for e in entries if e.get("timestamp")
+                    ]
                     if timestamps:
-                        stats["oldest_entry"] = datetime.fromtimestamp(min(timestamps)).isoformat()
-                        stats["newest_entry"] = datetime.fromtimestamp(max(timestamps)).isoformat()
+                        stats["oldest_entry"] = datetime.fromtimestamp(
+                            min(timestamps)
+                        ).isoformat()
+                        stats["newest_entry"] = datetime.fromtimestamp(
+                            max(timestamps)
+                        ).isoformat()
             except Exception as e:
                 print(f"[AuditLog] File stats failed: {e}")
-        
+
         # Vérification rapide (uniquement les 1000 dernières entrées)
         try:
             is_valid, _ = self.verify_chain(limit=1000)
             stats["chain_intact"] = is_valid
         except Exception:
             stats["chain_intact"] = None
-        
+
         return stats
-    
+
     def query(
         self,
-        org_id: Optional[str] = None,
-        event_type: Optional[str] = None,
-        risk_level: Optional[str] = None,
-        since: Optional[float] = None,
-        until: Optional[float] = None,
+        org_id: str | None = None,
+        event_type: str | None = None,
+        risk_level: str | None = None,
+        since: float | None = None,
+        until: float | None = None,
         limit: int = 100,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Requête sur l'audit log."""
         if self.database_url and PSYCOPG_AVAILABLE:
             try:
@@ -554,7 +579,7 @@ class ImmutableAuditLog:
                 with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
                     conditions = []
                     params = []
-                    
+
                     if org_id:
                         conditions.append("org_id = %s")
                         params.append(org_id)
@@ -570,20 +595,20 @@ class ImmutableAuditLog:
                     if until:
                         conditions.append("timestamp <= %s")
                         params.append(until)
-                    
+
                     query = "SELECT * from agentguard.audit_log"
                     if conditions:
                         query += " WHERE " + " AND ".join(conditions)
                     query += " ORDER BY seq_no DESC LIMIT %s"
                     params.append(limit)
-                    
+
                     cur.execute(query, params)
                     rows = [dict(r) for r in cur.fetchall()]
                 conn.close()
                 return rows
             except Exception as e:
                 print(f"[AuditLog] Query failed: {e}")
-        
+
         # Fallback fichier
         results = []
         for entry in reversed(self._load_entries()):
@@ -601,4 +626,3 @@ class ImmutableAuditLog:
             if len(results) >= limit:
                 break
         return results
-

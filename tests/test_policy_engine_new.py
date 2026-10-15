@@ -1,7 +1,8 @@
 """Tests du nouveau Policy Engine (Phase 1)."""
-import os
+
 import pytest
-from policy import PolicyEngine, Policy, PolicyDecision, Decision
+
+from policy import Decision, PolicyDecision, PolicyEngine
 
 
 @pytest.fixture
@@ -50,19 +51,19 @@ budget:
     policies_dir = tmp_path / "policies"
     policies_dir.mkdir()
     (policies_dir / "test.yaml").write_text(policy_content)
-    
+
     return PolicyEngine(policies_dir=str(policies_dir))
 
 
 class TestPolicyLoading:
     """Tests de chargement des policies."""
-    
+
     @pytest.mark.skip(reason="PolicyLoader API refactored - list_policies removed")
     def test_load_from_directory(self, engine):
         policies = engine.list_policies()
         assert len(policies) == 1
         assert policies[0].name == "test-policy"
-    
+
     def test_load_from_string(self, engine):
         yaml_str = """
 version: 1
@@ -79,7 +80,7 @@ capabilities:
 
 class TestToolCapabilities:
     """Tests des capacités d'outils."""
-    
+
     def test_allowed_tool(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -87,7 +88,7 @@ class TestToolCapabilities:
             params={},
         )
         assert decision.is_allowed()
-    
+
     def test_denied_tool(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -96,7 +97,7 @@ class TestToolCapabilities:
         )
         assert decision.is_denied()
         assert "not allowed" in decision.reason
-    
+
     def test_unknown_tool_no_whitelist(self, tmp_path):
         """Sans whitelist, outils inconnus autorisés."""
         policy = """
@@ -111,14 +112,14 @@ capabilities:
         policies_dir.mkdir()
         (policies_dir / "open.yaml").write_text(policy)
         engine = PolicyEngine(policies_dir=str(policies_dir))
-        
+
         decision = engine.evaluate_tool_call("agent-x", "any_tool", {})
         assert decision.is_allowed()
 
 
 class TestFilesystemCapabilities:
     """Tests des capacités filesystem."""
-    
+
     def test_allowed_read(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -126,7 +127,7 @@ class TestFilesystemCapabilities:
             params={"path": "/workspace/data/file.txt"},
         )
         assert decision.is_allowed()
-    
+
     def test_denied_read(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -134,7 +135,7 @@ class TestFilesystemCapabilities:
             params={"path": "/etc/passwd"},
         )
         assert decision.is_denied()
-    
+
     def test_recursive_pattern(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -146,7 +147,7 @@ class TestFilesystemCapabilities:
 
 class TestNetworkCapabilities:
     """Tests des capacités réseau + SSRF protection."""
-    
+
     def test_allowed_network(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -154,7 +155,7 @@ class TestNetworkCapabilities:
             params={"url": "https://api.example.com/data"},
         )
         assert decision.is_allowed()
-    
+
     def test_denied_network(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -162,7 +163,7 @@ class TestNetworkCapabilities:
             params={"url": "https://evil.com/steal"},
         )
         assert decision.is_denied()
-    
+
     def test_ssrf_localhost_blocked(self, engine):
         """SSRF : localhost toujours bloqué."""
         decision = engine.evaluate_tool_call(
@@ -171,7 +172,7 @@ class TestNetworkCapabilities:
             params={"url": "http://localhost:8080/admin"},
         )
         assert decision.is_denied()
-    
+
     def test_ssrf_aws_metadata_blocked(self, engine):
         """SSRF : AWS metadata endpoint toujours bloqué."""
         decision = engine.evaluate_tool_call(
@@ -184,7 +185,7 @@ class TestNetworkCapabilities:
 
 class TestRules:
     """Tests d'évaluation des règles."""
-    
+
     def test_rule_requires_approval(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -193,7 +194,7 @@ class TestRules:
         )
         assert decision.requires_approval()
         assert "approval" in decision.reason.lower()
-    
+
     def test_rule_not_triggered_small_amount(self, engine):
         decision = engine.evaluate_tool_call(
             agent_id="test-agent",
@@ -206,14 +207,14 @@ class TestRules:
 
 class TestNoPolicy:
     """Tests du comportement sans policy."""
-    
+
     @pytest.mark.skip(reason="PolicyLoader API refactored - get_default_policy removed")
     def test_no_policy_fail_closed(self, tmp_path):
         """Sans policy, fail_closed = DENY."""
         policies_dir = tmp_path / "empty_policies"
         policies_dir.mkdir()
         engine = PolicyEngine(policies_dir=str(policies_dir))
-        
+
         decision = engine.evaluate_tool_call(
             agent_id="unknown-agent",
             tool_name="any_tool",
@@ -225,7 +226,7 @@ class TestNoPolicy:
 
 class TestPolicyDecision:
     """Tests du modèle PolicyDecision."""
-    
+
     def test_to_dict(self):
         decision = PolicyDecision(
             action=Decision.ALLOW,

@@ -1,23 +1,32 @@
+import hashlib
 import inspect
+import json
+import logging
 import os
 import time
-import hashlib
-import json
+import warnings
+from collections.abc import Callable
+from functools import wraps
+from typing import Any
+
 import requests
 import structlog
 import tiktoken
-import logging
-import warnings
-from functools import wraps
-from typing import Optional, Dict, Any, List, Callable, Tuple
 
 from .models import (
-    SecurityCheck, RiskLevel, SecurityAction, SecurityException,
-    ApprovalRequiredException, ApprovalRejectedException, AgentDisconnectedException,
-    GuardSpan, SpanPayload, RuntimeRiskDecision, TrajectoryEvent
+    AgentDisconnectedException,
+    ApprovalRejectedException,
+    ApprovalRequiredException,
+    GuardSpan,
+    RiskLevel,
+    RuntimeRiskDecision,
+    SecurityCheck,
+    SecurityException,
+    SpanPayload,
+    TrajectoryEvent,
 )
 from .policy import PolicyEngine
-from .runtime import TrajectoryAnalyzer, RuntimeRiskEngine
+from .runtime import RuntimeRiskEngine, TrajectoryAnalyzer
 from .taint import FlowTracker, TaintLevel
 
 logger = structlog.get_logger("agentguard.sdk")
@@ -25,7 +34,7 @@ logger = structlog.get_logger("agentguard.sdk")
 SDK_VERSION = "0.6.0"
 
 
-_ENCODING_CACHE: Dict[str, Any] = {}
+_ENCODING_CACHE: dict[str, Any] = {}
 
 
 def _get_encoding(model: str):
@@ -66,33 +75,40 @@ def _count_text_tokens(model: str, text: str) -> int:
 class AgentGuard:
     def __init__(
         self,
-        collector_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        policies: Optional[List[Dict[str, Any]]] = None,
+        collector_url: str | None = None,
+        api_key: str | None = None,
+        policies: list[dict[str, Any]] | None = None,
         max_budget: float = 10.0,
         block_on_high: bool = True,
         debug: bool = False,
-        use_ml: Optional[bool] = None,
-        use_llm_judge: Optional[bool] = None,
-        redis_url: Optional[str] = None,
+        use_ml: bool | None = None,
+        use_llm_judge: bool | None = None,
+        redis_url: str | None = None,
         fail_open: bool = False,
-        agent_id: Optional[str] = None,
+        agent_id: str | None = None,
         wait_for_approval: bool = True,
-        notification_webhook: Optional[str] = None,
-        approval_timeout: Optional[float] = None,
-        approval_poll_interval: Optional[float] = None,
+        notification_webhook: str | None = None,
+        approval_timeout: float | None = None,
+        approval_poll_interval: float | None = None,
     ):
         # Lecture intelligente de l'URL (corrige le test d'environnement)
-        self.collector_url = (collector_url or os.getenv("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080")).rstrip("/")
+        self.collector_url = (
+            collector_url
+            or os.getenv("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080")
+        ).rstrip("/")
         self.api_key = api_key or os.getenv("AGENTGUARD_API_KEY")
         self.agent_id = agent_id or os.getenv("AGENTGUARD_AGENT_ID", "default")
         self.max_budget = max(0.0, float(max_budget))
         self.block_on_high = block_on_high
         self.debug = debug
         self.total_spent = 0.0
-        self.trace_id = hashlib.sha256(f"{time.time_ns()}:{id(self)}".encode()).hexdigest()[:16]
-        self.spans: List[GuardSpan] = []
-        self.collector_timeout = max(0.5, float(os.getenv("AGENTGUARD_COLLECTOR_TIMEOUT", "5.0")))
+        self.trace_id = hashlib.sha256(
+            f"{time.time_ns()}:{id(self)}".encode()
+        ).hexdigest()[:16]
+        self.spans: list[GuardSpan] = []
+        self.collector_timeout = max(
+            0.5, float(os.getenv("AGENTGUARD_COLLECTOR_TIMEOUT", "5.0"))
+        )
         self.policy_engine = PolicyEngine(policies or [], redis_url)
         self._verifier = None
 
@@ -121,24 +137,46 @@ class AgentGuard:
         self._conn_state = "connected"
         self._conn_checked_at = 0.0
         self._status_ttl = max(1.0, float(os.getenv("AGENTGUARD_STATUS_TTL", "5")))
-        self._status_check = bool(self.api_key) and os.getenv("AGENTGUARD_STATUS_CHECK", "true").lower() == "true"
+        self._status_check = (
+            bool(self.api_key)
+            and os.getenv("AGENTGUARD_STATUS_CHECK", "true").lower() == "true"
+        )
 
-        self._runtime_enabled = os.getenv("AGENTGUARD_RUNTIME_RISK_ENABLED", "true").lower() == "true"
-        self._runtime_fail_closed = os.getenv("AGENTGUARD_RUNTIME_FAIL_CLOSED", "true").lower() == "true"
-        self._trajectory = TrajectoryAnalyzer(max_events=100) if self._runtime_enabled else None
-        self._runtime_risk = RuntimeRiskEngine(fail_closed=self._runtime_fail_closed) if self._runtime_enabled else None
+        self._runtime_enabled = (
+            os.getenv("AGENTGUARD_RUNTIME_RISK_ENABLED", "true").lower() == "true"
+        )
+        self._runtime_fail_closed = (
+            os.getenv("AGENTGUARD_RUNTIME_FAIL_CLOSED", "true").lower() == "true"
+        )
+        self._trajectory = (
+            TrajectoryAnalyzer(max_events=100) if self._runtime_enabled else None
+        )
+        self._runtime_risk = (
+            RuntimeRiskEngine(fail_closed=self._runtime_fail_closed)
+            if self._runtime_enabled
+            else None
+        )
 
         # Taint tracking : mémorise (en RAM, jamais envoyé au collector) les secrets/PII vus
         # dans les résultats d'outils et via track_input(), et bloque leur sortie vers un sink externe.
-        self._taint_enabled = os.getenv("AGENTGUARD_TAINT_ENABLED", "true").lower() == "true"
+        self._taint_enabled = (
+            os.getenv("AGENTGUARD_TAINT_ENABLED", "true").lower() == "true"
+        )
         self._flow = FlowTracker(
-            session_mode=os.getenv("AGENTGUARD_TAINT_SESSION_MODE", "false").lower() == "true"
+            session_mode=os.getenv("AGENTGUARD_TAINT_SESSION_MODE", "false").lower()
+            == "true"
         )
 
-        logger.info("agentguard_initialized", agent_id=self.agent_id, runtime_risk=self._runtime_enabled)
+        logger.info(
+            "agentguard_initialized",
+            agent_id=self.agent_id,
+            runtime_risk=self._runtime_enabled,
+        )
 
     @staticmethod
-    def _stable_approval_id(agent_id: str, tool_name: str, params: Dict[str, Any]) -> str:
+    def _stable_approval_id(
+        agent_id: str, tool_name: str, params: dict[str, Any]
+    ) -> str:
         """ID deterministe : meme agent + meme outil + memes params => meme ID.
 
         Permet de reconnaitre une demande deja approuvee lors d'un nouvel appel
@@ -153,7 +191,11 @@ class AgentGuard:
         return f"req_{digest}"
 
     def _headers(self):
-        h = {"Content-Type": "application/json", "X-Agent-Id": str(self.agent_id), "X-Agent-Sdk": SDK_VERSION}
+        h = {
+            "Content-Type": "application/json",
+            "X-Agent-Id": str(self.agent_id),
+            "X-Agent-Sdk": SDK_VERSION,
+        }
         if self.api_key:
             h["X-API-Key"] = self.api_key
         return h
@@ -176,7 +218,9 @@ class AgentGuard:
                 elif r.status_code == 403 and "agent_disconnected" in r.text:
                     self._conn_state = "disconnected"
             except Exception as exc:
-                self._conn_checked_at = now + 25  # collecteur injoignable : on reessaie plus tard
+                self._conn_checked_at = (
+                    now + 25
+                )  # collecteur injoignable : on reessaie plus tard
                 logger.debug("agent_status_check_failed", error=str(exc))
         if self._conn_state == "disconnected":
             raise AgentDisconnectedException(
@@ -186,14 +230,21 @@ class AgentGuard:
     def _send_to_collector(self, span: GuardSpan):
         try:
             payload = SpanPayload(
-                trace_id=span.trace_id, span_id=span.span_id, span_type=span.span_type,
-                timestamp=span.timestamp, latency_ms=span.latency_ms,
-                input_data=span.input_data, output_data=span.output_data,
+                trace_id=span.trace_id,
+                span_id=span.span_id,
+                span_type=span.span_type,
+                timestamp=span.timestamp,
+                latency_ms=span.latency_ms,
+                input_data=span.input_data,
+                output_data=span.output_data,
                 security_checks=[c.to_model() for c in span.security_checks],
-                blocked=span.blocked, block_reason=span.block_reason,
-                cost_usd=span.cost_usd, input_tokens=span.input_tokens,
+                blocked=span.blocked,
+                block_reason=span.block_reason,
+                cost_usd=span.cost_usd,
+                input_tokens=span.input_tokens,
                 output_tokens=span.output_tokens,
-                taint_level=span.taint_level, risk_score=span.risk_score,
+                taint_level=span.taint_level,
+                risk_score=span.risk_score,
             ).model_dump()
             resp = requests.post(
                 f"{self.collector_url}/span",
@@ -203,7 +254,10 @@ class AgentGuard:
             )
             # <-- CORRECTION : Avertissement RuntimeWarning pour les tests
             if resp.status_code in (401, 403):
-                warnings.warn("Cerbere rejected your API key or agent is disconnected", RuntimeWarning)
+                warnings.warn(
+                    "Cerbere rejected your API key or agent is disconnected",
+                    RuntimeWarning,
+                )
                 self._conn_state = "disconnected"
 
             if resp.status_code >= 400:
@@ -216,13 +270,19 @@ class AgentGuard:
         except Exception as e:
             logger.warning("collector_send_failed", error=str(e))
 
-    def _request_signed_decision(self, tool_name: str, params: Dict[str, Any]) -> Optional[Dict]:
+    def _request_signed_decision(
+        self, tool_name: str, params: dict[str, Any]
+    ) -> dict | None:
         if not self._verifier:
             return None
         try:
             r = requests.post(
                 f"{self.collector_url}/api/decide",
-                json={"tool_name": tool_name, "params": params or {}, "agent_id": self.agent_id},
+                json={
+                    "tool_name": tool_name,
+                    "params": params or {},
+                    "agent_id": self.agent_id,
+                },
                 headers=self._headers(),
                 timeout=self.collector_timeout,
             )
@@ -245,7 +305,9 @@ class AgentGuard:
                 ),
             )
 
-    def track_input(self, value: Any, source: str = "user", level: Optional[str] = None) -> Any:
+    def track_input(
+        self, value: Any, source: str = "user", level: str | None = None
+    ) -> Any:
         """Déclare une donnée que l'agent vient de lire (fichier, DB, variable d'env, réponse API...).
 
         Les secrets/PII qu'elle contient sont mémorisés pour la session : s'ils réapparaissent
@@ -290,13 +352,15 @@ class AgentGuard:
             return "\n".join(parts)
         return ""
 
-    def _count_tokens(self, kwargs, result) -> Tuple[int, int]:
+    def _count_tokens(self, kwargs, result) -> tuple[int, int]:
         model = str(kwargs.get("model", "gpt-4o"))
         input_text = self._extract_input([], kwargs) or ""
         output_text = self._extract_output(result) or ""
-        return _count_text_tokens(model, input_text), _count_text_tokens(model, output_text)
+        return _count_text_tokens(model, input_text), _count_text_tokens(
+            model, output_text
+        )
 
-    def _estimate_cost(self, kwargs, result) -> Tuple[float, int, int]:
+    def _estimate_cost(self, kwargs, result) -> tuple[float, int, int]:
         model = str(kwargs.get("model", "gpt-4o"))
         input_tokens, output_tokens = self._count_tokens(kwargs, result)
         pricing = {
@@ -306,7 +370,11 @@ class AgentGuard:
             "deepseek-chat": (1.4e-7, 2.8e-7),
         }
         in_p, out_p = pricing.get(model, (2.5e-6, 1.0e-5))
-        return max(0.0, input_tokens * in_p + output_tokens * out_p), input_tokens, output_tokens
+        return (
+            max(0.0, input_tokens * in_p + output_tokens * out_p),
+            input_tokens,
+            output_tokens,
+        )
 
     def guard_llm_call(self, func: Callable) -> Callable:
         @wraps(func)
@@ -319,28 +387,46 @@ class AgentGuard:
                 self.policy_engine.check_injection(input_text),
                 self.policy_engine.check_pii(input_text),
             ]
-            high_risk = [c for c in checks if not c.passed and c.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)]
+            high_risk = [
+                c
+                for c in checks
+                if not c.passed and c.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+            ]
 
             if high_risk and self.block_on_high:
                 span = GuardSpan(
-                    span_id, self.trace_id, "llm_call", start,
+                    span_id,
+                    self.trace_id,
+                    "llm_call",
+                    start,
                     (time.time() - start) * 1000,
-                    {"prompt": input_text[:500], "model": kwargs.get("model", "unknown")},
-                    {"blocked": True}, checks, True,
+                    {
+                        "prompt": input_text[:500],
+                        "model": kwargs.get("model", "unknown"),
+                    },
+                    {"blocked": True},
+                    checks,
+                    True,
                     f"HIGH RISK: {[c.check_name for c in high_risk]}",
                 )
                 self.spans.append(span)
                 self._send_to_collector(span)
-                raise SecurityException(f"\U0001f6a8 AgentGuard BLOCKED: {span.block_reason}")
+                raise SecurityException(
+                    f"\U0001f6a8 AgentGuard BLOCKED: {span.block_reason}"
+                )
 
             try:
                 result = func(*args, **kwargs)
             except Exception as exc:
                 span = GuardSpan(
-                    span_id, self.trace_id, "llm_call", start,
+                    span_id,
+                    self.trace_id,
+                    "llm_call",
+                    start,
                     (time.time() - start) * 1000,
                     {"prompt": input_text[:500]},
-                    {"error": str(exc)[:1000]}, checks,
+                    {"error": str(exc)[:1000]},
+                    checks,
                 )
                 self.spans.append(span)
                 self._send_to_collector(span)
@@ -349,33 +435,53 @@ class AgentGuard:
             latency = (time.time() - start) * 1000
             cost, input_tokens, output_tokens = self._estimate_cost(kwargs, result)
 
-            budget_check = self.policy_engine.check_budget(cost, self.max_budget, self.total_spent)
+            budget_check = self.policy_engine.check_budget(
+                cost, self.max_budget, self.total_spent
+            )
             output_pii = self.policy_engine.check_pii(self._extract_output(result))
             checks.extend([output_pii, budget_check])
 
-            blocking_output = [c for c in checks if not c.passed and c.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)]
+            blocking_output = [
+                c
+                for c in checks
+                if not c.passed and c.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+            ]
             blocked = bool(blocking_output) and self.block_on_high
 
             span = GuardSpan(
-                span_id, self.trace_id, "llm_call", start, latency,
+                span_id,
+                self.trace_id,
+                "llm_call",
+                start,
+                latency,
                 {"prompt": input_text[:500], "model": kwargs.get("model", "unknown")},
                 {"response": self._extract_output(result)[:500]},
-                checks, blocked,
-                f"Output risk: {[c.check_name for c in blocking_output]}" if blocked else None,
-                cost_usd=cost, input_tokens=input_tokens, output_tokens=output_tokens,
+                checks,
+                blocked,
+                f"Output risk: {[c.check_name for c in blocking_output]}"
+                if blocked
+                else None,
+                cost_usd=cost,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
             self.spans.append(span)
             self._send_to_collector(span)
 
             if blocked:
-                raise SecurityException(f"\U0001f6a8 Output blocked: {span.block_reason}")
+                raise SecurityException(
+                    f"\U0001f6a8 Output blocked: {span.block_reason}"
+                )
 
             self.total_spent += cost
             return result
+
         return wrapper
 
     @staticmethod
-    def _bind_tool_params(func: Callable, args: tuple, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _bind_tool_params(
+        func: Callable, args: tuple, kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
         """Nomme les arguments positionnels d'un outil protégé.
 
         Sans cela, `send_email("a@b.com", "hi")` perdait ses arguments (TypeError) et, surtout,
@@ -384,13 +490,18 @@ class AgentGuard:
         if not args:
             return dict(kwargs)
         sig = inspect.signature(func)
-        bound = sig.bind(*args, **kwargs)  # lève le TypeError natif si l'appel est invalide
-        params: Dict[str, Any] = {}
+        bound = sig.bind(
+            *args, **kwargs
+        )  # lève le TypeError natif si l'appel est invalide
+        params: dict[str, Any] = {}
         for name, value in bound.arguments.items():
             kind = sig.parameters[name].kind
             if kind is inspect.Parameter.VAR_KEYWORD:
                 params.update(value)
-            elif kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.POSITIONAL_ONLY):
+            elif kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.POSITIONAL_ONLY,
+            ):
                 raise TypeError(
                     f"{getattr(func, '__name__', 'tool')}(): the parameter '{name}' cannot be passed by name; "
                     "guarded tools need regular named parameters"
@@ -401,26 +512,31 @@ class AgentGuard:
 
     def guard_tool_call(
         self,
-        tool_name: Optional[str] = None,
-        params: Optional[Dict[str, Any]] = None,
-        func: Optional[Callable] = None,
+        tool_name: str | None = None,
+        params: dict[str, Any] | None = None,
+        func: Callable | None = None,
     ):
         if callable(tool_name):
             actual_func = tool_name
             actual_tool_name = actual_func.__name__
+
             @wraps(actual_func)
             def wrapper(*args, **kwargs):
                 params = self._bind_tool_params(actual_func, args, kwargs)
                 return self._execute_guarded_tool(actual_tool_name, params, actual_func)
+
             return wrapper
 
         if params is None and func is None and isinstance(tool_name, str):
+
             def decorator(wrapped: Callable):
                 @wraps(wrapped)
                 def wrapper(*args, **kwargs):
                     params = self._bind_tool_params(wrapped, args, kwargs)
                     return self._execute_guarded_tool(tool_name, params, wrapped)
+
                 return wrapper
+
             return decorator
 
         if func is not None and isinstance(tool_name, str):
@@ -429,17 +545,23 @@ class AgentGuard:
         raise TypeError("Usage invalide de guard_tool_call.")
 
     @staticmethod
-    def _tag_span(span: GuardSpan, taint_level: Optional[str], decision: RuntimeRiskDecision) -> None:
+    def _tag_span(
+        span: GuardSpan, taint_level: str | None, decision: RuntimeRiskDecision
+    ) -> None:
         span.taint_level = taint_level
         span.risk_score = decision.risk_score
 
-    def _execute_guarded_tool(self, tool_name: str, params: Dict[str, Any], func: Callable):
+    def _execute_guarded_tool(
+        self, tool_name: str, params: dict[str, Any], func: Callable
+    ):
         self._ensure_connected()
         span_id = hashlib.sha256(f"{time.time_ns()}".encode()).hexdigest()[:16]
         start = time.time()
         budget_remaining = self.max_budget - self.total_spent
 
-        check = self.policy_engine.check_tool_policy(tool_name, params, budget_remaining, agent_id=self.agent_id)
+        check = self.policy_engine.check_tool_policy(
+            tool_name, params, budget_remaining, agent_id=self.agent_id
+        )
 
         taint_level = None
         if self._taint_enabled:
@@ -449,7 +571,12 @@ class AgentGuard:
                 self.agent_id, tool_name, params, taint_level=taint_level
             )
             runtime_decision = self._runtime_risk.evaluate(
-                tool_name, params, traj_score, traj_reasons, traj_meta, taint_level=taint_level
+                tool_name,
+                params,
+                traj_score,
+                traj_reasons,
+                traj_meta,
+                taint_level=taint_level,
             )
         else:
             runtime_decision = RuntimeRiskDecision("ALLOW", 0.0, RiskLevel.LOW)
@@ -462,7 +589,10 @@ class AgentGuard:
 
         if not runtime_decision.allowed:
             span = GuardSpan(
-                span_id, self.trace_id, "tool_call", start,
+                span_id,
+                self.trace_id,
+                "tool_call",
+                start,
                 (time.time() - start) * 1000,
                 {"tool": tool_name, "params": params},
                 {"blocked": True},
@@ -484,7 +614,10 @@ class AgentGuard:
             signed_decision = self._request_signed_decision(tool_name, params or {})
             if signed_decision is None:
                 span = GuardSpan(
-                    span_id, self.trace_id, "tool_call", start,
+                    span_id,
+                    self.trace_id,
+                    "tool_call",
+                    start,
                     (time.time() - start) * 1000,
                     {"tool": tool_name, "params": params},
                     {"blocked": True, "reason": "signed_decision_unavailable"},
@@ -497,13 +630,24 @@ class AgentGuard:
                 self._send_to_collector(span)
                 self._record_trajectory_tool(
                     tool_name,
-                    RuntimeRiskDecision("DENY", 100.0, RiskLevel.CRITICAL, ["signed server decision unavailable"]),
+                    RuntimeRiskDecision(
+                        "DENY",
+                        100.0,
+                        RiskLevel.CRITICAL,
+                        ["signed server decision unavailable"],
+                    ),
                 )
-                raise SecurityException("\U0001f6a8 AgentGuard DENY: server security decision unavailable")
+                raise SecurityException(
+                    "\U0001f6a8 AgentGuard DENY: server security decision unavailable"
+                )
             if signed_decision.get("action") == "DENY":
-                raise SecurityException(f"\U0001f6a8 Signed DENY: {signed_decision.get('reason', 'policy violation')}")
+                raise SecurityException(
+                    f"\U0001f6a8 Signed DENY: {signed_decision.get('reason', 'policy violation')}"
+                )
             if signed_decision.get("action") == "REQUIRE_APPROVAL":
-                raise SecurityException("\U0001f6a8 AgentGuard: human approval required")
+                raise SecurityException(
+                    "\U0001f6a8 AgentGuard: human approval required"
+                )
 
         # --- GESTION DE L'APPROBATION HUMAINE (HITL) avec auto-reprise ---
         if not check.passed:
@@ -520,7 +664,10 @@ class AgentGuard:
                             headers=self._headers(),
                             timeout=3,
                         )
-                        if r.status_code == 200 and r.json().get("status") == "approved":
+                        if (
+                            r.status_code == 200
+                            and r.json().get("status") == "approved"
+                        ):
                             self._approved_cache.add(cache_key)
                     except Exception:
                         pass
@@ -544,14 +691,21 @@ class AgentGuard:
                             timeout=5,
                         )
                     except Exception as e:
-                        logger.warning("failed_to_notify_collector_of_approval", error=str(e))
+                        logger.warning(
+                            "failed_to_notify_collector_of_approval", error=str(e)
+                        )
 
                     # 1.5. Declencher le Webhook externe (Email/Slack) si configure
                     if self.notification_webhook:
                         try:
                             requests.post(
                                 self.notification_webhook,
-                                json={"event": "approval_required", "approval_id": approval_id, "tool": tool_name, "agent": self.agent_id},
+                                json={
+                                    "event": "approval_required",
+                                    "approval_id": approval_id,
+                                    "tool": tool_name,
+                                    "agent": self.agent_id,
+                                },
                                 timeout=2,  # Fire and forget, ne pas bloquer l'agent
                             )
                         except Exception:
@@ -567,7 +721,11 @@ class AgentGuard:
                         )
 
                     # 3. Mode SYNC : on poll jusqu'a decision ou timeout
-                    logger.info("waiting_for_human_approval", approval_id=approval_id, tool=tool_name)
+                    logger.info(
+                        "waiting_for_human_approval",
+                        approval_id=approval_id,
+                        tool=tool_name,
+                    )
                     max_wait = self.approval_timeout
                     poll_interval = self.approval_poll_interval
                     elapsed = 0.0
@@ -585,7 +743,11 @@ class AgentGuard:
                             if r.status_code == 200:
                                 status = r.json().get("status")
                                 if status == "approved":
-                                    logger.info("approval_granted_executing_tool", approval_id=approval_id, tool=tool_name)
+                                    logger.info(
+                                        "approval_granted_executing_tool",
+                                        approval_id=approval_id,
+                                        tool=tool_name,
+                                    )
                                     self._approved_cache.add(cache_key)
                                     decided = True
                                     break
@@ -608,9 +770,15 @@ class AgentGuard:
                             timed_out=True,
                         )
             else:
-                if check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL) and self.block_on_high:
+                if (
+                    check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+                    and self.block_on_high
+                ):
                     span = GuardSpan(
-                        span_id, self.trace_id, "tool_call", start,
+                        span_id,
+                        self.trace_id,
+                        "tool_call",
+                        start,
                         (time.time() - start) * 1000,
                         {"tool": tool_name, "params": params},
                         {"blocked": True, "reason": "policy_block_on_high"},
@@ -629,7 +797,10 @@ class AgentGuard:
             result = func(**params)
         except Exception as exc:
             span = GuardSpan(
-                span_id, self.trace_id, "tool_call", start,
+                span_id,
+                self.trace_id,
+                "tool_call",
+                start,
                 (time.time() - start) * 1000,
                 {"tool": tool_name, "params": params},
                 {"error": str(exc)[:1000]},
@@ -641,7 +812,10 @@ class AgentGuard:
             raise
 
         span = GuardSpan(
-            span_id, self.trace_id, "tool_call", start,
+            span_id,
+            self.trace_id,
+            "tool_call",
+            start,
             (time.time() - start) * 1000,
             {"tool": tool_name, "params": params},
             {"result": str(result)[:500]},
@@ -657,7 +831,7 @@ class AgentGuard:
         self._record_trajectory_tool(tool_name, runtime_decision)
         return result
 
-    def get_report(self) -> Dict[str, Any]:
+    def get_report(self) -> dict[str, Any]:
         return {
             "trace_id": self.trace_id,
             "total_spans": len(self.spans),
@@ -670,4 +844,3 @@ class AgentGuard:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     logger.info("Starting CerbereAG MCP Server (v1.x) on stdio...")
-    from mcp.server.fastmcp import FastMCP

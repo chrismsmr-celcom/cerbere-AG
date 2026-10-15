@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -54,12 +54,10 @@ class TrajectoryEvent:
     irreversible: bool = False
 
     timestamp: str = field(
-        default_factory=lambda: datetime.now(
-            timezone.utc
-        ).isoformat()
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class TrajectoryAnalyzer:
@@ -80,7 +78,7 @@ class TrajectoryAnalyzer:
         self.session_id = session_id
         self.max_events = max(1, max_events)
 
-        self.events: List[TrajectoryEvent] = []
+        self.events: list[TrajectoryEvent] = []
 
     # -------------------------------------------------------------
     # Event management
@@ -101,14 +99,14 @@ class TrajectoryAnalyzer:
 
         # Prevent unbounded memory growth.
         if len(self.events) > self.max_events:
-            self.events = self.events[-self.max_events:]
+            self.events = self.events[-self.max_events :]
 
     @property
     def length(self) -> int:
         return len(self.events)
 
     @property
-    def last_event(self) -> Optional[TrajectoryEvent]:
+    def last_event(self) -> TrajectoryEvent | None:
         if not self.events:
             return None
 
@@ -118,30 +116,28 @@ class TrajectoryAnalyzer:
     # Security signals
     # -------------------------------------------------------------
 
-    def risky_actions(self) -> List[TrajectoryEvent]:
+    def risky_actions(self) -> list[TrajectoryEvent]:
 
         return [
             event
             for event in self.events
             if event.risk_score >= 50
             or event.blocked
-            or event.decision in {
+            or event.decision
+            in {
                 "block",
                 "review",
                 "require_approval",
             }
         ]
 
-    def blocked_actions(self) -> List[TrajectoryEvent]:
+    def blocked_actions(self) -> list[TrajectoryEvent]:
 
         return [
-            event
-            for event in self.events
-            if event.blocked
-            or event.decision == "block"
+            event for event in self.events if event.blocked or event.decision == "block"
         ]
 
-    def approval_actions(self) -> List[TrajectoryEvent]:
+    def approval_actions(self) -> list[TrajectoryEvent]:
 
         return [
             event
@@ -198,7 +194,6 @@ class TrajectoryAnalyzer:
         sensitive_seen = False
 
         for event in self.events:
-
             taint = event.taint_level.upper()
 
             if taint in {
@@ -207,19 +202,13 @@ class TrajectoryAnalyzer:
             }:
                 untrusted_seen = True
 
-            if (
-                untrusted_seen
-                and taint in {
-                    "CONFIDENTIAL",
-                    "SECRET",
-                }
-            ):
+            if untrusted_seen and taint in {
+                "CONFIDENTIAL",
+                "SECRET",
+            }:
                 sensitive_seen = True
 
-            if (
-                sensitive_seen
-                and event.external_side_effect
-            ):
+            if sensitive_seen and event.external_side_effect:
                 return True
 
         return False
@@ -250,7 +239,6 @@ class TrajectoryAnalyzer:
         }
 
         for event in self.events:
-
             if event.risk_score >= 50:
                 risky_seen = True
 
@@ -261,10 +249,7 @@ class TrajectoryAnalyzer:
                 )
             ).lower()
 
-            if (
-                risky_seen
-                and category in privileged_categories
-            ):
+            if risky_seen and category in privileged_categories:
                 return True
 
         return False
@@ -322,23 +307,17 @@ class TrajectoryAnalyzer:
     # Final trajectory analysis
     # -------------------------------------------------------------
 
-    def analyze(self) -> Dict[str, Any]:
+    def analyze(self) -> dict[str, Any]:
 
         risky = self.risky_actions()
 
         escalation = self.detect_escalation()
 
-        privilege_escalation = (
-            self.detect_privilege_escalation()
-        )
+        privilege_escalation = self.detect_privilege_escalation()
 
         score = self.calculate_risk()
 
-        if (
-            escalation
-            or privilege_escalation
-            or score >= 80
-        ):
+        if escalation or privilege_escalation or score >= 80:
             decision = "block"
 
         elif score >= 50:
@@ -352,12 +331,8 @@ class TrajectoryAnalyzer:
             "session_id": self.session_id,
             "trajectory_length": self.length,
             "risky_actions": len(risky),
-            "blocked_actions": len(
-                self.blocked_actions()
-            ),
-            "approval_actions": len(
-                self.approval_actions()
-            ),
+            "blocked_actions": len(self.blocked_actions()),
+            "approval_actions": len(self.approval_actions()),
             "external_input": self.has_external_input(),
             "sensitive_data": self.has_sensitive_data(),
             "privilege_escalation": privilege_escalation,
@@ -370,7 +345,7 @@ class TrajectoryAnalyzer:
     # Serialization
     # -------------------------------------------------------------
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
 
         return {
             "agent_id": self.agent_id,

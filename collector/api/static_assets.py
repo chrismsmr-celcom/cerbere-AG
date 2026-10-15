@@ -1,7 +1,7 @@
 """Assets statiques : logo, favicon."""
 
 import os
-import structlog
+
 from flask import send_from_directory
 
 from collector.api.helpers import api_bp, logger

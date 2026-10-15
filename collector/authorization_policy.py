@@ -14,13 +14,11 @@ ROLE_PERMISSIONS = {
     "viewer": {
         Permission.READ,
     },
-
     "developer": {
         Permission.READ,
         Permission.WRITE,
         Permission.EXECUTE,
     },
-
     "admin": {
         Permission.READ,
         Permission.WRITE,
@@ -28,12 +26,10 @@ ROLE_PERMISSIONS = {
         Permission.ADMIN,
         Permission.AUDIT,
     },
-
     "audit": {
         Permission.READ,
         Permission.AUDIT,
     },
-
     "billing": {
         Permission.READ,
         Permission.BILLING,

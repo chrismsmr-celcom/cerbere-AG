@@ -1,17 +1,12 @@
-from datasets import load_dataset
 import os
+
+from datasets import load_dataset
 
 os.makedirs("datasets/hf", exist_ok=True)
 
 datasets_to_try = [
-    {
-        "name": "deepset/prompt-injections",
-        "config": None
-    },
-    {
-        "name": "JailbreakBench/JBB-Behaviors",
-        "config": "behaviors"
-    },
+    {"name": "deepset/prompt-injections", "config": None},
+    {"name": "JailbreakBench/JBB-Behaviors", "config": "behaviors"},
 ]
 
 for item in datasets_to_try:
@@ -28,11 +23,7 @@ for item in datasets_to_try:
 
         print(ds)
 
-        out = os.path.join(
-            "datasets",
-            "hf",
-            name.replace("/", "_")
-        )
+        out = os.path.join("datasets", "hf", name.replace("/", "_"))
 
         ds.save_to_disk(out)
 

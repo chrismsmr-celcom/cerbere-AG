@@ -63,27 +63,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Réduire le bruit du SDK pendant la démo.
 logging.disable(logging.CRITICAL)
 
-import structlog  # noqa: E402
+import structlog
 
 structlog.configure(
     wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL)
 )
 
-from agentguard.models import (  # noqa: E402
+from agentguard.models import (
     ApprovalRejectedException,
     ApprovalRequiredException,
     SecurityException,
 )
-from agentguard.sdk import AgentGuard  # noqa: E402
-
+from agentguard.sdk import AgentGuard
 
 # ---------------------------------------------------------------------------
 # Arguments
 # ---------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser(
-    description="Cerbère human-approval demo"
-)
+parser = argparse.ArgumentParser(description="Cerbère human-approval demo")
 
 parser.add_argument(
     "--agent-id",
@@ -189,12 +186,10 @@ export_id = uuid.uuid4().hex[:8]
 # Outils de l'agent
 # ---------------------------------------------------------------------------
 
+
 @guard.guard_tool_call("query_customers")
 def query_customers(segment: str) -> str:
-    return (
-        f"3 customer records for segment '{segment}' "
-        f"(export {export_id})"
-    )
+    return f"3 customer records for segment '{segment}' (export {export_id})"
 
 
 @guard.guard_tool_call("send_email")
@@ -228,10 +223,7 @@ step(
     f"The agent emails the export to a personal address ({args.to})",
 )
 
-print(
-    "    ⏳ Cerbère paused the action. "
-    "Waiting for a human decision..."
-)
+print("    ⏳ Cerbère paused the action. Waiting for a human decision...")
 
 print("       Open the dashboard → Approvals")
 
@@ -249,10 +241,7 @@ except ApprovalRejectedException as exc:
 
     reviewer = getattr(exc, "resolved_by", None) or "unknown"
 
-    print(
-        f"    ✗ BLOCKED, not executed "
-        f"(reviewer: {reviewer})"
-    )
+    print(f"    ✗ BLOCKED, not executed (reviewer: {reviewer})")
 
     sys.exit(0)
 
@@ -281,11 +270,7 @@ step(3, "A human approved the request")
 
 elapsed = time.time() - started
 
-print(
-    f"    ✓ {result} "
-    f"(decision after {elapsed:.0f}s, "
-    "no code change, no second call)"
-)
+print(f"    ✓ {result} (decision after {elapsed:.0f}s, no code change, no second call)")
 
 
 # ---------------------------------------------------------------------------
@@ -300,9 +285,4 @@ for span in guard.spans:
     taint = span.taint_level or "-"
     risk = span.risk_score
 
-    print(
-        f"    {tool:<16} "
-        f"{status:<8} "
-        f"taint={taint:<7} "
-        f"risk={risk}"
-    )
+    print(f"    {tool:<16} {status:<8} taint={taint:<7} risk={risk}")

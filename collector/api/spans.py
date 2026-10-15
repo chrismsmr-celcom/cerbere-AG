@@ -10,27 +10,24 @@ FIX CI (test_span_rate_limit_kicks_in) :
 """
 
 import json
-import sqlite3
 import uuid
 
-from flask import request, jsonify, g, current_app
+from flask import current_app, g, jsonify, request
 
-from collector.extensions import limiter
-from collector.db import (
-    get_db,
-    redact_pii,
-    is_postgres,
-    sql_placeholder,
-    _get_db_path,
-)
 from collector.api.helpers import (
-    api_bp,
-    logger,
-    _sqlite_connect,
     _reject_if_agent_disconnected,
     _request_agent_id,
+    _sqlite_connect,
+    api_bp,
+    logger,
 )
-
+from collector.db import (
+    get_db,
+    is_postgres,
+    redact_pii,
+    sql_placeholder,
+)
+from collector.extensions import limiter
 
 # ── CANONICAL EVENT WRITE (Agent Control Room — tables `events`/`agent_sessions`) ──
 #
@@ -39,6 +36,7 @@ from collector.api.helpers import (
 # security_checks ; `taint_level` et `risk_score` viennent du SDK (FlowTracker +
 # moteur de risque runtime) et restent NULL pour les spans llm_call. But : de la vraie donnée qui coule dans
 # `events` dès maintenant pour brancher la Trajectory Timeline.
+
 
 def _next_sequence_no(cur, p, session_id):
     cur.execute(
@@ -73,10 +71,16 @@ def _write_canonical_event(data, org_id, agent_id):
     span_type = data.get("span_type", "")
     actor = "TOOL" if "tool" in span_type else "MODEL"
     decision = "BLOCK" if data["blocked"] else "ALLOW"
-    model = data.get("input_data", {}).get("model") if isinstance(data.get("input_data"), dict) else None
+    model = (
+        data.get("input_data", {}).get("model")
+        if isinstance(data.get("input_data"), dict)
+        else None
+    )
 
     # Le SDK envoie {"tool": ...} ; "tool_name" reste accepté (anciens clients).
-    input_data = data.get("input_data") if isinstance(data.get("input_data"), dict) else {}
+    input_data = (
+        data.get("input_data") if isinstance(data.get("input_data"), dict) else {}
+    )
     tool_name = input_data.get("tool_name") or input_data.get("tool")
 
     # taint_level / risk_score viennent du SDK (track_input + moteur de risque runtime).
@@ -86,7 +90,9 @@ def _write_canonical_event(data, org_id, agent_id):
     taint_level = taint_level if taint_level in _TAINT else None
     try:
         risk_score = data.get("risk_score")
-        risk_score = max(0.0, min(float(risk_score), 100.0)) if risk_score is not None else None
+        risk_score = (
+            max(0.0, min(float(risk_score), 100.0)) if risk_score is not None else None
+        )
     except (TypeError, ValueError):
         risk_score = None
 
@@ -110,15 +116,29 @@ def _write_canonical_event(data, org_id, agent_id):
                     taint_level, risk_score
                 ) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})""",
             (
-                event_id, data["trace_id"], session_id, agent_id or "unknown", org_id, seq,
-                actor, span_type, tool_name,
-                json.dumps(data.get("input_data", {})), json.dumps(data.get("output_data", {})),
-                json.dumps(checks), json.dumps(risk_contributors), decision, data.get("block_reason"),
-                taint_level, risk_score,
+                event_id,
+                data["trace_id"],
+                session_id,
+                agent_id or "unknown",
+                org_id,
+                seq,
+                actor,
+                span_type,
+                tool_name,
+                json.dumps(data.get("input_data", {})),
+                json.dumps(data.get("output_data", {})),
+                json.dumps(checks),
+                json.dumps(risk_contributors),
+                decision,
+                data.get("block_reason"),
+                taint_level,
+                risk_score,
             ),
         )
-        cur.execute(f"UPDATE agent_sessions SET last_event_id = {p}, status = {p} WHERE id = {p}",
-                    (event_id, "blocked" if data["blocked"] else "running", session_id))
+        cur.execute(
+            f"UPDATE agent_sessions SET last_event_id = {p}, status = {p} WHERE id = {p}",
+            (event_id, "blocked" if data["blocked"] else "running", session_id),
+        )
         conn.commit()
     except Exception:
         # FIX : rollback AVANT de laisser remonter l'exception, sinon la
@@ -181,17 +201,19 @@ def receive_span():
     llm_reason = None
 
     if "metadata" in data and isinstance(data["metadata"], dict):
-        detection_layer = (
-            data["metadata"].get("detection_layer")
-            or data["metadata"].get("layer")
-        )
+        detection_layer = data["metadata"].get("detection_layer") or data[
+            "metadata"
+        ].get("layer")
         ml_score = data["metadata"].get("ml_score")
         llm_score = data["metadata"].get("llm_score")
         llm_reason = data["metadata"].get("llm_reason")
 
     if not detection_layer and data.get("security_checks"):
         for check in data["security_checks"]:
-            if isinstance(check, dict) and check.get("check_name") in ["prompt_injection", "llm_judge"]:
+            if isinstance(check, dict) and check.get("check_name") in [
+                "prompt_injection",
+                "llm_judge",
+            ]:
                 meta = check.get("metadata", {}) or {}
                 detection_layer = meta.get("layer")
                 ml_score = meta.get("ml_score")
@@ -210,7 +232,11 @@ def receive_span():
     if llm_reason and isinstance(llm_reason, str):
         llm_reason = redact_pii(llm_reason)
 
-    model = data.get("input_data", {}).get("model") if isinstance(data.get("input_data"), dict) else None
+    model = (
+        data.get("input_data", {}).get("model")
+        if isinstance(data.get("input_data"), dict)
+        else None
+    )
 
     p = sql_placeholder()
 
@@ -218,23 +244,38 @@ def receive_span():
         conn = get_db()
         try:
             cur = conn.cursor()
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 INSERT INTO spans (
                     trace_id, span_id, span_type, timestamp, latency_ms,
                     input_data, output_data, security_checks, blocked,
                     block_reason, cost_usd, input_tokens, output_tokens,
                     detection_layer, ml_score, llm_score, llm_reason, org_id, model, agent_id
                 ) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
-            """, (
-                data["trace_id"], data["span_id"], data["span_type"],
-                data["timestamp"], data["latency_ms"],
-                json.dumps(data["input_data"]),
-                json.dumps(data["output_data"]),
-                json.dumps(data["security_checks"]),
-                data["blocked"], data.get("block_reason"), data["cost_usd"],
-                data["input_tokens"], data["output_tokens"],
-                detection_layer, ml_score, llm_score, llm_reason, g.org_id, model, span_agent_id
-            ))
+            """,
+                (
+                    data["trace_id"],
+                    data["span_id"],
+                    data["span_type"],
+                    data["timestamp"],
+                    data["latency_ms"],
+                    json.dumps(data["input_data"]),
+                    json.dumps(data["output_data"]),
+                    json.dumps(data["security_checks"]),
+                    data["blocked"],
+                    data.get("block_reason"),
+                    data["cost_usd"],
+                    data["input_tokens"],
+                    data["output_tokens"],
+                    detection_layer,
+                    ml_score,
+                    llm_score,
+                    llm_reason,
+                    g.org_id,
+                    model,
+                    span_agent_id,
+                ),
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -245,24 +286,38 @@ def receive_span():
         conn = _sqlite_connect()
         try:
             cur = conn.cursor()
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 INSERT INTO spans (
                     trace_id, span_id, span_type, timestamp, latency_ms,
                     input_data, output_data, security_checks, blocked,
                     block_reason, cost_usd, input_tokens, output_tokens,
                     detection_layer, ml_score, llm_score, llm_reason, org_id, model, agent_id
                 ) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
-            """, (
-                data["trace_id"], data["span_id"], data["span_type"],
-                data["timestamp"], data["latency_ms"],
-                json.dumps(data["input_data"]),
-                json.dumps(data["output_data"]),
-                json.dumps(data["security_checks"]),
-                1 if data["blocked"] else 0,
-                data.get("block_reason"), data["cost_usd"],
-                data["input_tokens"], data["output_tokens"],
-                detection_layer, ml_score, llm_score, llm_reason, g.org_id, model, span_agent_id
-            ))
+            """,
+                (
+                    data["trace_id"],
+                    data["span_id"],
+                    data["span_type"],
+                    data["timestamp"],
+                    data["latency_ms"],
+                    json.dumps(data["input_data"]),
+                    json.dumps(data["output_data"]),
+                    json.dumps(data["security_checks"]),
+                    1 if data["blocked"] else 0,
+                    data.get("block_reason"),
+                    data["cost_usd"],
+                    data["input_tokens"],
+                    data["output_tokens"],
+                    detection_layer,
+                    ml_score,
+                    llm_score,
+                    llm_reason,
+                    g.org_id,
+                    model,
+                    span_agent_id,
+                ),
+            )
             conn.commit()
         except Exception:
             # FIX : rollback avant re-raise — jamais de verrou résiduel.
@@ -284,33 +339,45 @@ def receive_span():
     if data["blocked"]:
         try:
             from collector import alerting
-            failed = [c for c in data["security_checks"]
-                      if isinstance(c, dict) and not c.get("passed", True)]
+
+            failed = [
+                c
+                for c in data["security_checks"]
+                if isinstance(c, dict) and not c.get("passed", True)
+            ]
             worst = "high"
             for c in failed:
                 r = c.get("risk_level", "low")
                 if alerting.RISK_ORDER.get(r, 0) > alerting.RISK_ORDER.get(worst, 0):
                     worst = r
-            alerting.send_alert({
-                "check_name": failed[0].get("check_name", "unknown") if failed else "unknown",
-                "risk_level": worst,
-                "org_id": g.org_id,
-                "trace_id": data["trace_id"],
-                "model": model,
-                "reason": data.get("block_reason") or "",
-                "prompt": str((data.get("input_data") or {}).get("prompt", ""))[:200],
-            })
+            alerting.send_alert(
+                {
+                    "check_name": failed[0].get("check_name", "unknown")
+                    if failed
+                    else "unknown",
+                    "risk_level": worst,
+                    "org_id": g.org_id,
+                    "trace_id": data["trace_id"],
+                    "model": model,
+                    "reason": data.get("block_reason") or "",
+                    "prompt": str((data.get("input_data") or {}).get("prompt", ""))[
+                        :200
+                    ],
+                }
+            )
         except Exception as e:
             logger.warning("alerting_failed", error=str(e))
 
     try:
-        from collector.audit_routes import get_audit_log, AuditEventType
+        from collector.audit_routes import AuditEventType, get_audit_log
+
         audit = get_audit_log()
         if audit:
             if data.get("blocked"):
                 audit.log_event(
-                    event_type=AuditEventType.PROMPT_BLOCKED if data["span_type"] == "llm_call"
-                             else AuditEventType.TOOL_BLOCKED,
+                    event_type=AuditEventType.PROMPT_BLOCKED
+                    if data["span_type"] == "llm_call"
+                    else AuditEventType.TOOL_BLOCKED,
                     org_id=g.org_id,
                     actor=f"agent:{g.org_id}",
                     resource=f"span:{data['span_id']}",

@@ -1,20 +1,28 @@
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, Trainer, TrainingArguments
 from datasets import load_dataset
-import torch
+from transformers import (
+    DistilBertForSequenceClassification,
+    DistilBertTokenizer,
+    Trainer,
+    TrainingArguments,
+)
 
 # 1. Charger le dataset
-dataset = load_dataset('csv', data_files='prompt_dataset.csv')
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+dataset = load_dataset("csv", data_files="prompt_dataset.csv")
+tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+
 
 def tokenize_function(examples):
-    return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=512)
+    return tokenizer(
+        examples["text"], padding="max_length", truncation=True, max_length=512
+    )
+
 
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
 # 2. Configurer le modèle
 model = DistilBertForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased", 
-    num_labels=2  # 0 = safe, 1 = attack
+    "distilbert-base-uncased",
+    num_labels=2,  # 0 = safe, 1 = attack
 )
 
 # 3. Paramètres d'entraînement

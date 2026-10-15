@@ -124,9 +124,7 @@ def resolve_full_identity():
                 org_id=agent_info["org_id"],
                 subject_id=agent_info["agent_id"],
                 role=Role.DEVELOPER,
-                agent_name=agent_info.get(
-                    "agent_name"
-                ),
+                agent_name=agent_info.get("agent_name"),
             )
 
             g.identity = identity
@@ -161,11 +159,7 @@ def resolve_full_identity():
         "",
     ).strip()
 
-    if (
-        api_key
-        and key
-        and safe_compare(key, api_key)
-    ):
+    if api_key and key and safe_compare(key, api_key):
         environment = current_app.config.get(
             "ENVIRONMENT",
             "development",
@@ -176,10 +170,7 @@ def resolve_full_identity():
             False,
         )
 
-        if (
-            environment == "production"
-            and not allow_legacy
-        ):
+        if environment == "production" and not allow_legacy:
             return None
 
         try:

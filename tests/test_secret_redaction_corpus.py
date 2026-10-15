@@ -39,17 +39,17 @@ valid patterns invented solely for testing redaction logic.
 Auditor finding: #13 (tests de redaction manquants).
 Status: RESOLVED.
 """
-import pytest
-from collector.db import redact_pii
 
+from collector.db import redact_pii
 
 # ═══════════════════════════════════════════════════════════════
 # 1. SECRET CORPUS — 22+ types de secrets
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestSecretCorpus:
     """Each test locks a specific secret type detection.
-    
+
     NOTE: All tokens below are FAKE and invented for testing.
     GitHub Secret Scanning will flag them — bypass with "used in tests".
     """
@@ -57,7 +57,7 @@ class TestSecretCorpus:
     # ── AWS ────────────────────────────────────────────────────
     def test_aws_access_key_redacted(self):
         """AWS Access Key ID (AKIA + 16 alphanumeric).
-        
+
         Pattern: AKIA[0-9A-Z]{16}
         Fake example: AKIAIOSFODNN7EXAMPLE (no real account)
         """
@@ -68,7 +68,7 @@ class TestSecretCorpus:
 
     def test_aws_secret_key_redacted(self):
         """AWS Secret Access Key via assignment pattern.
-        
+
         Pattern: aws_secret_access_key=<40 chars base64-ish>
         Fake example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
         """
@@ -80,7 +80,7 @@ class TestSecretCorpus:
     # ── GitHub ─────────────────────────────────────────────────
     def test_github_pat_classic_redacted(self):
         """GitHub PAT classic (ghp_ + exactly 36 alphanumeric).
-        
+
         NOTE: Pattern requires EXACTLY 36 chars after ghp_ (bounded by \\b).
         """
         # 26 uppercase + 10 lowercase = exactly 36 chars
@@ -100,7 +100,7 @@ class TestSecretCorpus:
 
     def test_github_server_token_redacted(self):
         """GitHub server-to-server token (ghs_ + exactly 36 alphanumeric).
-        
+
         NOTE: Pattern matches gh[us]_ + exactly 36 alphanumeric.
         """
         # 26 uppercase + 10 lowercase = exactly 36 chars
@@ -115,7 +115,7 @@ class TestSecretCorpus:
     # ── Google ─────────────────────────────────────────────────
     def test_google_api_key_redacted(self):
         """Google API key (AIza + 35 chars).
-        
+
         Fake: AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe
         """
         text = "AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe"
@@ -126,19 +126,21 @@ class TestSecretCorpus:
     # ── Slack ──────────────────────────────────────────────────
     def test_slack_bot_token_redacted(self):
         """Slack bot token (xoxb-...).
-        
+
         NOTE: Using digit patterns that don't match US phone regex
         (phone regex requires 3-3-4 pattern). Slack regex matches first.
         """
         # Avoid 10-digit sequences that match phone regex
-        text = "SLACK_TOKEN=xoxb-1234567890123-1234567890123-AbCdEfGhIjKlMnOpQrStUvWxYz12"
+        text = (
+            "SLACK_TOKEN=xoxb-1234567890123-1234567890123-AbCdEfGhIjKlMnOpQrStUvWxYz12"
+        )
         out = redact_pii(text)
         assert "xoxb-" not in out
         assert "[REDACTED_SLACK_TOKEN]" in out
 
     def test_slack_webhook_redacted(self):
         """Slack webhook URL.
-        
+
         Fake: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
         """
         text = "webhook: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
@@ -149,7 +151,7 @@ class TestSecretCorpus:
     # ── Stripe ─────────────────────────────────────────────────
     def test_stripe_secret_live_redacted(self):
         """Stripe live secret key.
-        
+
         Fake: sk_live_51H7bq2KJad5QZ9xYzAbCdEfGhIjKlMnOp
         """
         text = "sk_live_51H7bq2KJad5QZ9xYzAbCdEfGhIjKlMnOp"
@@ -173,7 +175,7 @@ class TestSecretCorpus:
     # ── JWT ────────────────────────────────────────────────────
     def test_jwt_redacted(self):
         """JWT (header.payload.signature — 3 base64url segments).
-        
+
         Fake JWT with standard test payload.
         """
         jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
@@ -204,7 +206,9 @@ aFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQ
 
     def test_pem_ec_private_key_redacted(self):
         """EC private key in PEM format."""
-        pem = "-----BEGIN EC PRIVATE KEY-----\nMHQCAQEEIBkg\n-----END EC PRIVATE KEY-----"
+        pem = (
+            "-----BEGIN EC PRIVATE KEY-----\nMHQCAQEEIBkg\n-----END EC PRIVATE KEY-----"
+        )
         out = redact_pii(pem)
         assert "BEGIN EC PRIVATE KEY" not in out
         assert "[REDACTED_PRIVATE_KEY]" in out
@@ -277,7 +281,7 @@ aFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQ
     # ── Generic secrets (assignment patterns) ─────────────────
     def test_generic_password_assignment_redacted(self):
         """Generic password=value assignment.
-        
+
         NOTE: Generic secret regex only accepts [A-Za-z0-9_\\-+/=] in the value.
         Special chars like @ or ! break the match. Use pure alphanumeric.
         """
@@ -295,7 +299,7 @@ aFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQ
 
     def test_access_token_assignment_redacted(self):
         """access_token=value assignment.
-        
+
         NOTE: Generic secret regex only accepts [A-Za-z0-9_\\-+/=] in the value.
         The '.' in 'ya29.AHES...' breaks the match. Use token without dots.
         """
@@ -310,9 +314,10 @@ aFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQaFDrBz9vFqU4yBBQ
 # 2. PII CORPUS — emails, SSN, phones, IPs, etc.
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestPIICorpus:
     """Lock PII detection patterns.
-    
+
     All PII examples below are FAKE (example.com domains, dummy SSNs, etc.).
     """
 
@@ -375,9 +380,10 @@ class TestPIICorpus:
 # 3. NESTED STRUCTURES — dict/list/tuple recursion
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNestedRedaction:
     """Verify redact_pii recurses into all nested structures.
-    
+
     These tests mirror the real /span payload structure where:
     - input_data: dict with user prompt
     - output_data: dict with LLM response
@@ -395,7 +401,7 @@ class TestNestedRedaction:
                 "profile": {
                     "ssn": "123-45-6789",
                     "phone": "(555) 123-4567",
-                }
+                },
             }
         }
         out = redact_pii(data)
@@ -443,7 +449,7 @@ class TestNestedRedaction:
 
     def test_security_checks_array_redacted(self):
         """Mirrors /span security_checks field.
-        
+
         Meta fields (check_name, risk_level) preserved.
         Free text (details) redacted.
         """
@@ -470,7 +476,7 @@ class TestNestedRedaction:
 
     def test_metadata_dict_redacted(self):
         """Mirrors /span metadata field.
-        
+
         Detection meta (detection_layer, ml_score) preserved.
         Leaked PII in metadata redacted.
         """
@@ -510,9 +516,10 @@ class TestNestedRedaction:
 # 4. FALSE POSITIVE GUARDS — don't redact examples/docs
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestFalsePositives:
     """Guard against over-aggressive redaction.
-    
+
     These tests document current behavior and guard against regressions
     when adding new detection patterns (entropy, structured, etc.).
     """
@@ -543,7 +550,7 @@ class TestFalsePositives:
 
     def test_low_entropy_strings_preserved(self):
         """Repetitive low-entropy strings should not match secrets.
-        
+
         Note: Future entropy detection (Chantier #3) will strengthen this.
         """
         text = "aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -553,7 +560,7 @@ class TestFalsePositives:
 
     def test_email_in_code_comment_preserved(self):
         """Emails in code comments are currently redacted.
-        
+
         Note: Context awareness (Chantier #3) may refine this.
         """
         text = "// TODO: contact admin@example.com for review"
@@ -585,11 +592,7 @@ class TestFalsePositives:
 
     def test_multiple_secrets_in_one_string(self):
         """Multiple secrets in single string — all must be redacted."""
-        text = (
-            "AWS: AKIAIOSFODNN7EXAMPLE "
-            "Email: admin@example.com "
-            "SSN: 123-45-6789"
-        )
+        text = "AWS: AKIAIOSFODNN7EXAMPLE Email: admin@example.com SSN: 123-45-6789"
         out = redact_pii(text)
         assert "AKIAIOSFODNN7EXAMPLE" not in out
         assert "admin@example.com" not in out

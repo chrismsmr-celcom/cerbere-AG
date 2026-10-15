@@ -5,7 +5,6 @@ dans l'org 'default', et la révocation coupe l'accès immédiatement.
 
 Lancer : pytest test_multitenancy.py -v
 """
-import os
 
 import pytest
 
@@ -21,8 +20,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("AGENTGUARD_DB_TYPE", "sqlite")
 
-    from collector.db import init_db
     from collector.app import create_app
+    from collector.db import init_db
 
     init_db()
     app = create_app()
@@ -32,8 +31,11 @@ def client(tmp_path, monkeypatch):
 
 
 def _create_customer(c, org_name, plan="pro"):
-    r = c.post("/admin/customers", headers={"X-Admin-Secret": ADMIN_SECRET},
-               json={"org_name": org_name, "plan": plan})
+    r = c.post(
+        "/admin/customers",
+        headers={"X-Admin-Secret": ADMIN_SECRET},
+        json={"org_name": org_name, "plan": plan},
+    )
     assert r.status_code == 201
     data = r.get_json()
     return data["api_key"], data["org_id"]
@@ -41,14 +43,22 @@ def _create_customer(c, org_name, plan="pro"):
 
 def _span(trace_id, prompt="hello"):
     return {
-        "trace_id": trace_id, "span_id": trace_id + "-s1", "span_type": "llm_call",
-        "timestamp": 1.0, "latency_ms": 1, "input_data": {"prompt": prompt},
-        "output_data": {}, "security_checks": [], "blocked": False, "cost_usd": 0.0,
+        "trace_id": trace_id,
+        "span_id": trace_id + "-s1",
+        "span_type": "llm_call",
+        "timestamp": 1.0,
+        "latency_ms": 1,
+        "input_data": {"prompt": prompt},
+        "output_data": {},
+        "security_checks": [],
+        "blocked": False,
+        "cost_usd": 0.0,
     }
 
 
-@pytest.mark.xfail(reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()"
+)
 def test_two_customers_are_fully_isolated(client):
     c, _ = client
     key_a, org_a = _create_customer(c, "Client A")
@@ -66,8 +76,9 @@ def test_two_customers_are_fully_isolated(client):
     assert metrics_b["total_spans"] == 3
 
 
-@pytest.mark.xfail(reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()"
+)
 def test_customer_cannot_read_another_customers_trace(client):
     c, _ = client
     key_a, _ = _create_customer(c, "Client A")
@@ -78,12 +89,15 @@ def test_customer_cannot_read_another_customers_trace(client):
     leaked = c.get("/api/traces/secret-trace", headers={"X-API-Key": key_b}).get_json()
     assert leaked == [], "FUITE: un client peut lire les traces d'un autre client"
 
-    owner_view = c.get("/api/traces/secret-trace", headers={"X-API-Key": key_a}).get_json()
+    owner_view = c.get(
+        "/api/traces/secret-trace", headers={"X-API-Key": key_a}
+    ).get_json()
     assert len(owner_view) == 1
 
 
-@pytest.mark.xfail(reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()"
+)
 def test_master_key_stays_isolated_from_customers(client):
     c, _ = client
     key_a, _ = _create_customer(c, "Client A")
@@ -91,7 +105,9 @@ def test_master_key_stays_isolated_from_customers(client):
     c.post("/span", headers={"X-API-Key": MASTER_KEY}, json=_span("default-trace"))
     c.post("/span", headers={"X-API-Key": key_a}, json=_span("customer-trace"))
 
-    default_metrics = c.get("/api/metrics", headers={"X-API-Key": MASTER_KEY}).get_json()
+    default_metrics = c.get(
+        "/api/metrics", headers={"X-API-Key": MASTER_KEY}
+    ).get_json()
     assert default_metrics["total_spans"] == 1
 
 
@@ -102,15 +118,18 @@ def test_invalid_key_rejected_cleanly_even_with_weird_input(client):
     assert r.status_code == 401
 
 
-@pytest.mark.xfail(reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-6 (2026-09) : isolation multi-tenant a verifier contre le modele org/tenant actuel apres reparation du fixture create_app()"
+)
 def test_revoked_customer_loses_access_immediately(client):
     c, _ = client
     key_a, org_a = _create_customer(c, "Client A")
 
     assert c.get("/api/metrics", headers={"X-API-Key": key_a}).status_code == 200
 
-    rev = c.post(f"/admin/customers/{org_a}/revoke", headers={"X-Admin-Secret": ADMIN_SECRET})
+    rev = c.post(
+        f"/admin/customers/{org_a}/revoke", headers={"X-Admin-Secret": ADMIN_SECRET}
+    )
     assert rev.status_code == 200
     assert rev.get_json()["keys_revoked"] == 1
 

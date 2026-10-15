@@ -20,10 +20,11 @@
  Test manuel :  python alerting.py --test
 ═══════════════════════════════════════════════════════════════════
 """
-import os
-import time
-import threading
+
 import logging
+import os
+import threading
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -64,7 +65,8 @@ def _resolve_org_emails(org_id):
     if not org_id:
         return []
     try:
-        from collector.db import is_postgres, get_pg_conn, get_sqlite_conn
+        from collector.db import get_pg_conn, get_sqlite_conn, is_postgres
+
         if is_postgres():
             conn = get_pg_conn()
             try:
@@ -155,11 +157,13 @@ def _send_slack(event):
         risk = event.get("risk_level", "high")
         payload = {
             "username": "AgentGuard 🛡️",
-            "attachments": [{
-                "color": RISK_COLOR.get(risk, "#f5b84b"),
-                "title": f"[{str(risk).upper()}] {event.get('check_name', 'unknown')} bloqué",
-                "text": _human_text(event),
-            }],
+            "attachments": [
+                {
+                    "color": RISK_COLOR.get(risk, "#f5b84b"),
+                    "title": f"[{str(risk).upper()}] {event.get('check_name', 'unknown')} bloqué",
+                    "text": _human_text(event),
+                }
+            ],
         }
         r = requests.post(SLACK_WEBHOOK, json=payload, timeout=10)
         if r.status_code != 200:
@@ -208,14 +212,17 @@ def _send_email(event):
         if not recipients:
             logger.warning(
                 "email alert skipped: no recipient resolved for org_id=%s "
-                "and no AGENTGUARD_ALERT_EMAIL_TO fallback set", org_id,
+                "and no AGENTGUARD_ALERT_EMAIL_TO fallback set",
+                org_id,
             )
             return
 
         risk = event.get("risk_level", "high")
         msg = MIMEText(_human_text(event), "plain", "utf-8")
-        msg["Subject"] = (f"🚨 [AgentGuard] {str(risk).upper()} — "
-                          f"{event.get('check_name', 'unknown')} bloqué")
+        msg["Subject"] = (
+            f"🚨 [AgentGuard] {str(risk).upper()} — "
+            f"{event.get('check_name', 'unknown')} bloqué"
+        )
         msg["From"] = SMTP_USER or "agentguard@localhost"
         msg["To"] = ", ".join(recipients)
 
@@ -230,7 +237,9 @@ def _send_email(event):
                 server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
 
-        logger.info("email alert sent to %d recipient(s) for org_id=%s", len(recipients), org_id)
+        logger.info(
+            "email alert sent to %d recipient(s) for org_id=%s", len(recipients), org_id
+        )
     except Exception as exc:
         logger.warning("email alert error: %s", exc)
 
@@ -247,15 +256,16 @@ if __name__ == "__main__":
         if not enabled():
             print("❌ Aucun canal configuré (SLACK_WEBHOOK / WEBHOOK_URL / EMAIL)")
             raise SystemExit(1)
-        send_alert({
-            "check_name": "prompt_injection",
-            "risk_level": "critical",
-            "org_id": "default",
-            "trace_id": "test-trace-000",
-            "model": "gpt-4o",
-            "reason": "Alerte de test — l'alerting AgentGuard fonctionne ✅",
-            "prompt": "Ignore all previous instructions…",
-        })
+        send_alert(
+            {
+                "check_name": "prompt_injection",
+                "risk_level": "critical",
+                "org_id": "default",
+                "trace_id": "test-trace-000",
+                "model": "gpt-4o",
+                "reason": "Alerte de test — l'alerting AgentGuard fonctionne ✅",
+                "prompt": "Ignore all previous instructions…",
+            }
+        )
         time.sleep(3)  # laisse le thread envoyer
         print("✅ Alerte de test envoyée — vérifie ton canal")
-

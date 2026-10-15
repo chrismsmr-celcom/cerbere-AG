@@ -8,9 +8,9 @@ Handles:
 - Invoice retrieval
 """
 
-import os
 import structlog
-from flask import Blueprint, request, jsonify, g, render_template_string, current_app
+from flask import Blueprint, g, jsonify, render_template_string, request
+
 from collector.auth import require_auth
 from collector.db import get_db
 
@@ -250,7 +250,7 @@ def billing_page():
 def get_usage():
     """
     Get current usage and billing metrics.
-    
+
     Requires authentication. Multi-tenant: returns only org's data.
     """
     if not require_auth():
@@ -258,7 +258,7 @@ def get_usage():
 
     try:
         db = get_db()
-        
+
         # Multi-tenant isolation
         org_id = getattr(g, "org_id", None)
         if not org_id:
@@ -286,7 +286,7 @@ def get_usage():
 def get_plan():
     """
     Get the current plan for an organization.
-    
+
     Requires authentication.
     """
     if not require_auth():
@@ -322,7 +322,7 @@ def get_plan():
 def get_invoices():
     """
     Get invoices for the current organization.
-    
+
     Requires authentication and billing permissions.
     """
     if not require_auth():
@@ -336,11 +336,13 @@ def get_invoices():
         # Placeholder: no invoices yet
         invoices = []
 
-        return jsonify({
-            "org_id": org_id,
-            "invoices": invoices,
-            "count": len(invoices),
-        }), 200
+        return jsonify(
+            {
+                "org_id": org_id,
+                "invoices": invoices,
+                "count": len(invoices),
+            }
+        ), 200
 
     except Exception as e:
         logger.exception("billing_invoices_error", error=str(e))
@@ -351,7 +353,7 @@ def get_invoices():
 def upgrade_plan():
     """
     Upgrade to a higher plan.
-    
+
     Requires authentication and payment method on file.
     Automated payment processing coming soon.
     """
@@ -361,7 +363,7 @@ def upgrade_plan():
     try:
         data = request.get_json() or {}
         target_plan = data.get("plan")
-        
+
         if not target_plan:
             return jsonify({"error": "Missing 'plan' in request"}), 400
 
@@ -380,12 +382,14 @@ def upgrade_plan():
             note="Automated payment processing being finalized",
         )
 
-        return jsonify({
-            "status": "pending",
-            "message": "Upgrade request received. Automated payment processing is being finalized. Contact support for immediate upgrade.",
-            "org_id": org_id,
-            "requested_plan": target_plan,
-        }), 202
+        return jsonify(
+            {
+                "status": "pending",
+                "message": "Upgrade request received. Automated payment processing is being finalized. Contact support for immediate upgrade.",
+                "org_id": org_id,
+                "requested_plan": target_plan,
+            }
+        ), 202
 
     except Exception as e:
         logger.exception("billing_upgrade_error", error=str(e))

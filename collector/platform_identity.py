@@ -12,13 +12,14 @@ Service identities:
 Key format: agp_{service}_{random_32_chars}
     Example: agp_audit_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
 """
+
 import hashlib
 import hmac
 import os
 import secrets
-import structlog
 from enum import Enum
-from typing import Optional, Set
+
+import structlog
 
 logger = structlog.get_logger("agentguard.platform")
 
@@ -27,40 +28,43 @@ logger = structlog.get_logger("agentguard.platform")
 # PLATFORM IDENTITY TYPES
 # ═══════════════════════════════════════════════════════════════
 
+
 class PlatformService(str, Enum):
     """Platform service identities."""
-    ADMIN = "admin"           # Full platform control
-    AUDIT = "audit"           # Read-only audit/traces
-    BILLING = "billing"       # Metrics + billing
-    MIGRATION = "migration"   # Cross-tenant data ops
+
+    ADMIN = "admin"  # Full platform control
+    AUDIT = "audit"  # Read-only audit/traces
+    BILLING = "billing"  # Metrics + billing
+    MIGRATION = "migration"  # Cross-tenant data ops
 
 
 class PlatformPermission(str, Enum):
     """Granular permissions for platform services."""
+
     # Tenant management
     TENANT_CREATE = "tenant:create"
     TENANT_DELETE = "tenant:delete"
     TENANT_READ = "tenant:read"
     TENANT_LIST = "tenant:list"
-    
+
     # Org management (cross-tenant)
     ORG_CREATE = "org:create"
     ORG_DELETE = "org:delete"
     ORG_READ = "org:read"
-    
+
     # User/Agent management (cross-tenant)
     USER_MANAGE = "user:manage"
     AGENT_MANAGE = "agent:manage"
-    
+
     # Observability
     AUDIT_READ = "audit:read"
     TRACES_READ = "traces:read"
     METRICS_READ = "metrics:read"
-    
+
     # Billing
     BILLING_READ = "billing:read"
     BILLING_MANAGE = "billing:manage"
-    
+
     # Platform operations
     MIGRATION_EXECUTE = "migration:execute"
     PLATFORM_CONFIG = "platform:config"
@@ -116,7 +120,9 @@ PLATFORM_PERMISSIONS: dict = {
 }
 
 
-def service_has_permission(service: PlatformService, permission: PlatformPermission) -> bool:
+def service_has_permission(
+    service: PlatformService, permission: PlatformPermission
+) -> bool:
     """Check if a platform service has a specific permission."""
     perms = PLATFORM_PERMISSIONS.get(service, set())
     return permission in perms
@@ -131,10 +137,10 @@ PLATFORM_KEY_PREFIX = "agp_"
 
 def generate_platform_key(service: PlatformService) -> str:
     """Generate a new platform API key.
-    
+
     Format: agp_{service}_{random_32}
     Example: agp_audit_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
-    
+
     Returns the FULL key (show once — store hash only).
     """
     random_part = secrets.token_urlsafe(32)[:32]
@@ -146,25 +152,25 @@ def hash_platform_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-def parse_platform_key(key: str) -> Optional[dict]:
+def parse_platform_key(key: str) -> dict | None:
     """Parse a platform API key.
-    
+
     Returns: {"service": PlatformService, "key_hash": str} or None
     """
     if not key or not key.startswith(PLATFORM_KEY_PREFIX):
         return None
-    
+
     parts = key.split("_")
     # agp_{service}_{random} → 3 parts
     if len(parts) < 3 or parts[0] != "agp":
         return None
-    
+
     service_str = parts[1]
     try:
         service = PlatformService(service_str)
     except ValueError:
         return None
-    
+
     return {
         "service": service,
         "key_hash": hash_platform_key(key),
@@ -176,9 +182,10 @@ def parse_platform_key(key: str) -> Optional[dict]:
 # ENVIRONMENT-BASED PLATFORM KEYS
 # ═══════════════════════════════════════════════════════════════
 
-def get_platform_key_for_service(service: PlatformService) -> Optional[str]:
+
+def get_platform_key_for_service(service: PlatformService) -> str | None:
     """Get platform key for a service from environment.
-    
+
     Environment variable: AGENTGUARD_PLATFORM_KEY_{SERVICE}
     Example: AGENTGUARD_PLATFORM_KEY_AUDIT=agp_audit_xxx...
     """
@@ -186,7 +193,7 @@ def get_platform_key_for_service(service: PlatformService) -> Optional[str]:
     key = os.environ.get(env_var)
     if not key:
         return None
-    
+
     # Validate format
     parsed = parse_platform_key(key)
     if not parsed or parsed["service"] != service:
@@ -196,13 +203,13 @@ def get_platform_key_for_service(service: PlatformService) -> Optional[str]:
             env_var=env_var,
         )
         return None
-    
+
     return key
 
 
-def resolve_platform_identity(api_key: str) -> Optional[dict]:
+def resolve_platform_identity(api_key: str) -> dict | None:
     """Resolve a platform API key to its identity.
-    
+
     Returns: {
         "service": PlatformService,
         "permissions": Set[PlatformPermission],
@@ -212,22 +219,22 @@ def resolve_platform_identity(api_key: str) -> Optional[dict]:
     parsed = parse_platform_key(api_key)
     if not parsed:
         return None
-    
+
     service = parsed["service"]
-    
+
     # Verify against environment variable (or DB in future)
     expected_key = get_platform_key_for_service(service)
     if not expected_key:
         logger.debug("platform_key_not_configured", service=service.value)
         return None
-    
+
     # Constant-time comparison
     if not hmac.compare_digest(api_key.encode(), expected_key.encode()):
         logger.warning("platform_key_mismatch", service=service.value)
         return None
-    
+
     permissions = PLATFORM_PERMISSIONS.get(service, set())
-    
+
     return {
         "service": service,
         "service_name": service.value,
@@ -240,34 +247,40 @@ def resolve_platform_identity(api_key: str) -> Optional[dict]:
 # HELPERS FOR ROUTES
 # ═══════════════════════════════════════════════════════════════
 
+
 def require_platform_permission(*required_permissions: PlatformPermission):
     """Decorator to require specific platform permissions.
-    
+
     Usage:
         @app.route("/api/platform/tenants")
         @require_platform_permission(PlatformPermission.TENANT_LIST)
         def list_tenants():
             ...
     """
+
     def decorator(f):
         from functools import wraps
-        from flask import request, jsonify, g
-        
+
+        from flask import g, jsonify
+
         @wraps(f)
         def wrapper(*args, **kwargs):
             platform_identity = getattr(g, "platform_identity", None)
-            
+
             if not platform_identity:
-                return jsonify({
-                    "error": "Platform authentication required",
-                    "hint": "Use agp_... API key with appropriate service role",
-                }), 401
-            
+                return jsonify(
+                    {
+                        "error": "Platform authentication required",
+                        "hint": "Use agp_... API key with appropriate service role",
+                    }
+                ), 401
+
             missing = [
-                p.value for p in required_permissions
+                p.value
+                for p in required_permissions
                 if p not in platform_identity["permissions"]
             ]
-            
+
             if missing:
                 logger.warning(
                     "platform_permission_denied",
@@ -275,14 +288,17 @@ def require_platform_permission(*required_permissions: PlatformPermission):
                     required=[p.value for p in required_permissions],
                     missing=missing,
                 )
-                return jsonify({
-                    "error": "Insufficient platform permissions",
-                    "required": [p.value for p in required_permissions],
-                    "missing": missing,
-                    "service": platform_identity.get("service_name"),
-                }), 403
-            
+                return jsonify(
+                    {
+                        "error": "Insufficient platform permissions",
+                        "required": [p.value for p in required_permissions],
+                        "missing": missing,
+                        "service": platform_identity.get("service_name"),
+                    }
+                ), 403
+
             return f(*args, **kwargs)
-        
+
         return wrapper
+
     return decorator

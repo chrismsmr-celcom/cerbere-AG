@@ -1,16 +1,16 @@
 """CRUD alert rules."""
 
-from flask import jsonify, g, request
+from flask import g, jsonify, request
 
-from collector.auth import require_auth
 from collector.alerts import (
-    create_alert_rule,
-    list_alert_rules,
-    delete_alert_rule,
-    VALID_METRICS,
     VALID_COMPARISONS,
+    VALID_METRICS,
+    create_alert_rule,
+    delete_alert_rule,
+    list_alert_rules,
 )
 from collector.api.helpers import api_bp, logger
+from collector.auth import require_auth
 
 
 @api_bp.route("/api/alert-rules", methods=["GET"])
@@ -48,7 +48,9 @@ def api_create_alert_rule():
     if metric not in VALID_METRICS:
         return jsonify({"error": f"metric must be one of {sorted(VALID_METRICS)}"}), 400
     if comparison not in VALID_COMPARISONS:
-        return jsonify({"error": f"comparison must be one of {sorted(VALID_COMPARISONS)}"}), 400
+        return jsonify(
+            {"error": f"comparison must be one of {sorted(VALID_COMPARISONS)}"}
+        ), 400
     try:
         threshold = float(threshold)
     except (TypeError, ValueError):

@@ -2,25 +2,21 @@
 signer Ed25519, registre d'agents, sérialisation, audit humain."""
 
 import json
+import os
 import re
 import sqlite3
 import time
-import os
 from datetime import datetime
 
 import structlog
-from flask import Blueprint, g, request, jsonify, current_app
-
-from collector.db import (
-    get_db,
-    dict_from_row,
-    is_postgres,
-    redact_pii,
-    _get_db_path,
-    sql_placeholder,
-)
+from flask import Blueprint, current_app, g, jsonify, request
 
 from agentguard.decision_engine import DecisionEngine
+from collector.db import (
+    _get_db_path,
+    get_db,
+    is_postgres,
+)
 
 logger = structlog.get_logger("agentguard.api")
 
@@ -36,6 +32,7 @@ decision_engine = DecisionEngine()
 # suivantes (dont le rate-limiter, qui ne renvoyait plus jamais 429).
 # WAL permet lecture concurrente pendant écriture ; busy_timeout absorbe
 # les contentions courtes entre workers.
+
 
 def _sqlite_connect():
     """Connexion SQLite avec WAL + busy_timeout. TOUJOURS utiliser ceci
@@ -55,9 +52,8 @@ def get_decision_signer():
 
     # AGENTGUARD_SIGNING_KEY est le nom canonique (documenté dans env.example).
     # CERBERE_SIGNING_KEY reste accepté comme alias legacy.
-    signing_key = (
-        os.environ.get("AGENTGUARD_SIGNING_KEY")
-        or os.environ.get("CERBERE_SIGNING_KEY")
+    signing_key = os.environ.get("AGENTGUARD_SIGNING_KEY") or os.environ.get(
+        "CERBERE_SIGNING_KEY"
     )
 
     if not signing_key:
@@ -141,12 +137,19 @@ def _human_auth():
     (collector.api.require_human_auth) et les routes humaines repondraient 401.
     """
     import collector.api as _pkg
+
     return _pkg.require_human_auth()
 
 
 # ── Sérialisation des events (Trajectory Timeline) ──────────────────────────
 
-_EVENT_JSON_FIELDS = ["arguments", "arguments_sanitized", "result", "policy_chain", "risk_contributors"]
+_EVENT_JSON_FIELDS = [
+    "arguments",
+    "arguments_sanitized",
+    "result",
+    "policy_chain",
+    "risk_contributors",
+]
 
 
 def _serialize_event(r, full=True):
@@ -164,8 +167,8 @@ def _serialize_event(r, full=True):
 # ── Registre d'agents (kill switch, dashboard) ──────────────────────────────
 
 _AGENT_ID_RE = re.compile(r"^[A-Za-z0-9_.:@\- ]{1,64}$")
-_AGENT_SEEN = {}      # (org, agent) -> dernier upsert (limite l'écriture en base)
-_AGENT_STATUS = {}    # (org, agent) -> (ts, status) cache court de lecture
+_AGENT_SEEN = {}  # (org, agent) -> dernier upsert (limite l'écriture en base)
+_AGENT_STATUS = {}  # (org, agent) -> (ts, status) cache court de lecture
 _AGENT_TOUCH_EVERY = 15.0
 # Anciens SDK (sans en-tête) : seuls ces endpoints d'ingestion font apparaître l'agent
 _INGEST_ENDPOINTS = {"api.receive_span", "api.decide", "api.api_sdk_create_approval"}
@@ -199,7 +202,8 @@ def _agent_status(org_id, agent_id):
     try:
         row, _ = _db_run(
             "SELECT status FROM connected_agents WHERE org_id = ? AND agent_id = ?",
-            (org_id, agent_id), fetch="one",
+            (org_id, agent_id),
+            fetch="one",
         )
     except Exception as exc:
         logger.warning("agent_status_lookup_failed", error=str(exc))
@@ -214,12 +218,16 @@ def _reject_if_agent_disconnected():
     agent_id = _request_agent_id()
     org_id = getattr(g, "org_id", None)
     if agent_id and org_id and _agent_status(org_id, agent_id) == "disconnected":
-        logger.warning("agent_request_refused_disconnected", agent_id=agent_id, org_id=org_id)
-        return jsonify({
-            "error": "agent_disconnected",
-            "agent_id": agent_id,
-            "message": "This agent was disconnected from the Cerbere dashboard.",
-        }), 403
+        logger.warning(
+            "agent_request_refused_disconnected", agent_id=agent_id, org_id=org_id
+        )
+        return jsonify(
+            {
+                "error": "agent_disconnected",
+                "agent_id": agent_id,
+                "message": "This agent was disconnected from the Cerbere dashboard.",
+            }
+        ), 403
     return None
 
 
@@ -238,7 +246,8 @@ def _touch_agent(org_id, agent_id, sdk_version=None, name=None):
             last_seen_at = CURRENT_TIMESTAMP,
             sdk_version = COALESCE(excluded.sdk_version, connected_agents.sdk_version)
         """,
-        (org_id, agent_id, name or agent_id, sdk_version), commit=True,
+        (org_id, agent_id, name or agent_id, sdk_version),
+        commit=True,
     )
 
 
@@ -256,7 +265,11 @@ def _register_agent_activity(response):
             agent_id = _request_agent_id()
             if org_id and agent_id:
                 sdk_version = (request.headers.get("X-Agent-Sdk") or "")[:32] or None
-                name = getattr(g, "api_key_name", None) if agent_id.startswith("key:") else None
+                name = (
+                    getattr(g, "api_key_name", None)
+                    if agent_id.startswith("key:")
+                    else None
+                )
                 _touch_agent(org_id, agent_id, sdk_version, name)
     except Exception as exc:  # ne jamais casser une réponse pour de la télémétrie
         logger.debug("agent_touch_failed", error=str(exc))
@@ -284,7 +297,8 @@ def _agent_state(status, last_seen):
 def _audit_human_action(event_name, resource, action, details):
     """Trace best-effort dans l'audit trail infalsifiable (onglet Compliance Audit)."""
     try:
-        from collector.audit_routes import get_audit_log, AuditEventType
+        from collector.audit_routes import AuditEventType, get_audit_log
+
         audit = get_audit_log()
         if audit:
             audit.log_event(

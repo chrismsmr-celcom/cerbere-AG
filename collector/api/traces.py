@@ -1,12 +1,9 @@
 """GET /api/traces, GET /api/traces/<trace_id>."""
 
-import json
-import sqlite3
+from flask import g, jsonify
 
-from flask import jsonify, g
-
-from collector.db import get_db, dict_from_row, is_postgres, _get_db_path, sql_placeholder
-from collector.api.helpers import api_bp, _as_json, _sqlite_connect
+from collector.api.helpers import _as_json, _sqlite_connect, api_bp
+from collector.db import dict_from_row, get_db, is_postgres
 
 
 @api_bp.route("/api/traces")
@@ -14,7 +11,8 @@ def list_traces():
     if is_postgres():
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT trace_id, COUNT(*) as span_count,
                    SUM(CASE WHEN blocked THEN 1 ELSE 0 END) as blocked_count,
                    SUM(cost_usd) as total_cost,
@@ -23,14 +21,17 @@ def list_traces():
             FROM spans WHERE org_id = %s
             GROUP BY trace_id
             ORDER BY last_seen DESC LIMIT 100
-        """, (g.org_id,))
+        """,
+            (g.org_id,),
+        )
         rows = [dict_from_row(r, cur) for r in cur.fetchall()]
         conn.close()
     else:
         conn = _sqlite_connect()
         try:
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT trace_id, COUNT(*) as span_count,
                        SUM(CASE WHEN blocked THEN 1 ELSE 0 END) as blocked_count,
                        SUM(cost_usd) as total_cost,
@@ -39,7 +40,9 @@ def list_traces():
                 FROM spans WHERE org_id = ?
                 GROUP BY trace_id
                 ORDER BY last_seen DESC LIMIT 100
-            """, (g.org_id,))
+            """,
+                (g.org_id,),
+            )
             rows = [dict_from_row(r, cur) for r in cur.fetchall()]
         finally:
             conn.close()
@@ -51,16 +54,20 @@ def get_trace(trace_id):
     if is_postgres():
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM spans WHERE trace_id = %s AND org_id = %s ORDER BY timestamp",
-                    (trace_id, g.org_id))
+        cur.execute(
+            "SELECT * FROM spans WHERE trace_id = %s AND org_id = %s ORDER BY timestamp",
+            (trace_id, g.org_id),
+        )
         rows = [dict_from_row(r, cur) for r in cur.fetchall()]
         conn.close()
     else:
         conn = _sqlite_connect()
         try:
             cur = conn.cursor()
-            cur.execute("SELECT * FROM spans WHERE trace_id = ? AND org_id = ? ORDER BY timestamp",
-                        (trace_id, g.org_id))
+            cur.execute(
+                "SELECT * FROM spans WHERE trace_id = ? AND org_id = ? ORDER BY timestamp",
+                (trace_id, g.org_id),
+            )
             rows = [dict_from_row(r, cur) for r in cur.fetchall()]
         finally:
             conn.close()

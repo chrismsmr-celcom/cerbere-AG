@@ -14,14 +14,14 @@ Format clé API agent :
   ag_{tenant_short}_{org_short}_{agent_short}_{random32}
   Ex: ag_acme_fin_prod_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
 """
-import os
+
+import hashlib
 import re
 import secrets
-import hashlib
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 
 class Role(str, Enum):
@@ -31,7 +31,7 @@ class Role(str, Enum):
     VIEWER = "viewer"
 
     @classmethod
-    def hierarchy(cls) -> Dict["Role", int]:
+    def hierarchy(cls) -> dict["Role", int]:
         """Plus le niveau est élevé, plus le rôle a de permissions."""
         return {
             cls.ADMIN: 100,
@@ -55,31 +55,34 @@ class IdentityType(str, Enum):
 @dataclass
 class Tenant:
     """Entreprise cliente (top-level isolation)."""
+
     tenant_id: str
     name: str
     created_at: float = field(default_factory=time.time)
     active: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 @dataclass
 class Org:
     """Département/projet au sein d'un tenant."""
+
     org_id: str
     tenant_id: str
     name: str
     created_at: float = field(default_factory=time.time)
     active: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 @dataclass
 class User:
     """Utilisateur humain (se connecte au dashboard)."""
+
     user_id: str
     org_id: str
     tenant_id: str
@@ -89,7 +92,7 @@ class User:
     created_at: float = field(default_factory=time.time)
     active: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["role"] = self.role.value
         return d
@@ -98,6 +101,7 @@ class User:
 @dataclass
 class Agent:
     """Agent IA (bot) avec sa propre clé API."""
+
     agent_id: str
     org_id: str
     tenant_id: str
@@ -107,7 +111,7 @@ class Agent:
     active: bool = True
     max_budget_per_day: float = 100.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -117,13 +121,14 @@ class ResolvedIdentity:
     Identité résolue à partir d'une clé API.
     Injectée dans g.identity par le middleware auth.
     """
+
     identity_type: IdentityType
     tenant_id: str
     org_id: str
     subject_id: str  # user_id ou agent_id
     role: Role
-    agent_name: Optional[str] = None
-    user_email: Optional[str] = None
+    agent_name: str | None = None
+    user_email: str | None = None
 
     def is_admin(self) -> bool:
         return self.role == Role.ADMIN
@@ -131,7 +136,7 @@ class ResolvedIdentity:
     def has_role(self, required: Role) -> bool:
         return self.role.has_permission(required)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["identity_type"] = self.identity_type.value
         d["role"] = self.role.value
@@ -167,7 +172,7 @@ def generate_agent_api_key(tenant_id: str, org_id: str, agent_id: str) -> str:
     return f"ag_{t_short}_{o_short}_{a_short}_{random_part}"
 
 
-def parse_agent_api_key(key: str) -> Optional[Dict[str, str]]:
+def parse_agent_api_key(key: str) -> dict[str, str] | None:
     """
     Parse une clé API agent.
     Retourne None si format invalide (ex: ancienne clé "ag-xxx").
@@ -197,19 +202,31 @@ def hash_key(key: str) -> str:
 # Permissions par rôle (ce que chaque rôle peut faire)
 PERMISSIONS = {
     Role.ADMIN: {
-        "org:create", "org:delete",
-        "user:create", "user:delete", "user:assign_role",
-        "agent:create", "agent:delete", "agent:revoke",
-        "traces:view_all", "audit:view", "audit:verify",
-        "settings:edit", "billing:view",
+        "org:create",
+        "org:delete",
+        "user:create",
+        "user:delete",
+        "user:assign_role",
+        "agent:create",
+        "agent:delete",
+        "agent:revoke",
+        "traces:view_all",
+        "audit:view",
+        "audit:verify",
+        "settings:edit",
+        "billing:view",
     },
     Role.DEVELOPER: {
-        "agent:create", "agent:revoke",  # ses propres agents
-        "traces:view_own_org", "audit:view",
+        "agent:create",
+        "agent:revoke",  # ses propres agents
+        "traces:view_own_org",
+        "audit:view",
         "dashboard:view",
     },
     Role.AUDITOR: {
-        "traces:view_own_org", "audit:view", "audit:verify",
+        "traces:view_own_org",
+        "audit:view",
+        "audit:verify",
         "dashboard:view",
     },
     Role.VIEWER: {

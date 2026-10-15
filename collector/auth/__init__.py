@@ -18,59 +18,13 @@ Ce package conserve exactement la surface publique de l'ancien module : tout ce 
   routes_*.py             routes Flask (supabase, login, signup, session, clés API)
 """
 
-from .blueprint import auth_bp  # noqa: F401
-
-from .config import (  # noqa: F401
-    MAGIC_LINK_TTL_SECONDS,
-    HUMAN_SESSION_TTL_SECONDS,
-    MAGIC_LINK_TOKEN_BYTES,
-    MAGIC_LINK_COOKIE,
-    MAGIC_LINK_ENABLED,
-    _env_first,
-    SMTP_HOST,
-    SMTP_PORT,
-    SMTP_USERNAME,
-    SMTP_PASSWORD,
-    SMTP_FROM,
-    SMTP_USE_TLS,
-    APP_BASE_URL,
-    PROTECTED_ENDPOINTS,
-)
-
-from .utils import (  # noqa: F401
-    safe_compare,
-    hash_key,
-    _hash_magic_token,
-    _utcnow,
-    _utc_iso,
-    _parse_datetime,
-    _normalize_email,
-    _valid_email,
-)
-
-from .users import (  # noqa: F401
-    _db_execute,
-    _user_by_email,
-    _user_by_id,
-    _user_is_active,
-)
-
-from .magic_link import (  # noqa: F401
-    _ensure_magic_link_table,
-    _invalidate_existing_magic_links,
-    _store_magic_link,
-    _consume_magic_link,
-    _build_magic_link,
-    _send_magic_link_email,
-)
-
-from .sessions import (  # noqa: F401
-    _human_session_token,
-    _resolve_human_session,
-    _set_human_session,
-    _clear_human_session,
-    _session_token,
-    _session_org_id,
+from collector.supabase_auth import (  # noqa: F401
+    SUPABASE_ANON_KEY,
+    SUPABASE_ENABLED,
+    SUPABASE_URL,
+    SupabaseAuthError,
+    get_or_provision_user,
+    verify_supabase_jwt,
 )
 
 from .api_keys import (  # noqa: F401
@@ -79,67 +33,97 @@ from .api_keys import (  # noqa: F401
     _lookup_org_by_key,
     resolve_org_id,
 )
-
+from .audit_helpers import (  # noqa: F401
+    _audit_login,
+)
+from .blueprint import auth_bp  # noqa: F401
+from .config import (  # noqa: F401
+    APP_BASE_URL,
+    HUMAN_SESSION_TTL_SECONDS,
+    MAGIC_LINK_COOKIE,
+    MAGIC_LINK_ENABLED,
+    MAGIC_LINK_TOKEN_BYTES,
+    MAGIC_LINK_TTL_SECONDS,
+    PROTECTED_ENDPOINTS,
+    SMTP_FROM,
+    SMTP_HOST,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_USE_TLS,
+    SMTP_USERNAME,
+    _env_first,
+)
 from .identity_resolution import (  # noqa: F401
     _build_user_identity,
     resolve_full_identity,
 )
-
+from .magic_link import (  # noqa: F401
+    _build_magic_link,
+    _consume_magic_link,
+    _ensure_magic_link_table,
+    _invalidate_existing_magic_links,
+    _send_magic_link_email,
+    _store_magic_link,
+)
 from .middleware import (  # noqa: F401
+    check_auth,
     require_auth,
     require_human_auth,
-    check_auth,
 )
-
-from .rbac import (  # noqa: F401
-    authorize_resource_access,
-    require_role,
-    require_permission,
-)
-
-from .audit_helpers import (  # noqa: F401
-    _audit_login,
-)
-
 from .pages import (  # noqa: F401
-    SUPABASE_LOGIN_HTML,
     LOGIN_HTML,
     SIGNUP_HTML,
+    SUPABASE_LOGIN_HTML,
 )
-
-from .routes_supabase import (  # noqa: F401
-    supabase_public_config,
-    supabase_session,
+from .rbac import (  # noqa: F401
+    authorize_resource_access,
+    require_permission,
+    require_role,
 )
-
-from .routes_login import (  # noqa: F401
-    login,
-    verify_magic_link,
-)
-
-from .routes_signup import (  # noqa: F401
-    signup,
-)
-
-from .routes_session import (  # noqa: F401
-    auth_login,
-    auth_me,
-    logout,
-    healthz,
-    dashboard,
-)
-
 from .routes_keys import (  # noqa: F401
     create_api_key,
     list_api_keys,
     revoke_api_key,
 )
-
-from collector.supabase_auth import (  # noqa: F401,E402
-    SUPABASE_ANON_KEY,
-    SUPABASE_ENABLED,
-    SUPABASE_URL,
-    SupabaseAuthError,
-    get_or_provision_user,
-    verify_supabase_jwt,
+from .routes_login import (  # noqa: F401
+    login,
+    verify_magic_link,
+)
+from .routes_session import (  # noqa: F401
+    auth_login,
+    auth_me,
+    dashboard,
+    healthz,
+    logout,
+)
+from .routes_signup import (  # noqa: F401
+    signup,
+)
+from .routes_supabase import (  # noqa: F401
+    supabase_public_config,
+    supabase_session,
+)
+from .sessions import (  # noqa: F401
+    _clear_human_session,
+    _human_session_token,
+    _resolve_human_session,
+    _session_org_id,
+    _session_token,
+    _set_human_session,
+)
+from .users import (  # noqa: F401
+    _db_execute,
+    _user_by_email,
+    _user_by_id,
+    _user_is_active,
+)
+from .utils import (  # noqa: F401
+    _hash_magic_token,
+    _normalize_email,
+    _parse_datetime,
+    _utc_iso,
+    _utcnow,
+    _valid_email,
+    hash_key,
+    safe_compare,
 )

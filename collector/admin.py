@@ -26,10 +26,7 @@ from flask import (
 from collector.auth import hash_key, safe_compare
 from collector.db import get_pg_conn, is_postgres
 
-
-logger = structlog.get_logger(
-    "agentguard.admin"
-)
+logger = structlog.get_logger("agentguard.admin")
 
 admin_bp = Blueprint(
     "admin",
@@ -51,6 +48,7 @@ DB_SQLITE_PATH = os.environ.get(
 # ADMIN AUTHENTICATION
 # ==============================================================
 
+
 def _verify_admin_secret() -> bool:
     """
     Verify the administrator secret.
@@ -68,9 +66,7 @@ def _verify_admin_secret() -> bool:
     history, referrer headers, monitoring systems, etc.
     """
 
-    admin_secret = current_app.config.get(
-        "ADMIN_SECRET"
-    )
+    admin_secret = current_app.config.get("ADMIN_SECRET")
 
     if not admin_secret:
         return False
@@ -121,6 +117,7 @@ def _verify_admin_secret() -> bool:
 # GET GLOBAL API KEY
 # ==============================================================
 
+
 @admin_bp.route(
     "/api/key",
     methods=["GET"],
@@ -132,40 +129,21 @@ def show_key():
     Admin authentication is mandatory.
     """
 
-    if not current_app.config.get(
-        "ADMIN_SECRET"
-    ):
-        return jsonify(
-            {
-                "error": (
-                    "AGENTGUARD_ADMIN_SECRET "
-                    "not configured"
-                )
-            }
-        ), 404
+    if not current_app.config.get("ADMIN_SECRET"):
+        return jsonify({"error": ("AGENTGUARD_ADMIN_SECRET not configured")}), 404
 
     if not _verify_admin_secret():
         return jsonify(
-            {
-                "error": (
-                    "Admin secret required "
-                    "(X-Admin-Secret header)"
-                )
-            }
+            {"error": ("Admin secret required (X-Admin-Secret header)")}
         ), 403
 
-    return jsonify(
-        {
-            "api_key": current_app.config[
-                "API_KEY"
-            ]
-        }
-    ), 200
+    return jsonify({"api_key": current_app.config["API_KEY"]}), 200
 
 
 # ==============================================================
 # CREATE CUSTOMER
 # ==============================================================
+
 
 @admin_bp.route(
     "/admin/customers",
@@ -182,26 +160,14 @@ def create_customer():
     # ADMIN AUTH
     # ----------------------------------------------------------
 
-    if not current_app.config.get(
-        "ADMIN_SECRET"
-    ):
-        return jsonify(
-            {
-                "error": (
-                    "AGENTGUARD_ADMIN_SECRET "
-                    "not configured"
-                )
-            }
-        ), 404
+    if not current_app.config.get("ADMIN_SECRET"):
+        return jsonify({"error": ("AGENTGUARD_ADMIN_SECRET not configured")}), 404
 
     if not _verify_admin_secret():
         return jsonify(
             {
                 "error": "Admin secret required",
-                "hint": (
-                    "Use X-Admin-Secret header "
-                    "(never query parameters)"
-                ),
+                "hint": ("Use X-Admin-Secret header (never query parameters)"),
             }
         ), 403
 
@@ -209,9 +175,7 @@ def create_customer():
     # INPUT
     # ----------------------------------------------------------
 
-    payload = request.get_json(
-        silent=True
-    ) or {}
+    payload = request.get_json(silent=True) or {}
 
     org_name = str(
         payload.get(
@@ -220,29 +184,22 @@ def create_customer():
         )
     ).strip()
 
-    plan = str(
-        payload.get(
-            "plan",
-            "free",
+    plan = (
+        str(
+            payload.get(
+                "plan",
+                "free",
+            )
         )
-    ).strip().lower()
+        .strip()
+        .lower()
+    )
 
     if not org_name:
-        return jsonify(
-            {
-                "error": "org_name is required"
-            }
-        ), 400
+        return jsonify({"error": "org_name is required"}), 400
 
     if len(org_name) > 200:
-        return jsonify(
-            {
-                "error": (
-                    "org_name must be "
-                    "200 characters or less"
-                )
-            }
-        ), 400
+        return jsonify({"error": ("org_name must be 200 characters or less")}), 400
 
     allowed_plans = {
         "free",
@@ -253,27 +210,16 @@ def create_customer():
 
     if plan not in allowed_plans:
         return jsonify(
-            {
-                "error": (
-                    "plan must be one of: "
-                    "free, pro, startup, enterprise"
-                )
-            }
+            {"error": ("plan must be one of: free, pro, startup, enterprise")}
         ), 400
 
     # ----------------------------------------------------------
     # GENERATE CREDENTIALS
     # ----------------------------------------------------------
 
-    org_id = (
-        "org_"
-        + secrets.token_urlsafe(8)
-    )
+    org_id = "org_" + secrets.token_urlsafe(8)
 
-    new_key = (
-        "ag_"
-        + secrets.token_urlsafe(32)
-    )
+    new_key = "ag_" + secrets.token_urlsafe(32)
 
     key_hash = hash_key(new_key)
 
@@ -282,9 +228,7 @@ def create_customer():
     # ----------------------------------------------------------
 
     try:
-
         if is_postgres():
-
             conn = get_pg_conn()
 
             try:
@@ -325,10 +269,7 @@ def create_customer():
                 conn.close()
 
         else:
-
-            conn = sqlite3.connect(
-                DB_SQLITE_PATH
-            )
+            conn = sqlite3.connect(DB_SQLITE_PATH)
 
             try:
                 cur = conn.cursor()
@@ -373,30 +314,23 @@ def create_customer():
             org_id=org_id,
         )
 
-        return jsonify(
-            {
-                "error": "database error"
-            }
-        ), 500
+        return jsonify({"error": "database error"}), 500
 
     # ----------------------------------------------------------
     # AUDIT
     # ----------------------------------------------------------
 
     try:
-
         from collector.audit_routes import (
-            get_audit_log,
             AuditEventType,
+            get_audit_log,
         )
 
         audit = get_audit_log()
 
         if audit:
             audit.log_event(
-                event_type=(
-                    AuditEventType.API_KEY_CREATED
-                ),
+                event_type=(AuditEventType.API_KEY_CREATED),
                 org_id=org_id,
                 actor="admin",
                 resource=f"api_key:{org_id}",
@@ -438,8 +372,7 @@ def create_customer():
             "plan": plan,
             "api_key": new_key,
             "warning": (
-                "This API key will NEVER be shown "
-                "again. Store it securely now."
+                "This API key will NEVER be shown again. Store it securely now."
             ),
         }
     ), 201
@@ -448,6 +381,7 @@ def create_customer():
 # ==============================================================
 # REVOKE CUSTOMER
 # ==============================================================
+
 
 @admin_bp.route(
     "/admin/customers/<org_id>/revoke",
@@ -469,26 +403,14 @@ def revoke_customer(org_id):
     # ADMIN AUTH
     # ----------------------------------------------------------
 
-    if not current_app.config.get(
-        "ADMIN_SECRET"
-    ):
-        return jsonify(
-            {
-                "error": (
-                    "AGENTGUARD_ADMIN_SECRET "
-                    "not configured"
-                )
-            }
-        ), 404
+    if not current_app.config.get("ADMIN_SECRET"):
+        return jsonify({"error": ("AGENTGUARD_ADMIN_SECRET not configured")}), 404
 
     if not _verify_admin_secret():
         return jsonify(
             {
                 "error": "Admin secret required",
-                "hint": (
-                    "Use X-Admin-Secret header "
-                    "(never query parameters)"
-                ),
+                "hint": ("Use X-Admin-Secret header (never query parameters)"),
             }
         ), 403
 
@@ -499,27 +421,17 @@ def revoke_customer(org_id):
     org_id = str(org_id).strip()
 
     if not org_id:
-        return jsonify(
-            {
-                "error": "org_id is required"
-            }
-        ), 400
+        return jsonify({"error": "org_id is required"}), 400
 
     if len(org_id) > 128:
-        return jsonify(
-            {
-                "error": "invalid org_id"
-            }
-        ), 400
+        return jsonify({"error": "invalid org_id"}), 400
 
     # ----------------------------------------------------------
     # REVOKE ALL KEYS
     # ----------------------------------------------------------
 
     try:
-
         if is_postgres():
-
             conn = get_pg_conn()
 
             try:
@@ -546,10 +458,7 @@ def revoke_customer(org_id):
                 conn.close()
 
         else:
-
-            conn = sqlite3.connect(
-                DB_SQLITE_PATH
-            )
+            conn = sqlite3.connect(DB_SQLITE_PATH)
 
             try:
                 cur = conn.cursor()
@@ -580,30 +489,23 @@ def revoke_customer(org_id):
             org_id=org_id,
         )
 
-        return jsonify(
-            {
-                "error": "database error"
-            }
-        ), 500
+        return jsonify({"error": "database error"}), 500
 
     # ----------------------------------------------------------
     # AUDIT
     # ----------------------------------------------------------
 
     try:
-
         from collector.audit_routes import (
-            get_audit_log,
             AuditEventType,
+            get_audit_log,
         )
 
         audit = get_audit_log()
 
         if audit:
             audit.log_event(
-                event_type=(
-                    AuditEventType.API_KEY_REVOKED
-                ),
+                event_type=(AuditEventType.API_KEY_REVOKED),
                 org_id=org_id,
                 actor="admin",
                 resource=f"api_key:{org_id}",

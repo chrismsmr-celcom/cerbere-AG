@@ -53,7 +53,7 @@ def _ensure_api_keys_table():
             """)
             conn.commit()
         finally:
-            conn.close()    
+            conn.close()
 
 
 def _ensure_api_keys_table_safe():
@@ -131,7 +131,9 @@ def _lookup_org_by_key(key: str):
         if row:
             if has_name:
                 try:
-                    g.api_key_name = str(row[1])   # sert à nommer les agents des anciens SDK
+                    g.api_key_name = str(
+                        row[1]
+                    )  # sert à nommer les agents des anciens SDK
                 except RuntimeError:
                     pass
             return row[0]
@@ -167,9 +169,7 @@ def resolve_org_id(key: str):
 
                 logger.info(
                     "platform_identity_resolved",
-                    service=platform_identity.get(
-                        "service_name"
-                    ),
+                    service=platform_identity.get("service_name"),
                 )
 
                 return "platform"

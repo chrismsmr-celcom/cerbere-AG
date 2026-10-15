@@ -11,6 +11,7 @@ v2 (2026-09-26): fixed against benchmark findings of 2026-09-25/26:
 - Dot-separated spelled words ("i.g.n.o.r.e.") leave trailing dots on
   every collapsed word ("ignore. all."); a cleanup pass strips them.
 """
+
 import re
 import unicodedata
 
@@ -18,16 +19,16 @@ import unicodedata
 # NOTE: mapping is context-free — map each glyph to the latin letter it is
 # most commonly substituted for in adversarial prompts.
 CONFUSABLES = {
-    "\u027f": "i",   # ɿ -> i (commonly substitutes the i of "ignore")
-    "\u0269": "l",   # ɩ -> l
-    "\u0251": "a",   # ɑ -> a
-    "\u025b": "e",   # ɛ -> e
-    "\u028c": "a",   # ʌ -> a
-    "\u0430": "a",   # cyrillic а -> a
-    "\u0435": "e",   # cyrillic е -> e
-    "\u043e": "o",   # cyrillic о -> o
-    "\u0440": "p",   # cyrillic р -> p
-    "\u0441": "c",   # cyrillic с -> c
+    "\u027f": "i",  # ɿ -> i (commonly substitutes the i of "ignore")
+    "\u0269": "l",  # ɩ -> l
+    "\u0251": "a",  # ɑ -> a
+    "\u025b": "e",  # ɛ -> e
+    "\u028c": "a",  # ʌ -> a
+    "\u0430": "a",  # cyrillic а -> a
+    "\u0435": "e",  # cyrillic е -> e
+    "\u043e": "o",  # cyrillic о -> o
+    "\u0440": "p",  # cyrillic р -> p
+    "\u0441": "c",  # cyrillic с -> c
 }
 
 # Zero-width chars act as invisible word separators -> replace with a space
@@ -65,9 +66,7 @@ def normalize_for_detection(text: str) -> str:
     s = ZERO_WIDTH.sub(" ", s)
 
     # 5. Collapse "i.g.n.o.r.e" spelled-out words
-    s = DOT_SEPARATED.sub(
-        lambda m: "".join(c for c in m.group(0) if c != "."), s
-    )
+    s = DOT_SEPARATED.sub(lambda m: "".join(c for c in m.group(0) if c != "."), s)
 
     # 6. Strip residual trailing dots left by pass 5
     s = TRAILING_DOT.sub("", s)

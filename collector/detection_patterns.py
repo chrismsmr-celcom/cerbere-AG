@@ -10,15 +10,15 @@ Do not add new patterns here. Add them to agentguard/patterns.py instead.
 This file just re-exports the same functions so any existing import of
 `collector.detection_patterns` keeps working.
 """
+
 from agentguard.patterns import (  # noqa: F401
+    DANGEROUS_COMMANDS_PATTERNS,
     DIRECT_INJECTION_PATTERNS,
+    EXFILTRATION_PATTERNS,
     JAILBREAK_PATTERNS,
     SYSTEM_EXTRACTION_PATTERNS,
-    EXFILTRATION_PATTERNS,
-    DANGEROUS_COMMANDS_PATTERNS,
-    get_extended_strong_patterns,
     get_all_strong_patterns,
-    get_weak_patterns,
+    get_extended_strong_patterns,
     get_pattern_stats,
+    get_weak_patterns,
 )
-

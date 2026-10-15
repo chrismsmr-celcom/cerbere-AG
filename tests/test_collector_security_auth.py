@@ -5,7 +5,6 @@ sans valeur par défaut, rate-limit sur /span.
 
 Lancer : pytest test_security.py -v
 """
-import os
 
 import pytest
 
@@ -21,8 +20,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("AGENTGUARD_DB_TYPE", "sqlite")
 
-    from collector.db import init_db
     from collector.app import create_app
+    from collector.db import init_db
 
     init_db()
     app = create_app()
@@ -33,14 +32,21 @@ def client(tmp_path, monkeypatch):
 
 def _span_payload(prompt="hello", trace_id="t1"):
     return {
-        "trace_id": trace_id, "span_id": "s1", "span_type": "llm_call",
-        "timestamp": 1.0, "latency_ms": 10, "cost_usd": 0.0, "blocked": False,
-        "input_data": {"prompt": prompt}, "output_data": {"response": "ok"},
+        "trace_id": trace_id,
+        "span_id": "s1",
+        "span_type": "llm_call",
+        "timestamp": 1.0,
+        "latency_ms": 10,
+        "cost_usd": 0.0,
+        "blocked": False,
+        "input_data": {"prompt": prompt},
+        "output_data": {"response": "ok"},
         "security_checks": [],
     }
 
 
 # ── AUTH : routes GET protégées ──
+
 
 @pytest.mark.parametrize("path", ["/api/metrics", "/api/traces", "/api/traces/x"])
 def test_get_routes_require_auth_json(client, path):
@@ -66,20 +72,24 @@ def test_query_string_key_no_longer_grants_auth(client):
     assert r.status_code == 401
 
 
-@pytest.mark.xfail(reason="AUDIT P0-5/6 (2026-09) : comportement a verifier apres reparation du fixture create_app() -- voir issue de suivi rate-limit/auth")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-5/6 (2026-09) : comportement a verifier apres reparation du fixture create_app() -- voir issue de suivi rate-limit/auth"
+)
 def test_login_with_wrong_key_rejected(client):
     r = client.post("/login", data={"api_key": "wrong-key"})
     assert r.status_code == 401
 
 
-@pytest.mark.xfail(reason="AUDIT P0-5/6 (2026-09) : comportement a verifier apres reparation du fixture create_app() -- voir issue de suivi rate-limit/auth")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-5/6 (2026-09) : comportement a verifier apres reparation du fixture create_app() -- voir issue de suivi rate-limit/auth"
+)
 def test_login_then_dashboard_and_api_work_via_session_cookie(client):
     r1 = client.post("/login", data={"api_key": TEST_API_KEY}, follow_redirects=False)
     assert r1.status_code == 302  # redirige vers le dashboard après succès
 
-    r2 = client.get("/")  # même client de test = cookie de session envoyé automatiquement
+    r2 = client.get(
+        "/"
+    )  # même client de test = cookie de session envoyé automatiquement
     assert r2.status_code == 200
 
     r3 = client.get("/api/metrics")
@@ -88,21 +98,24 @@ def test_login_then_dashboard_and_api_work_via_session_cookie(client):
 
 # ── AUTH : /span (POST) ──
 
+
 def test_span_post_requires_auth(client):
     r = client.post("/span", json=_span_payload())
     assert r.status_code == 401
 
 
 def test_span_post_accepts_header_key(client):
-    r = client.post("/span", json=_span_payload(),
-                     headers={"X-API-Key": TEST_API_KEY})
+    r = client.post("/span", json=_span_payload(), headers={"X-API-Key": TEST_API_KEY})
     assert r.status_code == 201
 
 
 # ── PII : redaction avant stockage ──
 
+
 def test_pii_is_redacted_before_storage(client):
-    payload = _span_payload(prompt="mon email test@example.com et carte 4111-1111-1111-1111")
+    payload = _span_payload(
+        prompt="mon email test@example.com et carte 4111-1111-1111-1111"
+    )
     r = client.post("/span", json=payload, headers={"X-API-Key": TEST_API_KEY})
     assert r.status_code == 201
 
@@ -115,16 +128,19 @@ def test_pii_is_redacted_before_storage(client):
 
 # ── /api/key : pas de secret par défaut ──
 
+
 def test_api_key_endpoint_disabled_without_admin_secret(client):
     r = client.get("/api/key", query_string={"admin": "changeme"})
     assert r.status_code == 404
 
 
-@pytest.mark.xfail(reason="AUDIT P0-5/6 (2026-09) : comportement a verifier apres reparation du fixture create_app() -- voir issue de suivi rate-limit/auth")
-
+@pytest.mark.xfail(
+    reason="AUDIT P0-5/6 (2026-09) : comportement a verifier apres reparation du fixture create_app() -- voir issue de suivi rate-limit/auth"
+)
 def test_api_key_endpoint_works_with_configured_secret(client, monkeypatch):
     monkeypatch.setenv("AGENTGUARD_ADMIN_SECRET", "real-secret")
     import collector
+
     importlib.reload(collector)
     with collector.app.test_client() as c:
         wrong = c.get("/api/key", query_string={"admin": "changeme"})
@@ -134,6 +150,7 @@ def test_api_key_endpoint_works_with_configured_secret(client, monkeypatch):
 
 
 # ── RATE LIMIT ──
+
 
 # Au lieu de 35 requêtes, utiliser la limite actuelle + 10%
 def test_span_rate_limit_kicks_in(client):
@@ -146,4 +163,6 @@ def test_span_rate_limit_kicks_in(client):
     codes = [r.status_code for r in responses]
     assert 429 in codes, "le rate-limit ne s'est pas déclenché"
     # Vérifier que les 60 premières sont passées (201)
-    assert all(r.status_code == 201 for r in responses[:limit]), "les requêtes autorisées devraient passer"
+    assert all(r.status_code == 201 for r in responses[:limit]), (
+        "les requêtes autorisées devraient passer"
+    )

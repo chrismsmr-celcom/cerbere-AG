@@ -28,11 +28,10 @@ le test doit être adapté à la nouvelle architecture plutôt que de
 réintroduire artificiellement du code inline.
 """
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Imports des artefacts sous test
@@ -49,16 +48,11 @@ except ImportError as exc:  # pragma: no cover
 
 # Le JavaScript du dashboard est désormais servi comme fichier statique.
 DASHBOARD_JS_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "collector"
-    / "static"
-    / "dashboard.js"
+    Path(__file__).resolve().parents[1] / "collector" / "static" / "dashboard.js"
 )
 
 if not DASHBOARD_JS_PATH.exists():  # pragma: no cover
-    pytest.fail(
-        f"Fichier JavaScript du dashboard introuvable : {DASHBOARD_JS_PATH}"
-    )
+    pytest.fail(f"Fichier JavaScript du dashboard introuvable : {DASHBOARD_JS_PATH}")
 
 DASHBOARD_JS = DASHBOARD_JS_PATH.read_text(encoding="utf-8")
 
@@ -81,10 +75,7 @@ def _import_auth_html():
     """Retourne un dict {nom: contenu} des blocs HTML de auth.py."""
     import collector.auth as auth_mod
 
-    return {
-        name: getattr(auth_mod, name, None)
-        for name in AUTH_HTML_NAMES
-    }
+    return {name: getattr(auth_mod, name, None) for name in AUTH_HTML_NAMES}
 
 
 AUTH_HTML = _import_auth_html()
@@ -141,9 +132,7 @@ def test_auth_html_block_exists_and_is_non_empty(block_name):
         "Mettre à jour cet import."
     )
 
-    assert isinstance(content, str), (
-        f"{block_name} doit être une str"
-    )
+    assert isinstance(content, str), f"{block_name} doit être une str"
 
     assert len(content.strip()) > 500, (
         f"{block_name} semble tronqué ({len(content)} octets)"
@@ -159,29 +148,20 @@ def test_auth_html_block_contains_markers(block_name):
     content = AUTH_HTML.get(block_name) or ""
 
     missing = [
-        marker
-        for marker in AUTH_HTML_MARKERS[block_name]
-        if marker not in content
+        marker for marker in AUTH_HTML_MARKERS[block_name] if marker not in content
     ]
 
-    assert not missing, (
-        f"{block_name} : marqueurs manquants {missing}"
-    )
+    assert not missing, f"{block_name} : marqueurs manquants {missing}"
 
 
 def test_auth_html_blocks_are_distinct():
     """Les 3 blocs doivent être distincts."""
-    present = {
-        key: value
-        for key, value in AUTH_HTML.items()
-        if value
-    }
+    present = {key: value for key, value in AUTH_HTML.items() if value}
 
     values = list(present.values())
 
     assert len(values) == len(set(values)), (
-        "Deux blocs HTML de auth.py sont identiques - "
-        "duplication suspecte"
+        "Deux blocs HTML de auth.py sont identiques - duplication suspecte"
     )
 
 
@@ -236,9 +216,7 @@ def test_dashboard_html_contains_marker(marker):
     Ces marqueurs doivent réellement appartenir au document HTML et ne
     sont donc pas recherchés dans le JavaScript.
     """
-    assert marker in DASHBOARD_HTML, (
-        f"DASHBOARD_HTML : marqueur manquant {marker!r}"
-    )
+    assert marker in DASHBOARD_HTML, f"DASHBOARD_HTML : marqueur manquant {marker!r}"
 
 
 # Ces marqueurs peuvent légitimement se trouver dans dashboard.js.
@@ -283,25 +261,20 @@ def test_dashboard_html_is_non_empty_and_balanced():
     """
     assert isinstance(DASHBOARD_HTML, str)
     assert len(DASHBOARD_HTML.strip()) > 10_000, (
-        "DASHBOARD_HTML semble anormalement petit "
-        f"({len(DASHBOARD_HTML)} octets)"
+        f"DASHBOARD_HTML semble anormalement petit ({len(DASHBOARD_HTML)} octets)"
     )
 
     assert "<!DOCTYPE html>" in DASHBOARD_HTML, (
         "DASHBOARD_HTML ne contient pas de DOCTYPE"
     )
 
-    assert "<html" in DASHBOARD_HTML, (
-        "DASHBOARD_HTML ne contient pas de balise <html>"
-    )
+    assert "<html" in DASHBOARD_HTML, "DASHBOARD_HTML ne contient pas de balise <html>"
 
     assert "</html>" in DASHBOARD_HTML, (
         "DASHBOARD_HTML ne contient pas de fermeture </html>"
     )
 
-    assert "<body" in DASHBOARD_HTML, (
-        "DASHBOARD_HTML ne contient pas de balise <body>"
-    )
+    assert "<body" in DASHBOARD_HTML, "DASHBOARD_HTML ne contient pas de balise <body>"
 
     assert "</body>" in DASHBOARD_HTML, (
         "DASHBOARD_HTML ne contient pas de fermeture </body>"
@@ -326,13 +299,10 @@ def test_dashboard_js_exists_and_is_non_empty():
         f"Dashboard JS introuvable : {DASHBOARD_JS_PATH}"
     )
 
-    assert DASHBOARD_JS.strip(), (
-        "dashboard.js est vide"
-    )
+    assert DASHBOARD_JS.strip(), "dashboard.js est vide"
 
     assert len(DASHBOARD_JS.strip()) > 1_000, (
-        "dashboard.js semble anormalement petit "
-        f"({len(DASHBOARD_JS)} octets)"
+        f"dashboard.js semble anormalement petit ({len(DASHBOARD_JS)} octets)"
     )
 
 
@@ -399,8 +369,7 @@ def test_auth_public_symbol_exists(symbol):
     import collector.auth as auth_mod
 
     assert hasattr(auth_mod, symbol), (
-        f"collector.auth.{symbol} manquant - "
-        "le découpage a cassé la surface publique"
+        f"collector.auth.{symbol} manquant - le découpage a cassé la surface publique"
     )
 
 
@@ -412,14 +381,13 @@ def test_auth_blueprint_is_registered_with_expected_routes():
 
     assert bp.name == "auth"
 
-    assert len(bp.deferred_functions) > 0, (
-        "auth_bp n'a aucune route enregistrée"
-    )
+    assert len(bp.deferred_functions) > 0, "auth_bp n'a aucune route enregistrée"
 
 
 # ---------------------------------------------------------------------------
 # 4. Contrat de module de dashboard.py
 # ---------------------------------------------------------------------------
+
 
 def test_dashboard_module_exports_single_html_constant():
     """
@@ -441,8 +409,7 @@ def test_dashboard_module_exports_single_html_constant():
     ]
 
     assert big_html_attrs == ["DASHBOARD_HTML"], (
-        "dashboard.py expose plusieurs gros blocs HTML : "
-        f"{big_html_attrs}"
+        f"dashboard.py expose plusieurs gros blocs HTML : {big_html_attrs}"
     )
 
 
@@ -453,12 +420,6 @@ def test_dashboard_html_has_no_duplicate_ids():
         DASHBOARD_HTML,
     )
 
-    duplicates = {
-        html_id
-        for html_id in ids
-        if ids.count(html_id) > 1
-    }
+    duplicates = {html_id for html_id in ids if ids.count(html_id) > 1}
 
-    assert not duplicates, (
-        f"IDs HTML dupliqués dans DASHBOARD_HTML : {duplicates}"
-    )
+    assert not duplicates, f"IDs HTML dupliqués dans DASHBOARD_HTML : {duplicates}"

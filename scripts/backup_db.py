@@ -6,11 +6,11 @@ AgentGuard Database Backup
 Usage:
   python scripts/backup_db.py --dir backups --keep 30
 """
+
 import argparse
 import os
 import shutil
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -51,9 +51,12 @@ def backup_sqlite(db_path: str, backup_dir: Path, timestamp: str) -> Path:
         # collector.db/collector.app (Flask, structlog, opentelemetry, ...) pour ça
         # -> une dépendance manquante dans requirements.txt (structlog) faisait
         # échouer le backup entier, même quand seul ce placeholder était utilisé.
-        log(f"{src} introuvable — création d'un fichier SQLite vide (mode CI, sqlite3 stdlib uniquement)...")
+        log(
+            f"{src} introuvable — création d'un fichier SQLite vide (mode CI, sqlite3 stdlib uniquement)..."
+        )
         src.parent.mkdir(parents=True, exist_ok=True)
         import sqlite3
+
         conn = sqlite3.connect(src)
         conn.execute("CREATE TABLE IF NOT EXISTS _ci_placeholder (created_at TEXT)")
         conn.commit()
@@ -95,7 +98,9 @@ def main():
         backup_file = backup_postgres(database_url, args.dir, timestamp)
     else:
         if db_type == "postgres" and not database_url:
-            log("⚠️ AGENTGUARD_DB_TYPE=postgres mais DATABASE_URL vide — fallback SQLite")
+            log(
+                "⚠️ AGENTGUARD_DB_TYPE=postgres mais DATABASE_URL vide — fallback SQLite"
+            )
         backup_file = backup_sqlite(db_path, args.dir, timestamp)
 
     size_mb = backup_file.stat().st_size / 1024 / 1024
@@ -107,4 +112,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

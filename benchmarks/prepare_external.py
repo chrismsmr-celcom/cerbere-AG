@@ -27,6 +27,7 @@ Then FREEZE before the first run:
     python benchmarks/run_public_benchmark.py --corpus-dir benchmarks/external/deepset_test --layers regex,ml,llm
 Never edit rules, thresholds or prompts after seeing results on this corpus.
 """
+
 import argparse
 import csv
 import hashlib
@@ -45,12 +46,36 @@ DATASETS = {
         "hf_repo": "deepset/prompt-injections",
         "url": "https://huggingface.co/datasets/deepset/prompt-injections",
         "default_license_note": "Dataset card lists a permissive license (apache-2.0 in the "
-                                "snapshots we saw); verify on the card before redistributing.",
+        "snapshots we saw); verify on the card before redistributing.",
     },
 }
 
-_DE = {"der", "die", "das", "und", "ist", "nicht", "ich", "ein", "eine", "zu", "mit", "für",
-       "auf", "den", "dem", "wie", "was", "sie", "es", "im", "von", "bitte", "kann", "wir"}
+_DE = {
+    "der",
+    "die",
+    "das",
+    "und",
+    "ist",
+    "nicht",
+    "ich",
+    "ein",
+    "eine",
+    "zu",
+    "mit",
+    "für",
+    "auf",
+    "den",
+    "dem",
+    "wie",
+    "was",
+    "sie",
+    "es",
+    "im",
+    "von",
+    "bitte",
+    "kann",
+    "wir",
+}
 
 
 def guess_lang(text: str) -> str:
@@ -74,6 +99,7 @@ def norm(t: str) -> str:
 def load_hf(source: str, split: str, revision):
     from datasets import load_dataset
     from huggingface_hub import HfApi
+
     repo = DATASETS[source]["hf_repo"]
     info = HfApi().dataset_info(repo, revision=revision)
     sha = info.sha
@@ -134,24 +160,55 @@ def build_corpus(rows, source: str, split: str):
         seen.add(key)
         if key in internal:
             overlap += 1
-        entry = {"prompt": text, "lang": guess_lang(text), "source": f"{source}/{split}"}
+        entry = {
+            "prompt": text,
+            "lang": guess_lang(text),
+            "source": f"{source}/{split}",
+        }
         if r["label"] == 1:
-            attacks.append({**entry, "id": f"ext_{source}_{split}_a{len(attacks):04d}",
-                            "category": "external_injection", "severity": "n/a"})
+            attacks.append(
+                {
+                    **entry,
+                    "id": f"ext_{source}_{split}_a{len(attacks):04d}",
+                    "category": "external_injection",
+                    "severity": "n/a",
+                }
+            )
         else:
-            benign.append({**entry, "id": f"ext_{source}_{split}_b{len(benign):04d}",
-                           "category": "external_benign", "severity": "none"})
-    stats = {"dropped_empty": dropped_empty, "dropped_duplicates": dropped_dup,
-             "overlap_with_internal_corpus": overlap}
+            benign.append(
+                {
+                    **entry,
+                    "id": f"ext_{source}_{split}_b{len(benign):04d}",
+                    "category": "external_benign",
+                    "severity": "none",
+                }
+            )
+    stats = {
+        "dropped_empty": dropped_empty,
+        "dropped_duplicates": dropped_dup,
+        "overlap_with_internal_corpus": overlap,
+    }
     return attacks, benign, stats
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--source", choices=sorted(DATASETS), default="deepset")
-    ap.add_argument("--split", default="test", help="Use 'test' only; never tune on it.")
-    ap.add_argument("--revision", default=None, help="HF revision (default: latest, then pinned by SHA).")
-    ap.add_argument("--local-file", default=None, help="Offline .jsonl/.csv with columns text,label.")
+    ap.add_argument(
+        "--split", default="test", help="Use 'test' only; never tune on it."
+    )
+    ap.add_argument(
+        "--revision",
+        default=None,
+        help="HF revision (default: latest, then pinned by SHA).",
+    )
+    ap.add_argument(
+        "--local-file",
+        default=None,
+        help="Offline .jsonl/.csv with columns text,label.",
+    )
     ap.add_argument("--out-name", default=None)
     args = ap.parse_args()
 
@@ -166,12 +223,16 @@ def main():
 
     attacks, benign, stats = build_corpus(rows, args.source, args.split)
     if not attacks or not benign:
-        raise SystemExit(f"Suspicious corpus ({len(attacks)} attacks, {len(benign)} benign): aborting.")
+        raise SystemExit(
+            f"Suspicious corpus ({len(attacks)} attacks, {len(benign)} benign): aborting."
+        )
 
     out_dir = OUT_ROOT / (args.out_name or f"{args.source}_{args.split}")
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, data in (("attacks.json", attacks), ("benign.json", benign)):
-        (out_dir / name).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        (out_dir / name).write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     langs = {}
     for e in attacks + benign:
@@ -182,8 +243,11 @@ def main():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "script_version": SCRIPT_VERSION,
         "source": {
-            "dataset": meta["hf_repo"], "url": meta["url"], "split": args.split,
-            "revision": revision, "license_from_card": license_,
+            "dataset": meta["hf_repo"],
+            "url": meta["url"],
+            "split": args.split,
+            "revision": revision,
+            "license_from_card": license_,
             "license_note": meta["default_license_note"],
         },
         "counts": {"attacks": len(attacks), "benign": len(benign), **stats},
@@ -196,15 +260,21 @@ def main():
             "Language is a stopword heuristic, not ground truth.",
         ],
     }
-    (out_dir / "MANIFEST.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    (out_dir / "MANIFEST.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     print(f"Corpus written to {out_dir}")
     print(f"  attacks={len(attacks)} benign={len(benign)} {stats}")
     print(f"  revision={revision} license_from_card={license_}")
     if stats["overlap_with_internal_corpus"]:
-        print(f"  WARNING: {stats['overlap_with_internal_corpus']} prompts also appear in the internal corpus.")
+        print(
+            f"  WARNING: {stats['overlap_with_internal_corpus']} prompts also appear in the internal corpus."
+        )
     print("\nNEXT: commit + tag to freeze BEFORE the first run:")
-    print(f"  git add {out_dir.relative_to(HERE.parent)} && git commit -m 'freeze external corpus' && git tag external-freeze-1")
+    print(
+        f"  git add {out_dir.relative_to(HERE.parent)} && git commit -m 'freeze external corpus' && git tag external-freeze-1"
+    )
 
 
 if __name__ == "__main__":

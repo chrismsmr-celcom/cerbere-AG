@@ -2,14 +2,17 @@
 
 import secrets
 
-from flask import jsonify, g, request
+from flask import g, jsonify, request
 
-from collector.auth import require_auth
 from agentguard.decision_engine import DecisionRequest
 from collector.api.helpers import (
-    api_bp, logger, get_decision_signer, is_server_registered_tool,
     _reject_if_agent_disconnected,
+    api_bp,
+    get_decision_signer,
+    is_server_registered_tool,
+    logger,
 )
+from collector.auth import require_auth
 
 
 @api_bp.route("/api/public-key")
@@ -77,30 +80,39 @@ def decide():
     try:
         result = decision_engine.evaluate(decision_request)
     except Exception as exc:
-        logger.exception("decision_engine_failed", error=str(exc), org_id=g.org_id, tool_name=tool_name)
+        logger.exception(
+            "decision_engine_failed",
+            error=str(exc),
+            org_id=g.org_id,
+            tool_name=tool_name,
+        )
         result = None
         try:
             signer = get_decision_signer()
-            signed = signer.sign_decision({
-                "request_id": secrets.token_hex(16),
-                "action": "DENY",
-                "policy_name": "fail_closed",
-                "policy_version": 0,
-                "reason": "Decision engine failure",
-            })
+            signed = signer.sign_decision(
+                {
+                    "request_id": secrets.token_hex(16),
+                    "action": "DENY",
+                    "policy_name": "fail_closed",
+                    "policy_version": 0,
+                    "reason": "Decision engine failure",
+                }
+            )
             return jsonify(signed), 503
         except Exception:
             return jsonify({"error": "security decision unavailable"}), 503
 
     try:
         signer = get_decision_signer()
-        signed = signer.sign_decision({
-            "request_id": secrets.token_hex(16),
-            "action": result.decision.value.upper(),
-            "policy_name": result.policy,
-            "policy_version": 1,
-            "reason": "; ".join(result.reasons[:5]),
-        })
+        signed = signer.sign_decision(
+            {
+                "request_id": secrets.token_hex(16),
+                "action": result.decision.value.upper(),
+                "policy_name": result.policy,
+                "policy_version": 1,
+                "reason": "; ".join(result.reasons[:5]),
+            }
+        )
         signed["risk_score"] = result.risk_score
         signed["risk_level"] = result.risk_level
         signed["reason_codes"] = result.reason_codes

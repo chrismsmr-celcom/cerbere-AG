@@ -1,7 +1,10 @@
-import os
-
 import pytest
 
+from agentguard.tool_guard import (
+    ToolGuard,
+    ToolPolicy,
+    ToolRequest,
+)
 from collector.approvals import (
     APPROVED,
     PENDING,
@@ -10,13 +13,6 @@ from collector.approvals import (
     create_approval,
     get_approval,
     reject_approval,
-)
-
-from agentguard.tool_guard import (
-    ApprovalRequired,
-    ToolGuard,
-    ToolPolicy,
-    ToolRequest,
 )
 
 
@@ -53,15 +49,11 @@ def test_create_approval_is_pending(
         reason="External side effect requires approval",
     )
 
-    assert approval["approval_id"].startswith(
-        "apr_"
-    )
+    assert approval["approval_id"].startswith("apr_")
 
     assert approval["status"] == PENDING
 
-    assert approval["tool_name"] == (
-        "send_email"
-    )
+    assert approval["tool_name"] == ("send_email")
 
 
 def test_approval_can_be_approved(
@@ -86,9 +78,7 @@ def test_approval_can_be_approved(
 
     assert result["status"] == APPROVED
 
-    assert result["decided_by"] == (
-        "user-123"
-    )
+    assert result["decided_by"] == ("user-123")
 
 
 def test_approval_can_be_rejected(
@@ -120,9 +110,7 @@ def test_tool_guard_creates_pending_approval(
         policies=[
             ToolPolicy(
                 name="send_email",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="email",
                 external_side_effect=True,
                 require_approval=True,
@@ -141,20 +129,13 @@ def test_tool_guard_creates_pending_approval(
         },
     )
 
-    decision = guard.authorize(
-        request
-    )
+    decision = guard.authorize(request)
 
     assert decision.allowed is False
 
-    assert (
-        decision.decision
-        == "require_approval"
-    )
+    assert decision.decision == "require_approval"
 
-    approval_id = decision.metadata.get(
-        "approval_id"
-    )
+    approval_id = decision.metadata.get("approval_id")
 
     assert approval_id
 
@@ -176,9 +157,7 @@ def test_approved_action_can_be_retried(
         policies=[
             ToolPolicy(
                 name="payment",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="payment",
                 external_side_effect=True,
                 require_approval=True,
@@ -197,18 +176,11 @@ def test_approved_action_can_be_retried(
         },
     )
 
-    first = guard.authorize(
-        original_request
-    )
+    first = guard.authorize(original_request)
 
-    assert (
-        first.decision
-        == "require_approval"
-    )
+    assert first.decision == "require_approval"
 
-    approval_id = first.metadata[
-        "approval_id"
-    ]
+    approval_id = first.metadata["approval_id"]
 
     approve_approval(
         approval_id,
@@ -230,18 +202,13 @@ def test_approved_action_can_be_retried(
         },
     )
 
-    second = guard.authorize(
-        retry_request
-    )
+    second = guard.authorize(retry_request)
 
     assert second.allowed is True
 
     assert second.decision == "allow"
 
-    assert (
-        second.metadata["reason_code"]
-        == "human_approval"
-    )
+    assert second.metadata["reason_code"] == "human_approval"
 
 
 def test_approved_action_cannot_change_arguments(
@@ -252,9 +219,7 @@ def test_approved_action_cannot_change_arguments(
         policies=[
             ToolPolicy(
                 name="payment",
-                allowed_identities={
-                    "agent-1"
-                },
+                allowed_identities={"agent-1"},
                 category="payment",
                 external_side_effect=True,
                 require_approval=True,
@@ -273,13 +238,9 @@ def test_approved_action_cannot_change_arguments(
         },
     )
 
-    first = guard.authorize(
-        original_request
-    )
+    first = guard.authorize(original_request)
 
-    approval_id = first.metadata[
-        "approval_id"
-    ]
+    approval_id = first.metadata["approval_id"]
 
     approve_approval(
         approval_id,
@@ -301,18 +262,13 @@ def test_approved_action_cannot_change_arguments(
         },
     )
 
-    decision = guard.authorize(
-        modified_request
-    )
+    decision = guard.authorize(modified_request)
 
     assert decision.allowed is False
 
     assert decision.decision == "block"
 
-    assert (
-        decision.metadata["reason_code"]
-        == "approval_mismatch"
-    )
+    assert decision.metadata["reason_code"] == "approval_mismatch"
 
 
 def test_approval_is_single_use_decision(

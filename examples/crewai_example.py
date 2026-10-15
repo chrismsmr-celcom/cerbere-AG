@@ -16,6 +16,7 @@ de dépendances). Vérifie la version installée chez toi avec
 Installer : pip install crewai
 Lancer    : python integrations/crewai_example.py
 """
+
 import os
 import sys
 
@@ -28,7 +29,10 @@ guard = AgentGuard(
     collector_url=os.environ.get("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080"),
     api_key=os.environ.get("AGENTGUARD_API_KEY"),
     policies=[
-        {"type": "tool_whitelist", "allowed_tools": ["send_email", "search_web", "read_file"]}
+        {
+            "type": "tool_whitelist",
+            "allowed_tools": ["send_email", "search_web", "read_file"],
+        }
     ],
     max_budget=5.0,
     block_on_high=True,
@@ -41,6 +45,7 @@ def build_guarded_tool(base_tool_cls):
     guard.guard_tool_call — la whitelist déclarée ci-dessus s'applique
     automatiquement avant l'exécution réelle de l'outil.
     """
+
     class GuardedTool(base_tool_cls):
         def _run(self, *args, **kwargs):
             return guard.guard_tool_call(
@@ -48,13 +53,15 @@ def build_guarded_tool(base_tool_cls):
                 params=kwargs or {"args": args},
                 func=lambda: super(GuardedTool, self)._run(*args, **kwargs),
             )
+
     return GuardedTool
 
 
 if __name__ == "__main__":
-    from crewai import Agent, Task, Crew
-    from crewai.tools import BaseTool
+    from crewai import Agent, Crew, Task
     from crewai.llm import LLM
+    from crewai.tools import BaseTool
+
     from agentguard.sdk import RiskLevel
 
     # ── Interception du LLM ──
@@ -70,11 +77,16 @@ if __name__ == "__main__":
 
         def guarded_call(messages, *args, **kwargs):
             import time as _time
+
             from agentguard.sdk import GuardSpan
 
             start = _time.time()
-            text = messages if isinstance(messages, str) else " ".join(
-                m.get("content", "") for m in messages if isinstance(m, dict)
+            text = (
+                messages
+                if isinstance(messages, str)
+                else " ".join(
+                    m.get("content", "") for m in messages if isinstance(m, dict)
+                )
             )
             injection_check = guard.policy_engine.check_injection(text)
             pii_check = guard.policy_engine.check_pii(text)
@@ -84,7 +96,11 @@ if __name__ == "__main__":
                 if judge:
                     checks.append(judge)
 
-            high_risk = [c for c in checks if c.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)]
+            high_risk = [
+                c
+                for c in checks
+                if c.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+            ]
             if high_risk and guard.block_on_high:
                 span = GuardSpan(
                     span_id=guard._generate_id(),
@@ -122,7 +138,9 @@ if __name__ == "__main__":
         goal="Répondre aux demandes clients et envoyer des emails de suivi",
         backstory="Un agent support qui peut envoyer des emails de confirmation.",
         tools=[GuardedSendEmail()],
-        llm=wrap_llm_with_guard(LLM(model="gpt-4o-mini")),  # remplace par ton modèle réel
+        llm=wrap_llm_with_guard(
+            LLM(model="gpt-4o-mini")
+        ),  # remplace par ton modèle réel
     )
 
     task = Task(

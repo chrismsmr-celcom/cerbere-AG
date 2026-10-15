@@ -16,18 +16,20 @@ Flux interdits (par défaut) :
   UNTRUSTED → TOOL_DANGEREUX    = DENY
   MALICIOUS → anywhere          = DENY
 """
-import re
-import json
+
 import base64
 import binascii
-from urllib.parse import quote
-from enum import Enum
+import json
+import re
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Set
+from enum import Enum
+from typing import Any
+from urllib.parse import quote
 
 
 class TaintLevel(Enum):
     """Niveaux de classification, du plus safe au plus dangereux."""
+
     PUBLIC = 0
     INTERNAL = 10
     CONFIDENTIAL = 20
@@ -44,12 +46,13 @@ class TaintLevel(Enum):
 
 class SinkType(Enum):
     """Types de destinations (sinks) pour les données."""
-    INTERNAL = "internal"           # Usage interne (LLM, calcul)
-    FILESYSTEM = "filesystem"       # Écriture fichier
-    DATABASE = "database"           # Écriture DB
+
+    INTERNAL = "internal"  # Usage interne (LLM, calcul)
+    FILESYSTEM = "filesystem"  # Écriture fichier
+    DATABASE = "database"  # Écriture DB
     NETWORK_INTERNAL = "network_internal"  # API interne
     NETWORK_EXTERNAL = "network_external"  # API externe, email
-    DANGEROUS_TOOL = "dangerous"    # execute_command, drop_table, etc.
+    DANGEROUS_TOOL = "dangerous"  # execute_command, drop_table, etc.
 
 
 # Patterns de détection automatique de classification
@@ -58,7 +61,10 @@ _SECRET_PATTERNS = [
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS access key
     re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),  # GitHub PAT
     re.compile(r"\b-----BEGIN (?:RSA |EC )?PRIVATE KEY-----"),
-    re.compile(r"\b(api[_-]?key|password|secret|token)\s*[:=]\s*['\"]?[\w\-]{16,}['\"]?", re.I),
+    re.compile(
+        r"\b(api[_-]?key|password|secret|token)\s*[:=]\s*['\"]?[\w\-]{16,}['\"]?",
+        re.IGNORECASE,
+    ),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),  # JWT
 ]
 
@@ -72,12 +78,13 @@ _PII_PATTERNS = [
 @dataclass
 class TaintLabel:
     """Label de taint pour une donnée."""
+
     level: TaintLevel
     source: str = "unknown"  # d'où vient la donnée
-    tags: Set[str] = field(default_factory=set)
-    propagated_from: List[str] = field(default_factory=list)
+    tags: set[str] = field(default_factory=set)
+    propagated_from: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "level": self.level.name,
             "source": self.source,
@@ -86,7 +93,7 @@ class TaintLabel:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TaintLabel":
+    def from_dict(cls, data: dict[str, Any]) -> "TaintLabel":
         return cls(
             level=TaintLevel[data.get("level", "PUBLIC")],
             source=data.get("source", "unknown"),
@@ -98,17 +105,17 @@ class TaintLabel:
 class TaintTracker:
     """
     Traque la classification des données dans une session.
-    
+
     Usage:
         tracker = TaintTracker()
-        
+
         # Marque les données entrantes
         tracker.label("user_input", user_text, TaintLevel.UNTRUSTED, "web_form")
         tracker.label("api_key", api_key, TaintLevel.SECRET, "env_var")
-        
+
         # Combine les labels quand des données sont mélangées
         combined = tracker.combine(["user_input", "api_key"])
-        
+
         # Vérifie si un flux est autorisé
         violation = tracker.check_sink(combined, SinkType.NETWORK_EXTERNAL)
         if violation:
@@ -118,32 +125,52 @@ class TaintTracker:
     # Règles de flux interdits par défaut
     DEFAULT_DENY_RULES = [
         # (source_level_min, sink_type, reason)
-        (TaintLevel.SECRET, SinkType.NETWORK_EXTERNAL, "SECRET data cannot be sent to external networks"),
-        (TaintLevel.SECRET, SinkType.DANGEROUS_TOOL, "SECRET data cannot be used in dangerous tools"),
+        (
+            TaintLevel.SECRET,
+            SinkType.NETWORK_EXTERNAL,
+            "SECRET data cannot be sent to external networks",
+        ),
+        (
+            TaintLevel.SECRET,
+            SinkType.DANGEROUS_TOOL,
+            "SECRET data cannot be used in dangerous tools",
+        ),
         (TaintLevel.MALICIOUS, SinkType.INTERNAL, "MALICIOUS data blocked"),
         (TaintLevel.MALICIOUS, SinkType.FILESYSTEM, "MALICIOUS data blocked"),
         (TaintLevel.MALICIOUS, SinkType.DATABASE, "MALICIOUS data blocked"),
-        (TaintLevel.UNTRUSTED, SinkType.DANGEROUS_TOOL, "UNTRUSTED data cannot be used in dangerous tools"),
+        (
+            TaintLevel.UNTRUSTED,
+            SinkType.DANGEROUS_TOOL,
+            "UNTRUSTED data cannot be used in dangerous tools",
+        ),
     ]
 
     DEFAULT_REVIEW_RULES = [
-        (TaintLevel.CONFIDENTIAL, SinkType.NETWORK_EXTERNAL, "CONFIDENTIAL data to external network requires approval"),
-        (TaintLevel.CONFIDENTIAL, SinkType.FILESYSTEM, "CONFIDENTIAL data write requires approval"),
+        (
+            TaintLevel.CONFIDENTIAL,
+            SinkType.NETWORK_EXTERNAL,
+            "CONFIDENTIAL data to external network requires approval",
+        ),
+        (
+            TaintLevel.CONFIDENTIAL,
+            SinkType.FILESYSTEM,
+            "CONFIDENTIAL data write requires approval",
+        ),
     ]
 
     def __init__(self):
         # id → TaintLabel
-        self._labels: Dict[str, TaintLabel] = {}
+        self._labels: dict[str, TaintLabel] = {}
         # id → valeur (pour re-analyse si besoin)
-        self._values: Dict[str, Any] = {}
+        self._values: dict[str, Any] = {}
 
     def label(
         self,
         data_id: str,
         value: Any,
-        level: Optional[TaintLevel] = None,
+        level: TaintLevel | None = None,
         source: str = "unknown",
-        tags: Optional[Set[str]] = None,
+        tags: set[str] | None = None,
     ) -> TaintLabel:
         """
         Attribue un label de taint à une donnée.
@@ -191,13 +218,13 @@ class TaintTracker:
                 return str(value)
         return str(value)
 
-    def get_label(self, data_id: str) -> Optional[TaintLabel]:
+    def get_label(self, data_id: str) -> TaintLabel | None:
         return self._labels.get(data_id)
 
     def combine(
         self,
-        data_ids: List[str],
-        new_id: Optional[str] = None,
+        data_ids: list[str],
+        new_id: str | None = None,
     ) -> TaintLabel:
         """
         Combine plusieurs labels (ex: quand un LLM reçoit plusieurs inputs).
@@ -211,14 +238,13 @@ class TaintTracker:
 
         max_level = TaintLevel.PUBLIC
         sources = []
-        all_tags: Set[str] = set()
+        all_tags: set[str] = set()
         propagated = []
 
         for did in data_ids:
             lbl = self._labels.get(did)
             if lbl:
-                if lbl.level > max_level:
-                    max_level = lbl.level
+                max_level = max(max_level, lbl.level)
                 sources.append(lbl.source)
                 all_tags.update(lbl.tags)
                 propagated.append(did)
@@ -239,10 +265,10 @@ class TaintTracker:
         self,
         label: TaintLabel,
         sink: SinkType,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Vérifie si un flux label → sink est autorisé.
-        
+
         Retourne:
             None si autorisé
             str avec raison si DENY
@@ -272,16 +298,20 @@ class TaintTracker:
         else:
             self.label(data_id, None, TaintLevel.MALICIOUS, reason, {reason})
 
-    def get_report(self) -> Dict[str, Any]:
+    def get_report(self) -> dict[str, Any]:
         """Résumé des labels actifs dans la session."""
-        by_level: Dict[str, int] = {}
+        by_level: dict[str, int] = {}
         for lbl in self._labels.values():
             by_level[lbl.level.name] = by_level.get(lbl.level.name, 0) + 1
         return {
             "total_tracked": len(self._labels),
             "by_level": by_level,
-            "secrets_tracked": sum(1 for l in self._labels.values() if l.level == TaintLevel.SECRET),
-            "malicious_detected": sum(1 for l in self._labels.values() if l.level == TaintLevel.MALICIOUS),
+            "secrets_tracked": sum(
+                1 for l in self._labels.values() if l.level == TaintLevel.SECRET
+            ),
+            "malicious_detected": sum(
+                1 for l in self._labels.values() if l.level == TaintLevel.MALICIOUS
+            ),
         }
 
 
@@ -300,7 +330,7 @@ class TaintTracker:
 
 _MIN_TRACKED_LEN = 8
 _MAX_TRACKED = 500
-_MAX_SCAN_CHARS = 200_000   # borne le coût d'analyse d'un gros résultat d'outil
+_MAX_SCAN_CHARS = 200_000  # borne le coût d'analyse d'un gros résultat d'outil
 
 # PII "forte" : suivie automatiquement. L'adresse e-mail (_PII_PATTERNS[0]) en
 # est exclue : un agent qui écrit à une adresse qu'il vient de lire est le cas
@@ -308,7 +338,7 @@ _MAX_SCAN_CHARS = 200_000   # borne le coût d'analyse d'un gros résultat d'out
 _PII_STRONG_PATTERNS = _PII_PATTERNS[1:]
 
 
-def _b64_aligned(raw: bytes, urlsafe: bool) -> List[str]:
+def _b64_aligned(raw: bytes, urlsafe: bool) -> list[str]:
     """Base64 d'un secret tel qu'il apparaît DANS un texte plus long.
 
     Le base64 code par blocs de 3 octets : selon la position du secret dans le
@@ -322,13 +352,13 @@ def _b64_aligned(raw: bytes, urlsafe: bool) -> List[str]:
         full = enc(b"\x00" * k + raw).decode().rstrip("=")
         drop_head = {0: 0, 1: 2, 2: 3}[k]
         drop_tail = 1 if (len(raw) + k) % 3 else 0
-        core = full[drop_head: len(full) - drop_tail if drop_tail else len(full)]
+        core = full[drop_head : len(full) - drop_tail if drop_tail else len(full)]
         if core:
             out.append(core)
     return out
 
 
-def _encodings(raw: str) -> List[str]:
+def _encodings(raw: str) -> list[str]:
     out = [raw]
     b = raw.encode("utf-8", "ignore")
     try:
@@ -352,7 +382,7 @@ class FlowTracker:
         # bloqué même si la valeur n'est pas retrouvée (très strict).
         self.session_mode = session_mode
         self._tracker = TaintTracker()
-        self._needles: Dict[str, TaintLevel] = {}   # chaîne -> niveau
+        self._needles: dict[str, TaintLevel] = {}  # chaîne -> niveau
         self._session_level = TaintLevel.PUBLIC
         self._counter = 0
 
@@ -379,8 +409,9 @@ class FlowTracker:
                 self._needles[variant] = level
 
     # -- API ------------------------------------------------------------
-    def track(self, value: Any, source: str = "user",
-              level: Optional[TaintLevel] = None) -> TaintLabel:
+    def track(
+        self, value: Any, source: str = "user", level: TaintLevel | None = None
+    ) -> TaintLabel:
         """Enregistre une donnée entrante/sortante et retient ce qu'elle
         contient de sensible. `level` force le niveau (ex: UNTRUSTED)."""
         text = TaintTracker._to_text(value)
@@ -391,7 +422,10 @@ class FlowTracker:
         if text:
             for needle, lvl in self._extract(text):
                 self._remember(needle, lvl)
-            if level in (TaintLevel.SECRET, TaintLevel.CONFIDENTIAL) and len(text) >= _MIN_TRACKED_LEN:
+            if (
+                level in (TaintLevel.SECRET, TaintLevel.CONFIDENTIAL)
+                and len(text) >= _MIN_TRACKED_LEN
+            ):
                 # Valeur déclarée sensible par l'appelant : on la suit en entier.
                 self._remember(text.strip(), level)
         if final > self._session_level and final != TaintLevel.UNTRUSTED:
@@ -400,7 +434,9 @@ class FlowTracker:
 
     def mark_malicious(self, source: str = "injection_detected") -> None:
         self._session_level = TaintLevel.MALICIOUS
-        self._tracker.label(f"m{self._counter + 1}", None, TaintLevel.MALICIOUS, source, {source})
+        self._tracker.label(
+            f"m{self._counter + 1}", None, TaintLevel.MALICIOUS, source, {source}
+        )
         self._counter += 1
 
     def level_in(self, params: Any) -> TaintLabel:
@@ -423,16 +459,19 @@ class FlowTracker:
                 level, source = direct, "pattern_in_params"
         if self._session_level == TaintLevel.MALICIOUS:
             level, source = TaintLevel.MALICIOUS, "session_malicious"
-        elif self.session_mode and self._session_level >= TaintLevel.SECRET and level < TaintLevel.SECRET:
+        elif (
+            self.session_mode
+            and self._session_level >= TaintLevel.SECRET
+            and level < TaintLevel.SECRET
+        ):
             level, source = TaintLevel.SECRET, "session_mode"
         return TaintLabel(level=level, source=source)
 
-    def check_sink(self, label: TaintLabel, sink: SinkType) -> Optional[str]:
+    def check_sink(self, label: TaintLabel, sink: SinkType) -> str | None:
         return self._tracker.check_sink(label, sink)
 
-    def report(self) -> Dict[str, Any]:
+    def report(self) -> dict[str, Any]:
         r = self._tracker.get_report()
         r["session_level"] = self._session_level.name
         r["tracked_needles"] = len(self._needles)
         return r
-

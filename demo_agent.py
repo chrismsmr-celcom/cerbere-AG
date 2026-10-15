@@ -5,16 +5,22 @@ Usage (PowerShell) :
   $env:CERBERE_URL="https://app.cerbereag.site"
   python demo_agent.py
 """
+
 import os
 import time
 
-from agentguard import AgentGuard, SecurityException
-from agentguard import ApprovalRequiredException, ApprovalRejectedException
+from agentguard import (
+    AgentGuard,
+    ApprovalRejectedException,
+    ApprovalRequiredException,
+    SecurityException,
+)
 
 COLLECTOR = os.environ.get("CERBERE_URL", "https://app.cerbereag.site")
 API_KEY = os.environ["CERBERE_API_KEY"]
 PAUSE = float(os.environ.get("DEMO_PAUSE", "2.5"))
 import requests
+
 
 def preflight():
     t = []
@@ -24,7 +30,10 @@ def preflight():
             r = requests.get(f"{COLLECTOR}/healthz", timeout=30)
             t.append((r.status_code, time.time() - s))
         except Exception as e:
-            print(f"✗ collector unreachable: {e}"); raise SystemExit(1)
+            print(f"✗ collector unreachable: {e}")
+            raise SystemExit(1)
+
+
 worst = max(elapsed for _, elapsed in timings)
 print(f"✓ Collector reachable — worst latency {worst:.2f}s")
 
@@ -43,17 +52,27 @@ guard = AgentGuard(
     collector_url=COLLECTOR,
     api_key=API_KEY,
     agent_id="support-bot",
-    wait_for_approval=True,      # l'agent attend le clic humain, puis reprend seul
+    wait_for_approval=True,  # l'agent attend le clic humain, puis reprend seul
     approval_timeout=180,
     approval_poll_interval=0.5,
 )
 
 
 # ── Outils simulés (appelés avec **params) ────────────────────────────
-def search_kb(query):        return f"Policy for '{query}': refunds within 30 days."
-def read_file(path):         return f"DATABASE_URL=postgres://db.internal/app\nOPENAI_API_KEY={SECRET}"
-def http_post(url, body):    return f"POST {url} ({len(body)} bytes)"
-def send_email(to, subject, body): return f"email sent to {to}"
+def search_kb(query):
+    return f"Policy for '{query}': refunds within 30 days."
+
+
+def read_file(path):
+    return f"DATABASE_URL=postgres://db.internal/app\nOPENAI_API_KEY={SECRET}"
+
+
+def http_post(url, body):
+    return f"POST {url} ({len(body)} bytes)"
+
+
+def send_email(to, subject, body):
+    return f"email sent to {to}"
 
 
 def say(msg, color="36"):
@@ -93,7 +112,11 @@ print("  → agent is waiting. Open Approvals in the dashboard and click Approve
 try:
     res = guard.guard_tool_call(
         "send_email",
-        params={"to": "cfo@gmail.com", "subject": "Q3 wire details", "body": "Please confirm the transfer."},
+        params={
+            "to": "cfo@gmail.com",
+            "subject": "Q3 wire details",
+            "body": "Please confirm the transfer.",
+        },
         func=send_email,
     )
     say(f"  ✓ approved by a human → executed: {res}", "32")

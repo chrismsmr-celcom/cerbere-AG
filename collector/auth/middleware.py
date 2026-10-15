@@ -50,10 +50,7 @@ def require_auth():
 
     if key:
         # Explicitly reject global legacy key in production
-        if (
-            api_key
-            and safe_compare(key, api_key)
-        ):
+        if api_key and safe_compare(key, api_key):
             environment = current_app.config.get(
                 "ENVIRONMENT",
                 "development",
@@ -64,10 +61,7 @@ def require_auth():
                 False,
             )
 
-            if (
-                environment == "production"
-                and not allow_legacy
-            ):
+            if environment == "production" and not allow_legacy:
                 logger.warning(
                     "legacy_system_key_rejected_in_production",
                     ip=request.remote_addr,
@@ -102,9 +96,7 @@ def require_auth():
         "",
     )
 
-    user = _auth_pkg()._resolve_human_session(
-        cookie_value
-    )
+    user = _auth_pkg()._resolve_human_session(cookie_value)
 
     if user:
         g.authenticated_user = user
@@ -122,9 +114,7 @@ def require_auth():
 
     # ── LEGACY API KEY SESSION ──────────────────────────────
 
-    org_id = _session_org_id(
-        cookie_value
-    )
+    org_id = _session_org_id(cookie_value)
 
     if org_id:
         g.org_id = org_id

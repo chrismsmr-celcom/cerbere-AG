@@ -1,10 +1,14 @@
 """Tests des décisions signées Ed25519 (v3.2)."""
-import time
-import pytest
+
 import os
-os.environ["AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY"] = "true" 
+import time
+
+import pytest
+
+os.environ["AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY"] = "true"
 try:
     from agentguard.signing import DecisionSigner, DecisionVerifier
+
     SIGNING_AVAILABLE = True
 except ImportError:
     SIGNING_AVAILABLE = False
@@ -19,13 +23,15 @@ class TestSignedDecisions:
         signer = DecisionSigner()
         verifier = DecisionVerifier(signer.public_key_pem())
 
-        signed = signer.sign_decision({
-            "request_id": "req1",
-            "action": "ALLOW",
-            "policy_name": "test",
-            "policy_version": 1,
-            "reason": "ok",
-        })
+        signed = signer.sign_decision(
+            {
+                "request_id": "req1",
+                "action": "ALLOW",
+                "policy_name": "test",
+                "policy_version": 1,
+                "reason": "ok",
+            }
+        )
         assert verifier.verify(dict(signed)) is True
 
     def test_tampered_decision_rejected(self):
@@ -33,13 +39,15 @@ class TestSignedDecisions:
         signer = DecisionSigner()
         verifier = DecisionVerifier(signer.public_key_pem())
 
-        signed = signer.sign_decision({
-            "request_id": "req1",
-            "action": "DENY",
-            "policy_name": "test",
-            "policy_version": 1,
-            "reason": "bad",
-        })
+        signed = signer.sign_decision(
+            {
+                "request_id": "req1",
+                "action": "DENY",
+                "policy_name": "test",
+                "policy_version": 1,
+                "reason": "bad",
+            }
+        )
         # Attaque : on tente de forcer ALLOW
         signed["action"] = "ALLOW"
         assert verifier.verify(dict(signed)) is False
@@ -49,13 +57,15 @@ class TestSignedDecisions:
         signer = DecisionSigner()
         verifier = DecisionVerifier(signer.public_key_pem())
 
-        signed = signer.sign_decision({
-            "request_id": "req1",
-            "action": "ALLOW",
-            "policy_name": "t",
-            "policy_version": 1,
-            "reason": "ok",
-        })
+        signed = signer.sign_decision(
+            {
+                "request_id": "req1",
+                "action": "ALLOW",
+                "policy_name": "t",
+                "policy_version": 1,
+                "reason": "ok",
+            }
+        )
         # Simule l'expiration
         signed["expires_at"] = int(time.time()) - 10
         assert verifier.verify(dict(signed)) is False
@@ -66,25 +76,29 @@ class TestSignedDecisions:
         signer_b = DecisionSigner()
         verifier_a = DecisionVerifier(signer_a.public_key_pem())
 
-        signed_by_b = signer_b.sign_decision({
-            "request_id": "r",
-            "action": "ALLOW",
-            "policy_name": "t",
-            "policy_version": 1,
-            "reason": "ok",
-        })
+        signed_by_b = signer_b.sign_decision(
+            {
+                "request_id": "r",
+                "action": "ALLOW",
+                "policy_name": "t",
+                "policy_version": 1,
+                "reason": "ok",
+            }
+        )
         assert verifier_a.verify(dict(signed_by_b)) is False
 
     def test_payload_fields_preserved(self):
         """Le payload signé contient tous les champs attendus."""
         signer = DecisionSigner()
-        signed = signer.sign_decision({
-            "request_id": "req-abc",
-            "action": "ALLOW",
-            "policy_name": "finance",
-            "policy_version": 42,
-            "reason": "within budget",
-        })
+        signed = signer.sign_decision(
+            {
+                "request_id": "req-abc",
+                "action": "ALLOW",
+                "policy_name": "finance",
+                "policy_version": 42,
+                "reason": "within budget",
+            }
+        )
         assert signed["request_id"] == "req-abc"
         assert signed["action"] == "ALLOW"
         assert signed["policy_name"] == "finance"
@@ -103,9 +117,14 @@ class TestSignedDecisions:
         signer2 = DecisionSigner(pem)
         verifier = DecisionVerifier(signer2.public_key_pem())
 
-        signed = signer1.sign_decision({
-            "request_id": "r", "action": "ALLOW",
-            "policy_name": "t", "policy_version": 1, "reason": "ok",
-        })
+        signed = signer1.sign_decision(
+            {
+                "request_id": "r",
+                "action": "ALLOW",
+                "policy_name": "t",
+                "policy_version": 1,
+                "reason": "ok",
+            }
+        )
         # La clé réimportée doit pouvoir vérifier la signature
         assert verifier.verify(dict(signed)) is True

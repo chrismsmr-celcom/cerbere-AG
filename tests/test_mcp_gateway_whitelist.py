@@ -10,6 +10,7 @@ Aucun test ne nécessite le package `mcp` : on teste les fonctions
 pures (_tool_matches_whitelist, _build_allowed_tools) et le
 PolicyEngine, pas le transport stdio.
 """
+
 import importlib
 import os
 import sys
@@ -18,13 +19,12 @@ import pytest
 
 from agentguard.policy import PolicyEngine, _tool_matches_whitelist
 
-
 # ==============================================================
 # 1. MATCHING WILDCARD DU POLICY ENGINE
 # ==============================================================
 
-class TestToolMatchesWhitelist:
 
+class TestToolMatchesWhitelist:
     def test_exact_match(self):
         assert _tool_matches_whitelist("read_file", {"read_file"})
 
@@ -49,7 +49,6 @@ class TestToolMatchesWhitelist:
 
 
 class TestPolicyEngineWildcard:
-
     def _engine(self, tools):
         return PolicyEngine(
             policies=[{"type": "tool_whitelist", "allowed_tools": tools}]
@@ -73,11 +72,13 @@ class TestPolicyEngineWildcard:
 
     def test_scoped_agent_wildcard(self):
         engine = PolicyEngine(
-            policies=[{
-                "type": "tool_whitelist",
-                "allowed_tools": ["mcp:db:*"],
-                "agents": ["agent-42"],
-            }]
+            policies=[
+                {
+                    "type": "tool_whitelist",
+                    "allowed_tools": ["mcp:db:*"],
+                    "agents": ["agent-42"],
+                }
+            ]
         )
         # L'agent scoped : le wildcard préfixe s'applique
         assert engine.check_tool_policy(
@@ -100,6 +101,7 @@ class TestPolicyEngineWildcard:
 # 2. CONSTRUCTION DE LA WHITELIST GATEWAY (SANS PACKAGE mcp)
 # ==============================================================
 
+
 def _load_gateway_module(monkeypatch, allowed_tools, label="fs"):
     """Charge mcp_gateway.py avec un environnement contrôlé.
 
@@ -116,11 +118,11 @@ def _load_gateway_module(monkeypatch, allowed_tools, label="fs"):
         sys.path.insert(0, root)
 
     from collector import mcp_gateway
+
     return importlib.reload(mcp_gateway)
 
 
 class TestBuildAllowedTools:
-
     def test_comma_separated_list(self, monkeypatch):
         mod = _load_gateway_module(monkeypatch, "read_file,write_file")
         assert sorted(mod.ALLOWED_TOOLS) == [
@@ -144,9 +146,7 @@ class TestBuildAllowedTools:
         assert excinfo.value.code == 2
 
     def test_guard_uses_effective_whitelist(self, monkeypatch):
-        mod = _load_gateway_module(
-            monkeypatch, "read_file,write_file,delete_file"
-        )
+        mod = _load_gateway_module(monkeypatch, "read_file,write_file,delete_file")
         assert sorted(mod.ALLOWED_TOOLS) == [
             "mcp:fs:delete_file",
             "mcp:fs:read_file",
@@ -156,21 +156,27 @@ class TestBuildAllowedTools:
         policies = mod.guard.policy_engine.policies
         assert policies[0]["allowed_tools"] == mod.ALLOWED_TOOLS
         # ==============================================================
+
+
 # 3. FAIL MODE DE LA WHITELIST SCOPED (open par défaut, closed opt-in)
 # ==============================================================
 
-class TestWhitelistFailMode:
 
+class TestWhitelistFailMode:
     def _engine(self, policies):
         return PolicyEngine(policies=policies)
 
     def test_default_open_keeps_historical_behavior(self, monkeypatch):
         monkeypatch.delenv("AGENTGUARD_WHITELIST_FAIL_MODE", raising=False)
-        engine = self._engine([{
-            "type": "tool_whitelist",
-            "allowed_tools": ["mcp:db:*"],
-            "agents": ["agent-42"],
-        }])
+        engine = self._engine(
+            [
+                {
+                    "type": "tool_whitelist",
+                    "allowed_tools": ["mcp:db:*"],
+                    "agents": ["agent-42"],
+                }
+            ]
+        )
         # Comportement historique : agent non couvert -> ALLOW
         assert engine.check_tool_policy(
             "anything", {}, 10.0, agent_id="other-agent"
@@ -178,11 +184,15 @@ class TestWhitelistFailMode:
 
     def test_closed_blocks_uncovered_agent(self, monkeypatch):
         monkeypatch.setenv("AGENTGUARD_WHITELIST_FAIL_MODE", "closed")
-        engine = self._engine([{
-            "type": "tool_whitelist",
-            "allowed_tools": ["mcp:db:*"],
-            "agents": ["agent-42"],
-        }])
+        engine = self._engine(
+            [
+                {
+                    "type": "tool_whitelist",
+                    "allowed_tools": ["mcp:db:*"],
+                    "agents": ["agent-42"],
+                }
+            ]
+        )
         check = engine.check_tool_policy(
             "mcp:db:query", {"sql": "SELECT 1"}, 10.0, agent_id="other-agent"
         )
@@ -192,21 +202,29 @@ class TestWhitelistFailMode:
 
     def test_closed_still_allows_scoped_agent(self, monkeypatch):
         monkeypatch.setenv("AGENTGUARD_WHITELIST_FAIL_MODE", "closed")
-        engine = self._engine([{
-            "type": "tool_whitelist",
-            "allowed_tools": ["mcp:db:*"],
-            "agents": ["agent-42"],
-        }])
+        engine = self._engine(
+            [
+                {
+                    "type": "tool_whitelist",
+                    "allowed_tools": ["mcp:db:*"],
+                    "agents": ["agent-42"],
+                }
+            ]
+        )
         assert engine.check_tool_policy(
             "mcp:db:query", {"sql": "SELECT 1"}, 10.0, agent_id="agent-42"
         ).passed
 
     def test_closed_with_global_whitelist_blocks_unknown_agent(self, monkeypatch):
         monkeypatch.setenv("AGENTGUARD_WHITELIST_FAIL_MODE", "closed")
-        engine = self._engine([{
-            "type": "tool_whitelist",
-            "allowed_tools": ["web_search"],
-        }])
+        engine = self._engine(
+            [
+                {
+                    "type": "tool_whitelist",
+                    "allowed_tools": ["web_search"],
+                }
+            ]
+        )
         # agent couvert par la whitelist globale : OK
         assert engine.check_tool_policy(
             "web_search", {}, 10.0, agent_id="any-agent"

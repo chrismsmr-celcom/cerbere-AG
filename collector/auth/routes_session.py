@@ -2,10 +2,18 @@
 
 import secrets
 from datetime import timedelta
+from pathlib import Path
 
 import structlog
-from pathlib import Path
-from flask import current_app, g, jsonify, redirect, render_template_string, request, url_for
+from flask import (
+    current_app,
+    g,
+    jsonify,
+    redirect,
+    render_template_string,
+    request,
+    url_for,
+)
 
 from collector.db import is_postgres
 
@@ -43,32 +51,18 @@ def auth_login():
     Legacy compatibility:
         {"api_key": "..."}
     """
-    data = request.get_json(
-        silent=True
-    ) or {}
+    data = request.get_json(silent=True) or {}
 
-    email = _normalize_email(
-        data.get("email", "")
-    )
+    email = _normalize_email(data.get("email", ""))
 
     # ── Magic link ──────────────────────────────────────────
 
     if email:
         if not MAGIC_LINK_ENABLED:
-            return jsonify(
-                {
-                    "error":
-                    "Magic-link authentication disabled"
-                }
-            ), 503
+            return jsonify({"error": "Magic-link authentication disabled"}), 503
 
         if not _valid_email(email):
-            return jsonify(
-                {
-                    "error":
-                    "Invalid email address"
-                }
-            ), 400
+            return jsonify({"error": "Invalid email address"}), 400
 
         try:
             _ensure_magic_link_table()
@@ -78,30 +72,17 @@ def auth_login():
             if user and bool(user[6]):
                 user_id = user[0]
 
-                _invalidate_existing_magic_links(
-                    user_id
-                )
+                _invalidate_existing_magic_links(user_id)
 
-                raw_token = secrets.token_urlsafe(
-                    MAGIC_LINK_TOKEN_BYTES
-                )
+                raw_token = secrets.token_urlsafe(MAGIC_LINK_TOKEN_BYTES)
 
                 _store_magic_link(
                     user_id=user_id,
-                    token_hash=_hash_magic_token(
-                        raw_token
-                    ),
-                    expires_at=(
-                        _utcnow()
-                        + timedelta(
-                            seconds=MAGIC_LINK_TTL_SECONDS
-                        )
-                    ),
+                    token_hash=_hash_magic_token(raw_token),
+                    expires_at=(_utcnow() + timedelta(seconds=MAGIC_LINK_TTL_SECONDS)),
                 )
 
-                link = _build_magic_link(
-                    raw_token
-                )
+                link = _build_magic_link(raw_token)
 
                 _send_magic_link_email(
                     email,
@@ -132,12 +113,7 @@ def auth_login():
                 error=str(exc),
             )
 
-            return jsonify(
-                {
-                    "error":
-                    "Unable to process sign-in request"
-                }
-            ), 500
+            return jsonify({"error": "Unable to process sign-in request"}), 500
 
     # ── Legacy API key compatibility ───────────────────────
 
@@ -149,39 +125,22 @@ def auth_login():
     ).strip()
 
     if not key:
-        return jsonify(
-            {
-                "error":
-                "Email is required"
-            }
-        ), 400
+        return jsonify({"error": "Email is required"}), 400
 
     org_id = _auth_pkg().resolve_org_id(key)
 
     if not org_id:
-        return jsonify(
-            {
-                "error":
-                "Unauthorized"
-            }
-        ), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
     if (
         org_id == "default"
-        and current_app.config.get(
-            "ENVIRONMENT"
-        ) == "production"
+        and current_app.config.get("ENVIRONMENT") == "production"
         and not current_app.config.get(
             "ALLOW_LEGACY_SYSTEM_KEY",
             False,
         )
     ):
-        return jsonify(
-            {
-                "error":
-                "Legacy system API key disabled"
-            }
-        ), 401
+        return jsonify({"error": "Legacy system API key disabled"}), 401
 
     response = jsonify(
         {
@@ -220,11 +179,7 @@ def auth_login():
 @auth_bp.get("/api/auth/me")
 def auth_me():
     if not require_auth():
-        return jsonify(
-            {
-                "authenticated": False
-            }
-        ), 401
+        return jsonify({"authenticated": False}), 401
 
     identity = resolve_full_identity()
 
@@ -285,13 +240,9 @@ def auth_me():
     methods=["GET", "POST"],
 )
 def logout():
-    response = redirect(
-        url_for("auth.login")
-    )
+    response = redirect(url_for("auth.login"))
 
-    _clear_human_session(
-        response
-    )
+    _clear_human_session(response)
 
     logger.info(
         "logout",
@@ -318,11 +269,7 @@ def healthz():
         finally:
             conn.close()
 
-        return jsonify(
-            {
-                "status": "ok"
-            }
-        ), 200
+        return jsonify({"status": "ok"}), 200
 
     except Exception as exc:
         return jsonify(
@@ -357,7 +304,8 @@ def dashboard():
 @auth_bp.route("/legacy")
 def dashboard_legacy():
     """Ancien dashboard (clés API, budgets, politiques, alertes) en attendant la parité."""
-    from collector.dashboard import DASHBOARD_HTML
     from flask import make_response
+
+    from collector.dashboard import DASHBOARD_HTML
 
     return make_response(render_template_string(DASHBOARD_HTML))

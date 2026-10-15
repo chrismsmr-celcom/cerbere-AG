@@ -8,6 +8,7 @@ Usage :
     python scripts/restore_db.py backups/agentguard_20260810_120000.dump
     python scripts/restore_db.py backups/agentguard_20260810_120000.db
 """
+
 import os
 import shutil
 import subprocess
@@ -25,7 +26,8 @@ def restore_postgres(backup_file: Path):
         sys.exit(1)
     result = subprocess.run(
         ["pg_restore", "--clean", "--if-exists", "-d", DATABASE_URL, str(backup_file)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     # pg_restore renvoie parfois un code non-zéro pour des avertissements
     # bénins (ex: "table does not exist" sur --if-exists) — on affiche le
@@ -46,7 +48,10 @@ def restore_sqlite(backup_file: Path):
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: python scripts/restore_db.py <fichier_de_sauvegarde>", file=sys.stderr)
+        print(
+            "Usage: python scripts/restore_db.py <fichier_de_sauvegarde>",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     backup_file = Path(sys.argv[1])
@@ -54,7 +59,9 @@ def main():
         print(f"[restore] ERREUR: {backup_file} introuvable.", file=sys.stderr)
         sys.exit(1)
 
-    confirm = input(f"⚠️  Ceci va écraser la base actuelle avec {backup_file}. Continuer ? [oui/N] ")
+    confirm = input(
+        f"⚠️  Ceci va écraser la base actuelle avec {backup_file}. Continuer ? [oui/N] "
+    )
     if confirm.strip().lower() not in ("oui", "yes", "y"):
         print("Annulé.")
         sys.exit(0)

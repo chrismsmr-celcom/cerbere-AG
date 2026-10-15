@@ -1,17 +1,18 @@
-
-import os
 import json
+import os
 import re
-import structlog
-from typing import Optional, Dict, Any, List
+from typing import Any
 
-from .models import SecurityCheck, RiskLevel, SecurityAction
+import structlog
+
+from .models import RiskLevel, SecurityAction, SecurityCheck
 
 logger = structlog.get_logger("agentguard.policy")
 
 try:
     from .ml import MLDetector
 except ImportError:
+
     class MLDetector:
         def __init__(self):
             self.enabled = False
@@ -22,7 +23,7 @@ except ImportError:
 
 
 try:
-    from .judges import LLMCascadeJudge, JudgeVerdict, TripleJudge
+    from .judges import JudgeVerdict, LLMCascadeJudge, TripleJudge
 except ImportError:  # pragma: no cover
     LLMCascadeJudge = None
     JudgeVerdict = None
@@ -56,21 +57,22 @@ class PolicyEngine:
 
     def __init__(
         self,
-        policies: Optional[List[Dict[str, Any]]] = None,
-        redis_url: Optional[str] = None,
+        policies: list[dict[str, Any]] | None = None,
+        redis_url: str | None = None,
     ):
         self.policies = policies or []
         self._compile_patterns()
         self.ml_detector = MLDetector()
 
-        self.use_llm_judge = (
-            os.getenv("AGENTGUARD_USE_LLM_JUDGE", "false").lower()
-            in ("true", "1", "on", "yes")
+        self.use_llm_judge = os.getenv("AGENTGUARD_USE_LLM_JUDGE", "false").lower() in (
+            "true",
+            "1",
+            "on",
+            "yes",
         )
-        self.block_on_ambiguous = (
-            os.getenv("AGENTGUARD_BLOCK_ON_AMBIGUOUS", "false").lower()
-            in ("true", "1", "on", "yes")
-        )
+        self.block_on_ambiguous = os.getenv(
+            "AGENTGUARD_BLOCK_ON_AMBIGUOUS", "false"
+        ).lower() in ("true", "1", "on", "yes")
         self.judge_timeout = max(
             0.5,
             float(os.getenv("AGENTGUARD_JUDGE_TIMEOUT", "15.0")),
@@ -79,12 +81,9 @@ class PolicyEngine:
         # Fail mode de la whitelist scoped :
         # "open" : comportement historique.
         # "closed" : bloque si aucune whitelist ne couvre l'agent.
-        self._whitelist_fail_closed = (
-            os.getenv("AGENTGUARD_WHITELIST_FAIL_MODE", "open")
-            .strip()
-            .lower()
-            in ("closed", "fail_closed", "true", "1")
-        )
+        self._whitelist_fail_closed = os.getenv(
+            "AGENTGUARD_WHITELIST_FAIL_MODE", "open"
+        ).strip().lower() in ("closed", "fail_closed", "true", "1")
 
         self._redis_client = None
         if redis_url and self.use_llm_judge:
@@ -98,7 +97,7 @@ class PolicyEngine:
                 self._redis_client = None
 
         self._allowed_tools_global = set()
-        self._allowed_tools_by_agent: Dict[str, set] = {}
+        self._allowed_tools_by_agent: dict[str, set] = {}
         self._has_whitelist_policies = False
 
         for policy in self.policies:
@@ -112,9 +111,9 @@ class PolicyEngine:
 
                 if scoped_agents:
                     for agent in scoped_agents:
-                        self._allowed_tools_by_agent.setdefault(
-                            agent, set()
-                        ).update(tools)
+                        self._allowed_tools_by_agent.setdefault(agent, set()).update(
+                            tools
+                        )
                 else:
                     self._allowed_tools_global.update(tools)
 
@@ -127,29 +126,20 @@ class PolicyEngine:
             try:
                 triple_judge = TripleJudge()
 
-                prompt_guard_ready = (
-                    triple_judge.prompt_guard.enabled
-                    and bool(triple_judge.prompt_guard.api_key)
+                prompt_guard_ready = triple_judge.prompt_guard.enabled and bool(
+                    triple_judge.prompt_guard.api_key
                 )
-                llama_guard_ready = (
-                    triple_judge.llama_guard.enabled
-                    and bool(triple_judge.llama_guard.api_key)
+                llama_guard_ready = triple_judge.llama_guard.enabled and bool(
+                    triple_judge.llama_guard.api_key
                 )
                 cascade_ready = triple_judge.llm_cascade.is_configured()
 
-                if (
-                    prompt_guard_ready
-                    or llama_guard_ready
-                    or cascade_ready
-                ):
+                if prompt_guard_ready or llama_guard_ready or cascade_ready:
                     self._triple_judge = triple_judge
                 else:
                     logger.warning(
                         "triple_judge_unconfigured",
-                        detail=(
-                            "Aucun juge LLM ne dispose d'une clé API "
-                            "configurée"
-                        ),
+                        detail=("Aucun juge LLM ne dispose d'une clé API configurée"),
                     )
             except Exception as exc:
                 logger.warning(
@@ -187,11 +177,9 @@ class PolicyEngine:
             merged.update(tools)
         return merged
 
-    def _effective_whitelist(self, agent_id: Optional[str]) -> set:
+    def _effective_whitelist(self, agent_id: str | None) -> set:
         scoped = (
-            self._allowed_tools_by_agent.get(agent_id, set())
-            if agent_id
-            else set()
+            self._allowed_tools_by_agent.get(agent_id, set()) if agent_id else set()
         )
         if scoped:
             return scoped | self._allowed_tools_global
@@ -274,10 +262,8 @@ class PolicyEngine:
         # Étape 3 : détection ML.
         if self.ml_detector.enabled:
             ml_result = self.ml_detector.predict(text)
-            if (
-                ml_result["risk"] == "HIGH"
-                and ml_result["score"]
-                >= getattr(self.ml_detector, "threshold", 0.95)
+            if ml_result["risk"] == "HIGH" and ml_result["score"] >= getattr(
+                self.ml_detector, "threshold", 0.95
             ):
                 if is_didactic_context(text):
                     return SecurityCheck(
@@ -317,10 +303,7 @@ class PolicyEngine:
 
         # Étape 4 : regex après normalisation.
         normalized = normalize_for_detection(text)
-        if (
-            normalized != text
-            and PolicyEngine._STRONG_PATTERNS.findall(normalized)
-        ):
+        if normalized != text and PolicyEngine._STRONG_PATTERNS.findall(normalized):
             if is_didactic_context(text):
                 return SecurityCheck(
                     "prompt_injection",
@@ -345,9 +328,8 @@ class PolicyEngine:
 
         # Étape 5 : mots inversés.
         reversed_text = reversed_words_variant(text)
-        if (
-            reversed_text != text
-            and PolicyEngine._STRONG_PATTERNS.findall(reversed_text)
+        if reversed_text != text and PolicyEngine._STRONG_PATTERNS.findall(
+            reversed_text
         ):
             return SecurityCheck(
                 "prompt_injection",
@@ -374,7 +356,7 @@ class PolicyEngine:
         )
 
     @staticmethod
-    def _cleared_flag(ml_cleared) -> Dict[str, Any]:
+    def _cleared_flag(ml_cleared) -> dict[str, Any]:
         """Métadonnées d'un flag ML innocenté par le LLM."""
         if ml_cleared is None:
             return {}
@@ -430,10 +412,7 @@ class PolicyEngine:
                 "prompt_injection",
                 True,
                 RiskLevel.MEDIUM,
-                (
-                    f"ML flag ({ml_score:.2%}), LLM arbiter: "
-                    "didactic context -> review"
-                ),
+                (f"ML flag ({ml_score:.2%}), LLM arbiter: didactic context -> review"),
                 {**meta, "downgraded": True},
                 SecurityAction.REVIEW,
             )
@@ -499,10 +478,7 @@ class PolicyEngine:
                 "budget_policy",
                 False,
                 RiskLevel.HIGH,
-                (
-                    f"Budget exceeded: {current_spent + cost:.4f} "
-                    f"> {max_budget:.4f}"
-                ),
+                (f"Budget exceeded: {current_spent + cost:.4f} > {max_budget:.4f}"),
                 {
                     "current_spent": current_spent,
                     "cost": cost,
@@ -521,25 +497,21 @@ class PolicyEngine:
     def check_tool_policy(
         self,
         tool_name: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         budget_remaining: float,
-        agent_id: Optional[str] = None,
+        agent_id: str | None = None,
     ) -> SecurityCheck:
         effective_whitelist = self._effective_whitelist(agent_id)
 
-        if (
-            effective_whitelist
-            and not _tool_matches_whitelist(tool_name, effective_whitelist)
+        if effective_whitelist and not _tool_matches_whitelist(
+            tool_name, effective_whitelist
         ):
             scope = f"agent '{agent_id}'" if agent_id else "default scope"
             return SecurityCheck(
                 "tool_policy",
                 False,
                 RiskLevel.CRITICAL,
-                (
-                    f"Tool '{tool_name}' not in whitelist "
-                    f"for {scope}"
-                ),
+                (f"Tool '{tool_name}' not in whitelist for {scope}"),
                 {"agent_id": agent_id},
                 SecurityAction.BLOCK,
             )
@@ -601,9 +573,7 @@ class PolicyEngine:
                     recipient = str(
                         args.get("recipient_email", args.get("to", ""))
                     ).lower()
-                    has_attachment = (
-                        "attachment" in args or "attachments" in args
-                    )
+                    has_attachment = "attachment" in args or "attachments" in args
 
                     personal_domains = (
                         "@gmail.com",
@@ -614,14 +584,10 @@ class PolicyEngine:
                     )
 
                     if any(domain in recipient for domain in personal_domains):
-                        reason = (
-                            "Envoi vers domaine personnel détecté "
-                            f"({recipient})"
-                        )
+                        reason = f"Envoi vers domaine personnel détecté ({recipient})"
                         if has_attachment:
                             reason += (
-                                " avec pièce jointe. "
-                                "Approbation humaine OBLIGATOIRE."
+                                " avec pièce jointe. Approbation humaine OBLIGATOIRE."
                             )
 
                         return SecurityCheck(
@@ -670,7 +636,7 @@ class PolicyEngine:
             "Tool call approved",
         )
 
-    def _check_email(self, params: Dict[str, Any]) -> SecurityCheck:
+    def _check_email(self, params: dict[str, Any]) -> SecurityCheck:
         full_content = (
             f"{params.get('to', '')} "
             f"{params.get('subject', '')} "
@@ -699,7 +665,7 @@ class PolicyEngine:
             "Email approved",
         )
 
-    def _check_command(self, params: Dict[str, Any]) -> SecurityCheck:
+    def _check_command(self, params: dict[str, Any]) -> SecurityCheck:
         command = params.get("command", "")
         dangerous = re.compile(
             r"\b(?:rm\s+-rf|sudo|chmod\s+777|mkfs|dd\s+if=|"

@@ -1,9 +1,10 @@
 """Fixtures partagées pour les tests AgentGuard."""
+
 import os
 import sys
-import pytest
-import tempfile
 from pathlib import Path
+
+import pytest
 
 # Force l'environnement de test AVANT tout import
 os.environ.setdefault("AGENTGUARD_API_KEY", "ag-test-key-for-ci-only")
@@ -37,16 +38,16 @@ def temp_db(tmp_path):
 def client(temp_db):
     """Client Flask de test avec DB isolée."""
     # ✅ Nouveau pattern : factory create_app() depuis collector.app
-    from collector.db import init_db
     from collector.app import create_app
-    
+    from collector.db import init_db
+
     # Réinitialise la DB pour chaque test
     init_db()
-    
+
     # Crée une instance Flask fraîche
     app = create_app()
     app.config["TESTING"] = True
-    
+
     with app.test_client() as test_client:
         yield test_client
 
@@ -54,9 +55,9 @@ def client(temp_db):
 @pytest.fixture
 def app(temp_db):
     """Instance Flask de test (pour tests qui ont besoin de l'app directement)."""
-    from collector.db import init_db
     from collector.app import create_app
-    
+    from collector.db import init_db
+
     init_db()
     app = create_app()
     app.config["TESTING"] = True
@@ -139,48 +140,54 @@ def injection_span():
 @pytest.fixture
 def db_conn(temp_db):
     """Connexion SQLite directe pour tests SQL bas niveau."""
-    from collector.db import init_db, get_sqlite_conn
-    
+    from collector.db import get_sqlite_conn, init_db
+
     init_db()
     conn = get_sqlite_conn()
     yield conn
     conn.close()
+
+
 @pytest.fixture
 def client_with_identity(tmp_path):
     """Client avec DB + tenant + org initialisés."""
     import os
+
     db_path = tmp_path / "test.db"
     os.environ["AGENTGUARD_DB_PATH"] = str(db_path)
-    
-    from collector.db import init_db
+
     from collector.app import create_app
-    
+    from collector.db import init_db
+
     init_db()
     app = create_app()
     app.config["TESTING"] = True
-    
+
     with app.test_client() as client:
         api_key = os.environ.get("AGENTGUARD_API_KEY", "ag-test-key-for-ci-only")
-        
+
         # Crée un tenant
-        resp = client.post("/api/identity/tenants",
+        resp = client.post(
+            "/api/identity/tenants",
             json={"name": "Acme Corp"},
-            headers={"X-API-Key": api_key})
+            headers={"X-API-Key": api_key},
+        )
         assert resp.status_code == 201
         tenant_id = resp.json["tenant_id"]
-        
+
         # Crée une org
-        resp = client.post("/api/identity/orgs",
+        resp = client.post(
+            "/api/identity/orgs",
             json={"name": "Engineering", "tenant_id": tenant_id},
-            headers={"X-API-Key": api_key})
+            headers={"X-API-Key": api_key},
+        )
         assert resp.status_code == 201
         org_id = resp.json["org_id"]
-        
+
         yield client, {"tenant_id": tenant_id, "org_id": org_id}
-    
+
     if db_path.exists():
         try:
             db_path.unlink()
         except Exception:
             pass
-            

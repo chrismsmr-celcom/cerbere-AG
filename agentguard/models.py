@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 # ==============================================================================
 # ENUMS
 # ==============================================================================
+
 
 class RiskLevel(Enum):
     LOW = "low"
@@ -13,28 +15,33 @@ class RiskLevel(Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
+
 class SecurityAction(Enum):
     ALLOW = "allow"
     BLOCK = "block"
     REDACT = "redact"
     REVIEW = "review"
 
+
 class DetectionConfidence(Enum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
+
 # ==============================================================================
 # PYDANTIC MODELS (Pour la sérialisation vers le Collector)
 # ==============================================================================
+
 
 class SecurityCheckModel(BaseModel):
     check_name: str
     passed: bool
     risk_level: str
     details: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     action: str = "allow"
+
 
 class SpanPayload(BaseModel):
     trace_id: str = Field(..., max_length=64)
@@ -42,20 +49,22 @@ class SpanPayload(BaseModel):
     span_type: str
     timestamp: float
     latency_ms: float = Field(..., ge=0)
-    input_data: Dict[str, Any]
-    output_data: Dict[str, Any]
-    security_checks: List[SecurityCheckModel]
+    input_data: dict[str, Any]
+    output_data: dict[str, Any]
+    security_checks: list[SecurityCheckModel]
     blocked: bool = False
-    block_reason: Optional[str] = None
+    block_reason: str | None = None
     cost_usd: float = Field(..., ge=0)
     input_tokens: int = Field(0, ge=0)
     output_tokens: int = Field(0, ge=0)
-    taint_level: Optional[str] = None
-    risk_score: Optional[float] = None
+    taint_level: str | None = None
+    risk_score: float | None = None
+
 
 # ==============================================================================
 # DATACLASSES (Pour la logique interne du SDK)
 # ==============================================================================
+
 
 @dataclass
 class SecurityCheck:
@@ -63,41 +72,44 @@ class SecurityCheck:
     passed: bool
     risk_level: RiskLevel
     details: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     action: SecurityAction = SecurityAction.ALLOW
 
     def to_model(self) -> SecurityCheckModel:
         return SecurityCheckModel(
-            check_name=self.check_name, 
+            check_name=self.check_name,
             passed=self.passed,
-            risk_level=self.risk_level.value, 
+            risk_level=self.risk_level.value,
             details=self.details,
-            metadata=self.metadata, 
+            metadata=self.metadata,
             action=self.action.value,
         )
+
 
 @dataclass
 class RuntimeRiskDecision:
     action: str
     risk_score: float
     risk_level: RiskLevel
-    reasons: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    reasons: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def allowed(self) -> bool:
         return self.action == "ALLOW"
 
+
 @dataclass
 class TrajectoryEvent:
     timestamp: float
     event_type: str
-    tool_name: Optional[str] = None
-    taint_level: Optional[str] = None
+    tool_name: str | None = None
+    taint_level: str | None = None
     external: bool = False
     irreversible: bool = False
     risk_score: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class GuardSpan:
@@ -106,36 +118,45 @@ class GuardSpan:
     span_type: str
     timestamp: float
     latency_ms: float
-    input_data: Dict[str, Any]
-    output_data: Dict[str, Any]
-    security_checks: List[SecurityCheck] = field(default_factory=list)
+    input_data: dict[str, Any]
+    output_data: dict[str, Any]
+    security_checks: list[SecurityCheck] = field(default_factory=list)
     blocked: bool = False
-    block_reason: Optional[str] = None
+    block_reason: str | None = None
     cost_usd: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
-    taint_level: Optional[str] = None
-    risk_score: Optional[float] = None
+    taint_level: str | None = None
+    risk_score: float | None = None
+
 
 # ==============================================================================
 # EXCEPTIONS
 # ==============================================================================
 
+
 class SecurityException(Exception):
     """Exception levée lorsqu'une opération est bloquée par AgentGuard."""
-    pass
+
 
 class AgentDisconnectedException(SecurityException):
     """Levée quand l'agent a été déconnecté depuis le dashboard Cerbere (kill switch)."""
-    pass
+
 
 class ApprovalRequiredException(Exception):
     """
     Exception levée lorsqu'une opération nécessite une approbation humaine (Human-in-the-Loop).
-    Utilisé pour les cas de DLP (Data Loss Prevention) où l'action n'est ni bloquée brutalement, 
+    Utilisé pour les cas de DLP (Data Loss Prevention) où l'action n'est ni bloquée brutalement,
     ni autorisée aveuglément.
     """
-    def __init__(self, message: str, approval_id: str, details: Dict[str, Any], timed_out: bool = False):
+
+    def __init__(
+        self,
+        message: str,
+        approval_id: str,
+        details: dict[str, Any],
+        timed_out: bool = False,
+    ):
         super().__init__(message)
         self.approval_id = approval_id
         self.details = details
@@ -144,7 +165,8 @@ class ApprovalRequiredException(Exception):
 
 class ApprovalRejectedException(SecurityException):
     """Levée quand un humain a explicitement REJETÉ la demande (pas juste "en attente")."""
-    def __init__(self, message: str, approval_id: str, resolved_by: Optional[str] = None):
+
+    def __init__(self, message: str, approval_id: str, resolved_by: str | None = None):
         super().__init__(message)
         self.approval_id = approval_id
         self.resolved_by = resolved_by

@@ -12,6 +12,7 @@ avant de brancher un vrai modèle (ChatOpenAI, ChatAnthropic, etc.).
 
 Lancer : python integrations/langchain_example.py
 """
+
 import os
 import sys
 
@@ -34,10 +35,12 @@ guard = AgentGuard(
 # Remplace par ex. ChatOpenAI(model="gpt-4o") ou ChatAnthropic(model="claude-sonnet-4-6")
 # — AgentGuard ne dépend d'aucun de ces packages, seulement de la fonction
 # d'appel que tu lui passes.
-llm = FakeListChatModel(responses=[
-    "Bonjour ! Je peux vous aider avec ça.",
-    "Je ne peux pas révéler d'informations confidentielles.",
-])
+llm = FakeListChatModel(
+    responses=[
+        "Bonjour ! Je peux vous aider avec ça.",
+        "Je ne peux pas révéler d'informations confidentielles.",
+    ]
+)
 
 
 # ── 3. Le point d'intégration : une fonction qui prend `messages` et

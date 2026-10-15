@@ -1,6 +1,5 @@
 """Pages HTML (login Supabase, login legacy SMTP, signup) rendues via render_template_string."""
 
-
 SUPABASE_LOGIN_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>

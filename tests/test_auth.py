@@ -1,6 +1,6 @@
 """Tests d'authentification et sessions."""
+
 import os
-import pytest
 
 
 class TestLoginFlow:
@@ -23,12 +23,12 @@ class TestLoginFlow:
 
 class TestKeyEndpoint:
     """Endpoint /api/key (récupération clé via admin secret)."""
-    
+
     def test_key_requires_admin_secret(self, client):
         """Sans admin secret → 403."""
         resp = client.get("/api/key")
         assert resp.status_code in (403, 404)
-    
+
     def test_key_with_valid_admin_secret(self, client):
         """Avec admin secret valide → retourne la clé."""
         resp = client.get(
@@ -44,7 +44,7 @@ class TestKeyEndpoint:
 
 class TestLogout:
     """Déconnexion."""
-    
+
     def test_logout_clears_cookie(self, client):
         """Logout supprime le cookie de session."""
         # Login d'abord
@@ -52,7 +52,7 @@ class TestLogout:
             "/login",
             data={"api_key": os.environ["AGENTGUARD_API_KEY"]},
         )
-        
+
         # Logout
         resp = client.post("/logout", follow_redirects=False)
         assert resp.status_code in (302, 303)

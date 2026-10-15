@@ -91,4 +91,3 @@ def show_banner(force: bool = False) -> None:
         return
     print(BANNER, file=sys.stderr)
     _already_shown = True
-

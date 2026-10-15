@@ -165,11 +165,7 @@ def _session_org_id(token: str):
                 ),
             )
 
-            return (
-                org_id
-                if cur.fetchone()
-                else None
-            )
+            return org_id if cur.fetchone() else None
         finally:
             conn.close()
 
@@ -192,10 +188,6 @@ def _session_org_id(token: str):
             ),
         )
 
-        return (
-            org_id
-            if cur.fetchone()
-            else None
-        )
+        return org_id if cur.fetchone() else None
     finally:
         conn.close()

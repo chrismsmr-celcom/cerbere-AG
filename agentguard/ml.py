@@ -18,16 +18,18 @@ Fixes v4 (benchmark 2026-09-26, layers regex,ml) :
   (encoded_obfuscated 8/10 au lieu de 10/10).
 - Version de modele loggee au boot (reproductibilite du benchmark).
 """
+
+import logging
 import os
 import re
-import logging
 import threading
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger("agentguard.ml")
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -38,8 +40,12 @@ class MLDetector:
         self.model = None
         self.tokenizer = None
         self.device = "cpu"
-        self._lock = threading.Lock()          # thread-safety inference
-        self.enabled = os.getenv("AGENTGUARD_USE_ML", "false").lower() in ("true", "1", "yes")
+        self._lock = threading.Lock()  # thread-safety inference
+        self.enabled = os.getenv("AGENTGUARD_USE_ML", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
         # v4: seuil dur. Le ML est un second filtre, pas un premier filtre.
         self.threshold = self._float_env("AGENTGUARD_ML_THRESHOLD", 0.95, 0.0, 1.0)
         self.model_path = os.getenv("AGENTGUARD_MODEL_PATH", "./agentguard-model")
@@ -49,7 +55,11 @@ class MLDetector:
         )
         self.max_chars = int(os.getenv("AGENTGUARD_ML_MAX_CHARS", "8192"))
         # v4: double passe normalisee (desactivable pour le debug)
-        self.dual_pass = os.getenv("AGENTGUARD_ML_DUAL_PASS", "true").lower() in ("true", "1", "yes")
+        self.dual_pass = os.getenv("AGENTGUARD_ML_DUAL_PASS", "true").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
         self._normalizer = None
         self.attack_label_id = None
         self.benign_label_id = None
@@ -62,8 +72,8 @@ class MLDetector:
 
         try:
             from transformers import (
-                AutoTokenizer,
                 AutoModelForSequenceClassification,
+                AutoTokenizer,
             )
 
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -73,7 +83,9 @@ class MLDetector:
                 try:
                     logger.info("ml_model_local_load: %s", self.model_path)
                     local_tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-                    local_model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
+                    local_model = AutoModelForSequenceClassification.from_pretrained(
+                        self.model_path
+                    )
                     labels = self._validate_model_labels(local_model)
                     self.tokenizer = local_tokenizer
                     self.model = local_model
@@ -88,7 +100,9 @@ class MLDetector:
             if not local_loaded:
                 logger.info("ml_model_download: %s", self.model_name)
                 remote_tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                remote_model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
+                remote_model = AutoModelForSequenceClassification.from_pretrained(
+                    self.model_name
+                )
                 labels = self._validate_model_labels(remote_model)
                 self.tokenizer = remote_tokenizer
                 self.model = remote_model
@@ -113,6 +127,7 @@ class MLDetector:
             if self.dual_pass:
                 try:
                     from agentguard.normalizer import normalize_for_detection
+
                     self._normalizer = normalize_for_detection
                 except Exception:
                     logger.warning("ml_normalizer_unavailable_dual_pass_disabled")
@@ -153,11 +168,21 @@ class MLDetector:
             raise RuntimeError(f"Classifier labels missing or invalid: {raw_labels!r}")
 
         attack_labels = {
-            "injection", "prompt_injection", "jailbreak",
-            "malicious", "unsafe", "attack", "attacker",
+            "injection",
+            "prompt_injection",
+            "jailbreak",
+            "malicious",
+            "unsafe",
+            "attack",
+            "attacker",
         }
         benign_labels = {
-            "safe", "benign", "no_injection", "clean", "normal", "non_injection",
+            "safe",
+            "benign",
+            "no_injection",
+            "clean",
+            "normal",
+            "non_injection",
         }
 
         attack_ids = [i for i, l in normalized.items() if l in attack_labels]
@@ -210,7 +235,7 @@ class MLDetector:
 
         return float(probabilities[0][self.attack_label_id].item())
 
-    def predict(self, text: str) -> Dict[str, Any]:
+    def predict(self, text: str) -> dict[str, Any]:
         if not self.enabled or self.model is None or self.tokenizer is None:
             return {"score": 0.0, "risk": "UNKNOWN", "confidence": "low"}
 
@@ -226,8 +251,7 @@ class MLDetector:
                 normalized = self._normalizer(text)
                 if normalized != text:
                     norm_score = self._score_once(normalized)
-                    if norm_score > score:
-                        score = norm_score
+                    score = max(score, norm_score)
 
             if score >= self.threshold:
                 risk = "HIGH"

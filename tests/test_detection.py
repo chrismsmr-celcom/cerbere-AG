@@ -7,7 +7,7 @@ du jailbreak sans en être).
 
 Lancer : pytest test_detection.py -v -s
 """
-import pytest
+
 from agentguard.sdk import PolicyEngine, RiskLevel
 
 pe = PolicyEngine([])
@@ -51,8 +51,10 @@ def test_attacks_are_detected():
         if check.passed:
             missed.append(text)
     detection_rate = (len(ATTACKS) - len(missed)) / len(ATTACKS)
-    print(f"\n[Détection attaques] {len(ATTACKS) - len(missed)}/{len(ATTACKS)} "
-          f"détectées ({detection_rate:.0%})")
+    print(
+        f"\n[Détection attaques] {len(ATTACKS) - len(missed)}/{len(ATTACKS)} "
+        f"détectées ({detection_rate:.0%})"
+    )
     if missed:
         print("  Manquées :", missed)
     assert not missed, f"{len(missed)} attaque(s) non détectée(s) par le regex"
@@ -65,7 +67,9 @@ def test_attacks_trigger_high_risk_not_just_medium():
         check = pe.check_injection(text)
         if check.risk_level != RiskLevel.HIGH:
             weak_only.append((text, check.risk_level.value))
-    print(f"\n[Confiance] {len(ATTACKS) - len(weak_only)}/{len(ATTACKS)} en HIGH confidence")
+    print(
+        f"\n[Confiance] {len(ATTACKS) - len(weak_only)}/{len(ATTACKS)} en HIGH confidence"
+    )
     assert not weak_only, f"Attaques détectées mais pas en HIGH: {weak_only}"
 
 
@@ -77,10 +81,14 @@ def test_benign_prompts_are_not_blocked():
         if check.risk_level == RiskLevel.HIGH:
             false_positives.append(text)
     fp_rate = len(false_positives) / len(BENIGN)
-    print(f"\n[Faux positifs] {len(false_positives)}/{len(BENIGN)} bloqués à tort ({fp_rate:.0%})")
+    print(
+        f"\n[Faux positifs] {len(false_positives)}/{len(BENIGN)} bloqués à tort ({fp_rate:.0%})"
+    )
     if false_positives:
         print("  Faux positifs :", false_positives)
-    assert not false_positives, f"{len(false_positives)} prompt(s) légitime(s) bloqué(s) à tort"
+    assert not false_positives, (
+        f"{len(false_positives)} prompt(s) légitime(s) bloqué(s) à tort"
+    )
 
 
 def test_ambiguous_roleplay_flagged_but_not_blocked():
@@ -88,7 +96,12 @@ def test_ambiguous_roleplay_flagged_but_not_blocked():
     pour revue humaine ou llm_judge) mais jamais bloquées d'office (HIGH)."""
     for text in BENIGN:
         check = pe.check_injection(text)
-        if "rôle" in text.lower() or "pretend" in text.lower() or "act as" in text.lower() or "comme si" in text.lower():
+        if (
+            "rôle" in text.lower()
+            or "pretend" in text.lower()
+            or "act as" in text.lower()
+            or "comme si" in text.lower()
+        ):
             assert check.risk_level != RiskLevel.HIGH
             # Ambigu, donc soit signalé MEDIUM pour revue, soit laissé passer
             assert check.risk_level in (RiskLevel.LOW, RiskLevel.MEDIUM)
@@ -98,7 +111,9 @@ def test_summary_report():
     """Rapport lisible, pas seulement des assertions pass/fail."""
     tp = sum(1 for t in ATTACKS if not pe.check_injection(t).passed)
     fp = sum(1 for t in BENIGN if pe.check_injection(t).risk_level == RiskLevel.HIGH)
-    print(f"\n{'='*50}\nRAPPORT DE DÉTECTION\n{'='*50}")
-    print(f"Attaques détectées : {tp}/{len(ATTACKS)} ({tp/len(ATTACKS):.0%})")
-    print(f"Faux positifs (blocages à tort) : {fp}/{len(BENIGN)} ({fp/len(BENIGN):.0%})")
-    print(f"{'='*50}")
+    print(f"\n{'=' * 50}\nRAPPORT DE DÉTECTION\n{'=' * 50}")
+    print(f"Attaques détectées : {tp}/{len(ATTACKS)} ({tp / len(ATTACKS):.0%})")
+    print(
+        f"Faux positifs (blocages à tort) : {fp}/{len(BENIGN)} ({fp / len(BENIGN):.0%})"
+    )
+    print(f"{'=' * 50}")

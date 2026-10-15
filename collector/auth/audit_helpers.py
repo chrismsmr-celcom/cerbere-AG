@@ -1,13 +1,11 @@
 """Audit des connexions."""
 
-from typing import Optional
-
 
 def _audit_login(
     success: bool,
-    email: Optional[str] = None,
+    email: str | None = None,
     org_id: str = "unknown",
-    reason: Optional[str] = None,
+    reason: str | None = None,
 ):
     try:
         from collector.audit_routes import (
@@ -21,9 +19,7 @@ def _audit_login(
             return
 
         event_type = (
-            AuditEventType.LOGIN_SUCCESS
-            if success
-            else AuditEventType.LOGIN_FAILED
+            AuditEventType.LOGIN_SUCCESS if success else AuditEventType.LOGIN_FAILED
         )
 
         details = {
@@ -36,23 +32,11 @@ def _audit_login(
         audit.log_event(
             event_type=event_type,
             org_id=org_id,
-            actor=(
-                f"user:{email}"
-                if email
-                else "unknown"
-            ),
+            actor=(f"user:{email}" if email else "unknown"),
             resource="dashboard",
-            action=(
-                "login"
-                if success
-                else "login_failed"
-            ),
+            action=("login" if success else "login_failed"),
             details=details,
-            risk_level=(
-                "info"
-                if success
-                else "warning"
-            ),
+            risk_level=("info" if success else "warning"),
         )
 
     except Exception:

@@ -1,16 +1,18 @@
 """Pydantic schemas for strict input validation."""
-from decimal import Decimal, InvalidOperation
-from typing import Optional
+
+from decimal import Decimal
+
 from pydantic import BaseModel, Field, field_validator
 
 
 class AgentCreateRequest(BaseModel):
     """Validation stricte pour création d'agent."""
+
     name: str = Field(..., min_length=2, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     max_budget_per_day: float = Field(100.0, ge=0, le=10000)
-    org_id: Optional[str] = None
-    
+    org_id: str | None = None
+
     @field_validator("max_budget_per_day")
     @classmethod
     def validate_budget(cls, v):
@@ -21,23 +23,24 @@ class AgentCreateRequest(BaseModel):
         if d < 0 or d > 10000:
             raise ValueError("max_budget_per_day must be between 0 and 10000")
         return float(d)
-    
+
     @field_validator("name")
     @classmethod
     def validate_name(cls, v):
         # Prevent injection via name
-        if any(c in v for c in ['<', '>', '"', "'", ';', '`', '$']):
+        if any(c in v for c in ["<", ">", '"', "'", ";", "`", "$"]):
             raise ValueError("name contains forbidden characters")
         return v.strip()
 
 
 class UserCreateRequest(BaseModel):
     """Validation stricte pour création d'utilisateur."""
+
     email: str = Field(..., min_length=3, max_length=255)
-    display_name: Optional[str] = Field(None, max_length=100)
+    display_name: str | None = Field(None, max_length=100)
     role: str = Field("viewer")
-    org_id: Optional[str] = None
-    
+    org_id: str | None = None
+
     @field_validator("email")
     @classmethod
     def validate_email(cls, v):
@@ -47,11 +50,12 @@ class UserCreateRequest(BaseModel):
         if len(v) > 255:
             raise ValueError("email too long")
         return v
-    
+
     @field_validator("role")
     @classmethod
     def validate_role(cls, v):
         from agentguard.identity import Role
+
         try:
             Role(v)
         except ValueError:
@@ -61,19 +65,21 @@ class UserCreateRequest(BaseModel):
 
 class OrgCreateRequest(BaseModel):
     """Validation pour création d'org."""
+
     name: str = Field(..., min_length=2, max_length=64)
-    tenant_id: Optional[str] = None
-    
+    tenant_id: str | None = None
+
     @field_validator("name")
     @classmethod
     def validate_name(cls, v):
-        if any(c in v for c in ['<', '>', '"', "'", ';', '`']):
+        if any(c in v for c in ["<", ">", '"', "'", ";", "`"]):
             raise ValueError("name contains forbidden characters")
         return v.strip()
 
 
 class SpanIngestRequest(BaseModel):
     """Validation du payload /span — rejette les payloads malformés."""
+
     trace_id: str = Field(..., min_length=1, max_length=64)
     span_id: str = Field(..., min_length=1, max_length=64)
     span_type: str = Field(..., min_length=1, max_length=64)
@@ -82,7 +88,7 @@ class SpanIngestRequest(BaseModel):
     cost_usd: float = Field(0.0, ge=0, le=1000000)
     input_tokens: int = Field(0, ge=0, le=1000000000)
     output_tokens: int = Field(0, ge=0, le=1000000000)
-    
+
     @field_validator("timestamp")
     @classmethod
     def validate_timestamp(cls, v):
@@ -90,7 +96,7 @@ class SpanIngestRequest(BaseModel):
         if not d.is_finite():
             raise ValueError("timestamp must be finite")
         return float(d)
-    
+
     @field_validator("latency_ms", "cost_usd")
     @classmethod
     def validate_finite(cls, v):

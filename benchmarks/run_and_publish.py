@@ -29,6 +29,7 @@ Usage:
     python benchmarks/run_public_benchmark.py --layers regex,ml
     python benchmarks/run_public_benchmark.py --all-layers
 """
+
 import argparse
 import hashlib
 import json
@@ -66,6 +67,7 @@ def sha256_file(path: Path) -> str:
 def sdk_version() -> str:
     try:
         from importlib.metadata import version
+
         return version("cerbere-ag")
     except Exception:
         return "unknown (not installed as package)"
@@ -75,7 +77,9 @@ def percentile(sorted_values, p):
     """Nearest-rank percentile on a sorted list."""
     if not sorted_values:
         return 0.0
-    k = max(0, min(len(sorted_values) - 1, int(round(p / 100 * len(sorted_values))) - 1))
+    k = max(
+        0, min(len(sorted_values) - 1, int(round(p / 100 * len(sorted_values))) - 1)
+    )
     return sorted_values[k]
 
 
@@ -94,7 +98,6 @@ def load_json(name: str) -> list:
                     entries.append(item)
         return entries
     return data
-
 
 
 def wilson_ci(successes: int, n: int, z: float = 1.96):
@@ -123,6 +126,7 @@ class Engine:
 
     def __init__(self):
         from agentguard.sdk import PolicyEngine
+
         self.policy_engine = PolicyEngine()
 
     def active_layers(self):
@@ -170,20 +174,22 @@ def run_subset(engine, entries, expect_detected: bool, label: str):
             detected, risk, reason = False, "error", f"engine error: {exc}"
         latency_ms = (time.perf_counter() - start) * 1000
 
-        passed = (detected == expect_detected)
-        records.append({
-            "id": e.get("id", ""),
-            "category": e.get("category", label),
-            "severity": e.get("severity", "n/a"),
-            "lang": e.get("lang", "en"),
-            "prompt": e["prompt"],
-            "expected_detected": expect_detected,
-            "detected": detected,
-            "passed": passed,
-            "risk_level": risk,
-            "latency_ms": round(latency_ms, 3),
-            "reason": reason,
-        })
+        passed = detected == expect_detected
+        records.append(
+            {
+                "id": e.get("id", ""),
+                "category": e.get("category", label),
+                "severity": e.get("severity", "n/a"),
+                "lang": e.get("lang", "en"),
+                "prompt": e["prompt"],
+                "expected_detected": expect_detected,
+                "detected": detected,
+                "passed": passed,
+                "risk_level": risk,
+                "latency_ms": round(latency_ms, 3),
+                "reason": reason,
+            }
+        )
     return records
 
 
@@ -203,17 +209,28 @@ def aggregate(records):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--layers", default="regex",
-                        help="Comma-separated: regex,ml,llm")
-    parser.add_argument("--all-layers", action="store_true",
-                        help="Run all three presets: regex / regex,ml / regex,ml,llm")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="Limit prompts per subset (smoke runs only; "
-                             "results marked non-authoritative)")
-    parser.add_argument("--allow-degraded", action="store_true",
-                        help="Do not abort when a requested layer is not "
-                             "really active; the run is then marked "
-                             "degraded and records the layers that ran.")
+    parser.add_argument(
+        "--layers", default="regex", help="Comma-separated: regex,ml,llm"
+    )
+    parser.add_argument(
+        "--all-layers",
+        action="store_true",
+        help="Run all three presets: regex / regex,ml / regex,ml,llm",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit prompts per subset (smoke runs only; "
+        "results marked non-authoritative)",
+    )
+    parser.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="Do not abort when a requested layer is not "
+        "really active; the run is then marked "
+        "degraded and records the layers that ran.",
+    )
     args = parser.parse_args()
 
     presets = list(LAYER_PRESETS) if args.all_layers else [args.layers]
@@ -250,10 +267,12 @@ def main():
         missing = [l for l in layers if l not in actual]
         degraded = bool(missing)
         if degraded:
-            msg = (f"Requested layers {layers} but only {actual} are really "
-                   f"active (missing: {missing}). Install torch/model for "
-                   f"'ml'; 'llm' is not wired into PolicyEngine if "
-                   f"_triple_judge is None.")
+            msg = (
+                f"Requested layers {layers} but only {actual} are really "
+                f"active (missing: {missing}). Install torch/model for "
+                f"'ml'; 'llm' is not wired into PolicyEngine if "
+                f"_triple_judge is None."
+            )
             if not args.allow_degraded:
                 raise LayerUnavailable("ERROR: " + msg)
             print("  WARNING (degraded run): " + msg)
@@ -273,9 +292,7 @@ def main():
         by_cat = defaultdict(list)
         for r in attack_rec:
             by_cat[r["category"]].append(r)
-        per_category = {
-            cat: aggregate(recs) for cat, recs in sorted(by_cat.items())
-        }
+        per_category = {cat: aggregate(recs) for cat, recs in sorted(by_cat.items())}
         att_all = aggregate(attack_rec)
         all_lat = aggregate(attack_rec + benign_rec + hardneg_rec)["latency_ms"]
         ben_all = aggregate(benign_rec)
@@ -292,14 +309,17 @@ def main():
             "ml": engine.ml_info(),
             "recall_overall": round(recall, 4),
             "recall_per_category": {
-                c: round(s["detected"] / s["count"], 4)
-                for c, s in per_category.items()
+                c: round(s["detected"] / s["count"], 4) for c, s in per_category.items()
             },
             "false_positive_rate_benign": round(fpr, 4),
             "false_positive_rate_hard_negatives": round(hn_fpr, 4),
             "recall_ci95": wilson_ci(att_all["detected"], att_all["count"]),
-            "fpr_benign_ci95": wilson_ci(ben_all["count"] - ben_all["passed"], ben_all["count"]),
-            "fpr_hard_negatives_ci95": wilson_ci(hn_all["count"] - hn_all["passed"], hn_all["count"]),
+            "fpr_benign_ci95": wilson_ci(
+                ben_all["count"] - ben_all["passed"], ben_all["count"]
+            ),
+            "fpr_hard_negatives_ci95": wilson_ci(
+                hn_all["count"] - hn_all["passed"], hn_all["count"]
+            ),
             # Latency over ALL prompts: attacks caught by regex exit early,
             # so attack-only latency hides the cost of the ML path.
             "latency_ms": all_lat,
@@ -326,14 +346,17 @@ def main():
             print(f"    - {c:28s} {s['detected']}/{s['count']}")
         print(f"  FPR (benign):          {fpr:.2%}")
         print(f"  FPR (hard negatives): {hn_fpr:.2%}")
-        print(f"  Active layers:         {actual}"
-              f"{'  (DEGRADED)' if degraded else ''}")
-        print(f"  Latency (all prompts) p50/p95/p99: "
-              f"{all_lat['p50']:.2f} / {all_lat['p95']:.2f} / {all_lat['p99']:.2f} ms")
-        print(f"  Latency (benign only) p50/p95/p99: "
-              f"{ben_all['latency_ms']['p50']:.2f} / "
-              f"{ben_all['latency_ms']['p95']:.2f} / "
-              f"{ben_all['latency_ms']['p99']:.2f} ms")
+        print(f"  Active layers:         {actual}{'  (DEGRADED)' if degraded else ''}")
+        print(
+            f"  Latency (all prompts) p50/p95/p99: "
+            f"{all_lat['p50']:.2f} / {all_lat['p95']:.2f} / {all_lat['p99']:.2f} ms"
+        )
+        print(
+            f"  Latency (benign only) p50/p95/p99: "
+            f"{ben_all['latency_ms']['p50']:.2f} / "
+            f"{ben_all['latency_ms']['p95']:.2f} / "
+            f"{ben_all['latency_ms']['p99']:.2f} ms"
+        )
 
     report = {
         "benchmark": "cerbere-ag-public-benchmark",

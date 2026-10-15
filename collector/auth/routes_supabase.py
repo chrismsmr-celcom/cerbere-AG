@@ -22,11 +22,13 @@ logger = structlog.get_logger("agentguard.auth")
 @auth_bp.get("/api/auth/config")
 def supabase_public_config():
     """Expose la config publique (URL + anon key) au front — jamais le JWT secret."""
-    return jsonify({
-        "supabase_enabled": SUPABASE_ENABLED,
-        "supabase_url": SUPABASE_URL,
-        "supabase_anon_key": SUPABASE_ANON_KEY,
-    })
+    return jsonify(
+        {
+            "supabase_enabled": SUPABASE_ENABLED,
+            "supabase_url": SUPABASE_URL,
+            "supabase_anon_key": SUPABASE_ANON_KEY,
+        }
+    )
 
 
 @auth_bp.post("/api/auth/supabase-session")

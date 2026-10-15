@@ -19,15 +19,11 @@ def safe_compare(a: str, b: str) -> bool:
 
 
 def hash_key(key: str) -> str:
-    return hashlib.sha256(
-        str(key).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(str(key).encode("utf-8")).hexdigest()
 
 
 def _hash_magic_token(token: str) -> str:
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _utcnow() -> datetime:
@@ -50,9 +46,9 @@ def _parse_datetime(value):
     value = str(value)
 
     try:
-        return datetime.fromisoformat(
-            value.replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
     except Exception:
         return None
 

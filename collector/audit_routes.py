@@ -1,7 +1,10 @@
 """Audit log routes + singleton instance."""
+
 import os
+
 import structlog
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
+
 from collector.auth import require_auth
 
 logger = structlog.get_logger("agentguard.audit")
@@ -18,8 +21,11 @@ def get_audit_log():
         try:
             from agentguard.audit import ImmutableAuditLog
             from collector.db import is_postgres
+
             db_url = os.environ.get("DATABASE_URL") if is_postgres() else None
-            signing_key = os.environ.get("CERBERE_SIGNING_KEY") or os.environ.get("AGENTGUARD_SIGNING_KEY", "")
+            signing_key = os.environ.get("CERBERE_SIGNING_KEY") or os.environ.get(
+                "AGENTGUARD_SIGNING_KEY", ""
+            )
             _audit_log_instance = ImmutableAuditLog(
                 database_url=db_url,
                 signing_key_pem=signing_key,
@@ -56,6 +62,7 @@ def audit_verify():
     if not require_auth():
         return jsonify({"error": "Unauthorized"}), 401
     from datetime import datetime
+
     limit = request.args.get("limit", type=int)
     if limit and (limit < 1 or limit > 10000):
         return jsonify({"error": "limit must be between 1 and 10000"}), 400
@@ -64,11 +71,13 @@ def audit_verify():
         if not audit:
             return jsonify({"error": "Audit log not available"}), 503
         is_valid, report = audit.verify_chain(limit=limit)
-        return jsonify({
-            "valid": is_valid,
-            "report": report,
-            "verified_at": datetime.utcnow().isoformat(),
-        })
+        return jsonify(
+            {
+                "valid": is_valid,
+                "report": report,
+                "verified_at": datetime.utcnow().isoformat(),
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

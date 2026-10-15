@@ -2,7 +2,7 @@
 Routes pour les pages légales (Privacy Policy, Terms of Service).
 """
 
-from flask import Blueprint, render_template_string, current_app
+from flask import Blueprint, render_template_string
 
 legal_bp = Blueprint("legal", __name__)
 
@@ -288,7 +288,7 @@ PRIVACY_HTML = LEGAL_BASE_TEMPLATE.replace(
         Kinshasa, République Démocratique du Congo<br>
         <a href="mailto:hello@cerbereag.site">hello@cerbereag.site</a>
     </p>
-    """
+    """,
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -377,22 +377,25 @@ TERMS_HTML = LEGAL_BASE_TEMPLATE.replace(
         Kinshasa, République Démocratique du Congo<br>
         <a href="mailto:hello@cerbereag.site">hello@cerbereag.site</a>
     </p>
-    """
+    """,
 )
 
 # ═══════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════
 
+
 @legal_bp.route("/privacy")
 def privacy():
     """Page Politique de Confidentialité."""
     return render_template_string(PRIVACY_HTML)
 
+
 @legal_bp.route("/terms")
 def terms():
     """Page Conditions d'Utilisation."""
     return render_template_string(TERMS_HTML)
+
 
 @legal_bp.route("/legal")
 def legal_index():

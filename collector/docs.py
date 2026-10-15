@@ -12,8 +12,10 @@ unique, un titre, et son contenu en Markdown — le HTML affiché est
 généré automatiquement depuis ce Markdown, donc il n'y a qu'une seule
 source de vérité par section.
 """
+
 import re
-from flask import Blueprint, render_template_string, Response
+
+from flask import Blueprint, Response, render_template_string
 
 docs_bp = Blueprint("docs", __name__)
 
@@ -171,7 +173,9 @@ def _md_to_html(md: str) -> str:
             continue
 
         is_table_row = stripped.startswith("|") and stripped.endswith("|")
-        is_separator_row = is_table_row and re.fullmatch(r"[|\-: ]+", stripped) is not None
+        is_separator_row = (
+            is_table_row and re.fullmatch(r"[|\-: ]+", stripped) is not None
+        )
 
         if is_table_row:
             if not in_table:
@@ -183,7 +187,9 @@ def _md_to_html(md: str) -> str:
             table_row_num += 1
             cells = [c.strip() for c in stripped.strip("|").split("|")]
             tag = "th" if table_row_num == 1 else "td"
-            html.append("<tr>" + "".join(f"<{tag}>{c}</{tag}>" for c in cells) + "</tr>")
+            html.append(
+                "<tr>" + "".join(f"<{tag}>{c}</{tag}>" for c in cells) + "</tr>"
+            )
             continue
         elif in_table:
             html.append("</table>")
@@ -192,7 +198,9 @@ def _md_to_html(md: str) -> str:
         if line.startswith("### "):
             html.append(f"<h3>{line[4:]}</h3>")
         elif line.startswith("## "):
-            html.append(f"<h2 id='{re.sub(r'[^a-z0-9]+', '-', line[3:].lower()).strip('-')}'>{line[3:]}</h2>")
+            html.append(
+                f"<h2 id='{re.sub(r'[^a-z0-9]+', '-', line[3:].lower()).strip('-')}'>{line[3:]}</h2>"
+            )
         elif line.startswith("- ") or re.match(r"^\d+\. ", line):
             if not in_list:
                 html.append("<ul>")
@@ -348,7 +356,12 @@ DOC_TEMPLATE = """
 
 def _rendered_sections():
     return [
-        {"id": s["id"], "title": s["title"], "md": s["md"], "html": _md_to_html(s["md"])}
+        {
+            "id": s["id"],
+            "title": s["title"],
+            "md": s["md"],
+            "html": _md_to_html(s["md"]),
+        }
         for s in DOC_SECTIONS
     ]
 

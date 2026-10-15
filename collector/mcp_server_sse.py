@@ -1,6 +1,7 @@
 # mcp_server_sse.py
-import os
 import logging
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 # Configuration du logging
@@ -15,33 +16,38 @@ API_KEY = os.getenv("AGENTGUARD_API_KEY", "")
 # Initialisation du serveur MCP en mode distant
 mcp = FastMCP("CerbereAG Security")
 
+
 @mcp.tool()
 def check_prompt_security(text: str) -> str:
     """Vérifie si un texte contient des injections ou des fuites de PII."""
     import requests
+
     try:
         # Appel à TON API centrale de sécurité (que tu as déjà construite)
         response = requests.post(
             f"{COLLECTOR_URL}/api/v1/check_prompt",
             json={"text": text},
-            headers={"Authorization": f"Bearer {API_KEY}"}
+            headers={"Authorization": f"Bearer {API_KEY}"},
         )
         return str(response.json())
     except Exception as e:
-        return f"{{\"error\": \"Security check failed: {str(e)}\"}}"
+        return f'{{"error": "Security check failed: {e!s}"}}'
+
 
 @mcp.tool()
 def get_agent_observability(agent_id: str) -> str:
     """Récupère les métriques de sécurité et d'observation d'un agent."""
     import requests
+
     try:
         response = requests.get(
             f"{COLLECTOR_URL}/api/v1/agents/{agent_id}/metrics",
-            headers={"Authorization": f"Bearer {API_KEY}"}
+            headers={"Authorization": f"Bearer {API_KEY}"},
         )
         return str(response.json())
     except Exception as e:
-        return f"{{\"error\": \"Failed to fetch metrics: {str(e)}\"}}"
+        return f'{{"error": "Failed to fetch metrics: {e!s}"}}'
+
 
 if __name__ == "__main__":
     # Lance le serveur en mode SSE sur le port 8080 (standard pour le cloud)

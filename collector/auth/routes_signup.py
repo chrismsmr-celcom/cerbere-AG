@@ -35,10 +35,14 @@ def signup():
     company_name = request.form.get("company", "").strip()
 
     if not _valid_email(email):
-        return render_template_string(SIGNUP_HTML, error="Enter a valid work email address.", success=None), 400
+        return render_template_string(
+            SIGNUP_HTML, error="Enter a valid work email address.", success=None
+        ), 400
 
     if not display_name:
-        return render_template_string(SIGNUP_HTML, error="Full name is required.", success=None), 400
+        return render_template_string(
+            SIGNUP_HTML, error="Full name is required.", success=None
+        ), 400
 
     try:
         _ensure_magic_link_table()
@@ -49,7 +53,7 @@ def signup():
             return render_template_string(
                 SIGNUP_HTML,
                 error="An account with this email already exists. Please log in.",
-                success=None
+                success=None,
             ), 400
 
         # 2. Générer les identifiants uniques pour la chaîne Tenant -> Org -> User
@@ -69,22 +73,31 @@ def signup():
                 cur = conn.cursor()
 
                 # Étape A : Créer le Tenant
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO tenants (tenant_id, name, created_at)
                     VALUES ({p}, {p}, CURRENT_TIMESTAMP)
-                """, (tenant_id, tenant_name))
+                """,
+                    (tenant_id, tenant_name),
+                )
 
                 # Étape B : Créer l'Organisation liée à ce Tenant
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO orgs (org_id, tenant_id, name, created_at)
                     VALUES ({p}, {p}, {p}, CURRENT_TIMESTAMP)
-                """, (org_id, tenant_id, org_name))
+                """,
+                    (org_id, tenant_id, org_name),
+                )
 
                 # Étape C : Créer l'Utilisateur lié à ce Tenant et cette Organisation
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO users (user_id, org_id, tenant_id, email, display_name, role, active, created_at)
                     VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, CURRENT_TIMESTAMP)
-                """, (user_id, org_id, tenant_id, email, display_name, "admin", True))
+                """,
+                    (user_id, org_id, tenant_id, email, display_name, "admin", True),
+                )
 
                 conn.commit()
             finally:
@@ -94,20 +107,29 @@ def signup():
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO tenants (tenant_id, name, created_at)
                     VALUES (?, ?, CURRENT_TIMESTAMP)
-                """, (tenant_id, tenant_name))
+                """,
+                    (tenant_id, tenant_name),
+                )
 
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO orgs (org_id, tenant_id, name, created_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                """, (org_id, tenant_id, org_name))
+                """,
+                    (org_id, tenant_id, org_name),
+                )
 
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO users (user_id, org_id, tenant_id, email, display_name, role, active, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (user_id, org_id, tenant_id, email, display_name, "admin", 1))
+                """,
+                    (user_id, org_id, tenant_id, email, display_name, "admin", 1),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -131,7 +153,7 @@ def signup():
         return render_template_string(
             SIGNUP_HTML,
             error=None,
-            success="Account created successfully! A secure sign-in link has been sent to your email."
+            success="Account created successfully! A secure sign-in link has been sent to your email.",
         )
 
     except Exception as exc:
@@ -139,5 +161,5 @@ def signup():
         return render_template_string(
             SIGNUP_HTML,
             error="Unable to create account. Please try again.",
-            success=None
+            success=None,
         ), 500

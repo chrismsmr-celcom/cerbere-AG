@@ -33,9 +33,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 from agentguard.decision_engine import (
     Decision,
@@ -52,7 +51,7 @@ class ToolBlocked(Exception):
 class ApprovalRequired(Exception):
     """Raised when human approval is required."""
 
-    def __init__(self, reason: str, approval_id: Optional[str] = None):
+    def __init__(self, reason: str, approval_id: str | None = None):
         super().__init__(reason)
         self.reason = reason
         self.approval_id = approval_id
@@ -62,9 +61,7 @@ class ApprovalRequired(Exception):
 class ToolPolicy:
     name: str
 
-    allowed_identities: Set[str] = field(
-        default_factory=set
-    )
+    allowed_identities: set[str] = field(default_factory=set)
 
     category: str = "read"
 
@@ -87,7 +84,7 @@ class ToolRequest:
 
     identity: str
 
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
 
     model_score: float = 0.0
 
@@ -111,9 +108,7 @@ class ToolRequest:
 
     span_id: str = ""
 
-    metadata: Dict[str, Any] = field(
-        default_factory=dict
-    )
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -126,9 +121,7 @@ class ToolDecision:
 
     risk_score: float
 
-    metadata: Dict[str, Any] = field(
-        default_factory=dict
-    )
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def requires_approval(self) -> bool:
@@ -169,41 +162,28 @@ def _approval_matches_request(
 
     expected_agent = request.agent_id or request.identity
 
-    if (
-        approval.get("agent_id")
-        and approval.get("agent_id") != expected_agent
-    ):
+    if approval.get("agent_id") and approval.get("agent_id") != expected_agent:
         return False
 
-    if (
-        approval.get("session_id")
-        and approval.get("session_id") != request.session_id
-    ):
+    if approval.get("session_id") and approval.get("session_id") != request.session_id:
         return False
 
     approved_hash = approval.get("arguments_hash")
 
-    if (
-        approved_hash
-        and approved_hash != _arguments_hash(request.arguments)
-    ):
+    if approved_hash and approved_hash != _arguments_hash(request.arguments):
         return False
 
     return True
 
 
 class ToolGuard:
-
     def __init__(
         self,
         policies=None,
     ):
 
-        self.policies: Dict[str, ToolPolicy] = {
-            policy.name: policy
-            for policy in (
-                policies or []
-            )
+        self.policies: dict[str, ToolPolicy] = {
+            policy.name: policy for policy in (policies or [])
         }
 
         self.decision_engine = DecisionEngine()
@@ -216,22 +196,14 @@ class ToolGuard:
 
     def _sync_engine_policies(self):
 
-        allowed_tools = set(
-            self.policies.keys()
-        )
+        allowed_tools = set(self.policies.keys())
 
         blocked_tools = {
-            name
-            for name, policy
-            in self.policies.items()
-            if policy.blocked
+            name for name, policy in self.policies.items() if policy.blocked
         }
 
         approval_tools = {
-            name
-            for name, policy
-            in self.policies.items()
-            if policy.require_approval
+            name for name, policy in self.policies.items() if policy.require_approval
         }
 
         self.decision_engine.register_policy(
@@ -260,7 +232,7 @@ class ToolGuard:
     def _approved_retry(
         self,
         request: ToolRequest,
-    ) -> Optional[ToolDecision]:
+    ) -> ToolDecision | None:
         """
         Validate a previously approved request.
 
@@ -272,9 +244,7 @@ class ToolGuard:
         - exact arguments
         """
 
-        approval_id = request.metadata.get(
-            "approval_id"
-        )
+        approval_id = request.metadata.get("approval_id")
 
         if not approval_id:
             return None
@@ -287,7 +257,6 @@ class ToolGuard:
         )
 
         if approval is None:
-
             return ToolDecision(
                 allowed=False,
                 decision="block",
@@ -303,7 +272,6 @@ class ToolGuard:
             approval,
             request,
         ):
-
             return ToolDecision(
                 allowed=False,
                 decision="block",
@@ -323,9 +291,7 @@ class ToolGuard:
             metadata={
                 "reason_code": "human_approval",
                 "approval_id": approval_id,
-                "approved_by": approval.get(
-                    "decided_by"
-                ),
+                "approved_by": approval.get("decided_by"),
             },
         )
 
@@ -350,19 +316,13 @@ class ToolGuard:
             list_approvals,
         )
 
-        argument_hash = _arguments_hash(
-            request.arguments
-        )
+        argument_hash = _arguments_hash(request.arguments)
 
-        agent_id = (
-            request.agent_id
-            or request.identity
-        )
+        agent_id = request.agent_id or request.identity
 
         # Avoid approval spam when an agent retries while
         # the human is still deciding.
         try:
-
             pending = list_approvals(
                 org_id=request.org_id or None,
                 status="pending",
@@ -370,21 +330,13 @@ class ToolGuard:
             )
 
             for approval in pending:
-
                 if (
-                    approval.get("tool_name")
-                    == request.tool_name
-                    and approval.get("agent_id")
-                    == agent_id
-                    and approval.get("session_id")
-                    == request.session_id
-                    and approval.get("arguments_hash")
-                    == argument_hash
+                    approval.get("tool_name") == request.tool_name
+                    and approval.get("agent_id") == agent_id
+                    and approval.get("session_id") == request.session_id
+                    and approval.get("arguments_hash") == argument_hash
                 ):
-
-                    approval_id = approval.get(
-                        "approval_id"
-                    )
+                    approval_id = approval.get("approval_id")
 
                     return ToolDecision(
                         allowed=False,
@@ -417,9 +369,7 @@ class ToolGuard:
             policy_name=request.tool_name,
         )
 
-        approval_id = approval[
-            "approval_id"
-        ]
+        approval_id = approval["approval_id"]
 
         return ToolDecision(
             allowed=False,
@@ -448,31 +398,20 @@ class ToolGuard:
         # This check happens before the normal policy evaluation so
         # the human approval becomes the explicit authorization for
         # this exact action.
-        if request.metadata.get(
-            "approval_id"
-        ):
+        if request.metadata.get("approval_id"):
+            return self._approved_retry(request)
 
-            return self._approved_retry(
-                request
-            )
-
-        policy = self.policies.get(
-            request.tool_name
-        )
+        policy = self.policies.get(request.tool_name)
 
         # ---------------------------------------------------------
         # Unknown tool
         # ---------------------------------------------------------
 
         if policy is None:
-
             return ToolDecision(
                 allowed=False,
                 decision="block",
-                reason=(
-                    "Tool is not registered "
-                    "in AgentGuard policy"
-                ),
+                reason=("Tool is not registered in AgentGuard policy"),
                 risk_score=100,
                 metadata={
                     "reason_code": "tool",
@@ -486,17 +425,12 @@ class ToolGuard:
 
         if (
             policy.allowed_identities
-            and request.identity
-            not in policy.allowed_identities
+            and request.identity not in policy.allowed_identities
         ):
-
             return ToolDecision(
                 allowed=False,
                 decision="block",
-                reason=(
-                    "Agent identity is not "
-                    "authorized for this tool"
-                ),
+                reason=("Agent identity is not authorized for this tool"),
                 risk_score=100,
                 metadata={
                     "reason_code": "identity",
@@ -510,48 +444,32 @@ class ToolGuard:
         # ---------------------------------------------------------
 
         try:
-
             serialized = json.dumps(
                 request.arguments,
                 default=str,
                 ensure_ascii=False,
             )
 
-            argument_size = len(
-                serialized.encode("utf-8")
-            )
+            argument_size = len(serialized.encode("utf-8"))
 
         except Exception:
-
             return ToolDecision(
                 allowed=False,
                 decision="block",
-                reason=(
-                    "Tool arguments could not "
-                    "be serialized safely"
-                ),
+                reason=("Tool arguments could not be serialized safely"),
                 risk_score=100,
-                metadata={
-                    "reason_code": "validation"
-                },
+                metadata={"reason_code": "validation"},
             )
 
         # ---------------------------------------------------------
         # Argument size
         # ---------------------------------------------------------
 
-        if (
-            argument_size
-            > policy.max_argument_bytes
-        ):
-
+        if argument_size > policy.max_argument_bytes:
             return ToolDecision(
                 allowed=False,
                 decision="block",
-                reason=(
-                    "Tool argument size exceeds "
-                    "policy limit"
-                ),
+                reason=("Tool argument size exceeds policy limit"),
                 risk_score=90,
                 metadata={
                     "reason_code": "argument_size",
@@ -564,9 +482,7 @@ class ToolGuard:
         # Unified decision engine
         # ---------------------------------------------------------
 
-        metadata = dict(
-            request.metadata
-        )
+        metadata = dict(request.metadata)
 
         metadata.update(
             {
@@ -576,34 +492,21 @@ class ToolGuard:
             }
         )
 
-        result = (
-            self.decision_engine.evaluate(
-                DecisionRequest(
-                    agent_id=(
-                        request.agent_id
-                        or request.identity
-                    ),
-                    tool_name=request.tool_name,
-                    tool_category=policy.category,
-                    identity_trusted=True,
-                    model_score=request.model_score,
-                    anomaly_score=request.anomaly_score,
-                    taint_level=request.taint_level,
-                    trajectory_length=(
-                        request.trajectory_length
-                    ),
-                    previous_risky_actions=(
-                        request.previous_risky_actions
-                    ),
-                    external_side_effect=(
-                        policy.external_side_effect
-                    ),
-                    irreversible=(
-                        policy.irreversible
-                    ),
-                    tool_registered=True,
-                    metadata=metadata,
-                )
+        result = self.decision_engine.evaluate(
+            DecisionRequest(
+                agent_id=(request.agent_id or request.identity),
+                tool_name=request.tool_name,
+                tool_category=policy.category,
+                identity_trusted=True,
+                model_score=request.model_score,
+                anomaly_score=request.anomaly_score,
+                taint_level=request.taint_level,
+                trajectory_length=(request.trajectory_length),
+                previous_risky_actions=(request.previous_risky_actions),
+                external_side_effect=(policy.external_side_effect),
+                irreversible=(policy.irreversible),
+                tool_registered=True,
+                metadata=metadata,
             )
         )
 
@@ -612,13 +515,10 @@ class ToolGuard:
         # ---------------------------------------------------------
 
         if result.decision == Decision.BLOCK:
-
             return ToolDecision(
                 allowed=False,
                 decision="block",
-                reason="; ".join(
-                    result.reasons
-                ),
+                reason="; ".join(result.reasons),
                 risk_score=result.risk_score,
                 metadata=result.to_dict(),
             )
@@ -627,47 +527,32 @@ class ToolGuard:
         # REQUIRE APPROVAL
         # ---------------------------------------------------------
 
-        if (
-            result.decision
-            == Decision.REQUIRE_APPROVAL
-        ):
-
+        if result.decision == Decision.REQUIRE_APPROVAL:
             base_decision = ToolDecision(
                 allowed=False,
                 decision="require_approval",
-                reason="; ".join(
-                    result.reasons
-                ),
+                reason="; ".join(result.reasons),
                 risk_score=result.risk_score,
                 metadata=result.to_dict(),
             )
 
             try:
-
-                return (
-                    self._create_or_reuse_approval(
-                        request,
-                        base_decision,
-                    )
+                return self._create_or_reuse_approval(
+                    request,
+                    base_decision,
                 )
 
             except Exception as exc:
-
                 # Fail closed:
                 # if the approval cannot be persisted,
                 # the side effect must not happen.
                 return ToolDecision(
                     allowed=False,
                     decision="block",
-                    reason=(
-                        "Approval could not be "
-                        "persisted; action blocked"
-                    ),
+                    reason=("Approval could not be persisted; action blocked"),
                     risk_score=100,
                     metadata={
-                        "reason_code": (
-                            "approval_persistence_failure"
-                        ),
+                        "reason_code": ("approval_persistence_failure"),
                         "error": str(exc)[:200],
                     },
                 )
@@ -693,26 +578,15 @@ class ToolGuard:
         request: ToolRequest,
     ) -> ToolDecision:
 
-        decision = self.authorize(
-            request
-        )
+        decision = self.authorize(request)
 
         if decision.decision == "block":
+            raise ToolBlocked(decision.reason)
 
-            raise ToolBlocked(
-                decision.reason
-            )
-
-        if (
-            decision.decision
-            == "require_approval"
-        ):
-
+        if decision.decision == "require_approval":
             raise ApprovalRequired(
                 decision.reason,
-                approval_id=decision.metadata.get(
-                    "approval_id"
-                ),
+                approval_id=decision.metadata.get("approval_id"),
             )
 
         return decision

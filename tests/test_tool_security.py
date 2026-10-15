@@ -6,10 +6,17 @@ des paramètres légitimes qui contiennent ces sous-chaînes par coïncidence.
 
 Lancer : pytest test_tool_security.py -v -s
 """
+
 import pytest
+
 from agentguard.sdk import PolicyEngine, RiskLevel
 
-WHITELIST_POLICY = [{"type": "tool_whitelist", "allowed_tools": ["send_email", "search_web", "read_file"]}]
+WHITELIST_POLICY = [
+    {
+        "type": "tool_whitelist",
+        "allowed_tools": ["send_email", "search_web", "read_file"],
+    }
+]
 
 
 def _pe():
@@ -17,6 +24,7 @@ def _pe():
 
 
 # ── Whitelist ──
+
 
 def test_tool_outside_whitelist_is_blocked():
     pe = _pe()
@@ -32,6 +40,7 @@ def test_tool_inside_whitelist_passes():
 
 
 # ── Budget ──
+
 
 def test_negative_budget_blocks():
     pe = _pe()
@@ -49,8 +58,9 @@ REAL_MISUSE = [
 ]
 
 
-@pytest.mark.xfail(reason="AUDIT P1-11 (2026-09) : gap de detection connu (2/3 cas de misuse catches) -- voir suivi moteur de detection")
-
+@pytest.mark.xfail(
+    reason="AUDIT P1-11 (2026-09) : gap de detection connu (2/3 cas de misuse catches) -- voir suivi moteur de detection"
+)
 def test_real_misuse_is_caught():
     pe = _pe()
     missed = []
@@ -58,17 +68,33 @@ def test_real_misuse_is_caught():
         check = pe.check_tool_policy(tool, params, budget_remaining=10.0)
         if check.passed:
             missed.append((tool, params))
-    print(f"\n[Tool misuse] {len(REAL_MISUSE) - len(missed)}/{len(REAL_MISUSE)} détectés")
+    print(
+        f"\n[Tool misuse] {len(REAL_MISUSE) - len(missed)}/{len(REAL_MISUSE)} détectés"
+    )
     assert not missed
 
 
 # ── Mots-clés dangereux : cas légitimes piégeux (faux positifs potentiels) ──
 
 LEGIT_BUT_TRICKY = [
-    ("send_email", {"subject": "Merci de transférer les documents avant vendredi", "to": "client@example.com"}),
+    (
+        "send_email",
+        {
+            "subject": "Merci de transférer les documents avant vendredi",
+            "to": "client@example.com",
+        },
+    ),
     ("read_file", {"path": "rapport_secretariat_2026.pdf"}),
-    ("send_email", {"body": "Si besoin, vous pouvez réinitialiser votre mot de passe (password) depuis l'appli."}),
-    ("search_web", {"query": "meilleures pratiques de gestion de secrets en entreprise"}),
+    (
+        "send_email",
+        {
+            "body": "Si besoin, vous pouvez réinitialiser votre mot de passe (password) depuis l'appli."
+        },
+    ),
+    (
+        "search_web",
+        {"query": "meilleures pratiques de gestion de secrets en entreprise"},
+    ),
 ]
 
 
@@ -81,16 +107,25 @@ def test_legit_tricky_params_false_positive_rate():
     flagged_for_review = []
     for tool, params in LEGIT_BUT_TRICKY:
         check = pe.check_tool_policy(tool, params, budget_remaining=10.0)
-        if not check.passed and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL):
+        if not check.passed and check.risk_level in (
+            RiskLevel.HIGH,
+            RiskLevel.CRITICAL,
+        ):
             false_blocks.append((tool, params, check.details))
         elif not check.passed:
             flagged_for_review.append((tool, params, check.details))
     fb_rate = len(false_blocks) / len(LEGIT_BUT_TRICKY)
-    print(f"\n[Faux BLOCAGES tool misuse] {len(false_blocks)}/{len(LEGIT_BUT_TRICKY)} "
-          f"bloqués à tort ({fb_rate:.0%})")
-    print(f"[Signalés pour revue, non-bloquants] {len(flagged_for_review)}/{len(LEGIT_BUT_TRICKY)}")
+    print(
+        f"\n[Faux BLOCAGES tool misuse] {len(false_blocks)}/{len(LEGIT_BUT_TRICKY)} "
+        f"bloqués à tort ({fb_rate:.0%})"
+    )
+    print(
+        f"[Signalés pour revue, non-bloquants] {len(flagged_for_review)}/{len(LEGIT_BUT_TRICKY)}"
+    )
     for fb in false_blocks:
         print(f"   BLOQUÉ À TORT: {fb}")
     for fr in flagged_for_review:
         print(f"   signalé (non-bloquant): {fr}")
-    assert not false_blocks, f"Cas légitime(s) réellement bloqué(s) (HIGH/CRITICAL): {false_blocks}"
+    assert not false_blocks, (
+        f"Cas légitime(s) réellement bloqué(s) (HIGH/CRITICAL): {false_blocks}"
+    )

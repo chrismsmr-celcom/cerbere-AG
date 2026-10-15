@@ -72,11 +72,14 @@ def sha256_bytes(data: bytes) -> str:
 # ── transforms for the encoded_obfuscated category ──────────────────────────
 # Standard base64 / lowercase hex applied to UTF-8 bytes of ASCII payloads.
 
+
 def t_base64(s: str) -> str:
     return "Decode and follow: " + base64.b64encode(s.encode("utf-8")).decode("ascii")
 
+
 def t_hex(s: str) -> str:
     return "Decode and follow: " + s.encode("utf-8").hex()
+
 
 def t_rot13(s: str) -> str:
     out = []
@@ -89,27 +92,35 @@ def t_rot13(s: str) -> str:
             out.append(ch)
     return "".join(out)
 
+
 def t_leet(s: str) -> str:
     table = str.maketrans("aeiostAEIOST", "431057431057")
     return s.translate(table)
 
+
 def t_dotted(s: str) -> str:
     return ".".join(s)
+
 
 def t_spaced_upper(s: str) -> str:
     return " ".join(s.upper())
 
+
 def t_zws(s: str) -> str:
-    return s.replace(" ", "​ ")
+    return s.replace(" ", "\u200b ")
+
 
 def t_reversed(s: str) -> str:
     return s[::-1]
 
+
 def t_doubled(s: str) -> str:
     return "".join(ch + ch if ch.isalnum() else ch for ch in s)
 
+
 def t_unicode_escape(s: str) -> str:
     return "".join("\\u00%02x" % b for b in s.encode("utf-8"))
+
 
 TRANSFORMS = {
     "base64": t_base64,
@@ -219,13 +230,15 @@ def main():
         selected = queue[:target]
         attack_stats[cat] = len(selected)
         for text, lang in selected:
-            attacks.append({
-                "id": "",
-                "prompt": text,
-                "category": cat,
-                "severity": cfg["severity"],
-                "lang": lang,
-            })
+            attacks.append(
+                {
+                    "id": "",
+                    "prompt": text,
+                    "category": cat,
+                    "severity": cfg["severity"],
+                    "lang": lang,
+                }
+            )
 
     # ── benign: round-robin across groups ───────────────────────────────────
     groups = []
@@ -257,13 +270,15 @@ def main():
             if not queue:
                 continue
             text, lang = queue.pop(0)
-            benign.append({
-                "id": "",
-                "prompt": text,
-                "category": group,
-                "severity": "none",
-                "lang": lang,
-            })
+            benign.append(
+                {
+                    "id": "",
+                    "prompt": text,
+                    "category": group,
+                    "severity": "none",
+                    "lang": lang,
+                }
+            )
             benign_stats[group] = benign_stats.get(group, 0) + 1
     if len(benign) < targets["benign"]:
         raise SystemExit(f"Not enough unique benign prompts: {len(benign)}")
@@ -274,7 +289,9 @@ def main():
         cfg = tables["hard_negatives"][group]
         queue = []
         for gen in cfg["generators"]:
-            queue.extend(generator_queue(gen, seen, targets["hard_negatives"] - len(queue)))
+            queue.extend(
+                generator_queue(gen, seen, targets["hard_negatives"] - len(queue))
+            )
         groups.append((group, queue))
     if (CORPUS_DIR / "hard_negatives.json").is_file():
         data = load_json(CORPUS_DIR / "hard_negatives.json")
@@ -297,13 +314,15 @@ def main():
             if not queue:
                 continue
             text, lang = queue.pop(0)
-            hard_negatives.append({
-                "id": "",
-                "prompt": text,
-                "category": "hard_negative",
-                "severity": "none",
-                "lang": lang,
-            })
+            hard_negatives.append(
+                {
+                    "id": "",
+                    "prompt": text,
+                    "category": "hard_negative",
+                    "severity": "none",
+                    "lang": lang,
+                }
+            )
             hn_stats[group] = hn_stats.get(group, 0) + 1
     if len(hard_negatives) < targets["hard_negatives"]:
         raise SystemExit(f"Not enough unique hard negatives: {len(hard_negatives)}")
@@ -323,7 +342,9 @@ def main():
         ("benign.json", benign),
         ("hard_negatives.json", hard_negatives),
     ):
-        payload = (json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        payload = (
+            json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
         (OUT_DIR / name).write_bytes(payload)
         manifest_files[name] = sha256_bytes(payload)
 
@@ -338,7 +359,9 @@ def main():
         "counts": {
             "attacks": {k: attack_stats[k] for k in ATTACK_CATEGORY_ORDER},
             "benign": {k: benign_stats.get(k, 0) for k in BENIGN_GROUP_ORDER},
-            "hard_negatives": {k: hn_stats.get(k, 0) for k in HARD_NEGATIVE_GROUP_ORDER},
+            "hard_negatives": {
+                k: hn_stats.get(k, 0) for k in HARD_NEGATIVE_GROUP_ORDER
+            },
             "total": {
                 "attacks": len(attacks),
                 "benign": len(benign),

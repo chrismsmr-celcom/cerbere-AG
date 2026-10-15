@@ -17,7 +17,7 @@ Le RiskEngine produit une décision indépendante.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any
 
 
 class RiskDecision(str, Enum):
@@ -62,7 +62,7 @@ class RiskInput:
     # Détection d'anomalie comportementale.
     anomaly_score: float = 0.0
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -70,8 +70,8 @@ class RiskResult:
     score: float
     level: RiskLevel
     decision: RiskDecision
-    reasons: List[str]
-    factors: Dict[str, float]
+    reasons: list[str]
+    factors: dict[str, float]
 
     def to_dict(self):
         return {
@@ -134,9 +134,7 @@ class RiskEngine:
         score += tool_risk * 0.30
 
         if tool_risk >= 70:
-            reasons.append(
-                f"High-risk tool category: {data.tool_category}"
-            )
+            reasons.append(f"High-risk tool category: {data.tool_category}")
 
         # ---------------------------------------------------------
         # 2. Model / detection signal
@@ -168,9 +166,7 @@ class RiskEngine:
         score += taint_score * 0.20
 
         if taint in {"SECRET", "UNTRUSTED", "MALICIOUS"}:
-            reasons.append(
-                f"Sensitive/untrusted data classification: {taint}"
-            )
+            reasons.append(f"Sensitive/untrusted data classification: {taint}")
 
         # ---------------------------------------------------------
         # 4. Trajectory
@@ -178,17 +174,14 @@ class RiskEngine:
 
         trajectory_score = min(
             100,
-            data.trajectory_length * 3
-            + data.previous_risky_actions * 12,
+            data.trajectory_length * 3 + data.previous_risky_actions * 12,
         )
 
         factors["trajectory_risk"] = trajectory_score
         score += trajectory_score * 0.10
 
         if data.previous_risky_actions >= 2:
-            reasons.append(
-                "Multiple risky actions detected in trajectory"
-            )
+            reasons.append("Multiple risky actions detected in trajectory")
 
         # ---------------------------------------------------------
         # 5. External side effect
@@ -198,9 +191,7 @@ class RiskEngine:
             factors["external_side_effect"] = 80
             score += 80 * 0.15
 
-            reasons.append(
-                "Action produces an external side effect"
-            )
+            reasons.append("Action produces an external side effect")
         else:
             factors["external_side_effect"] = 0
 
@@ -212,9 +203,7 @@ class RiskEngine:
             factors["irreversible"] = 100
             score += 100 * 0.20
 
-            reasons.append(
-                "Action is irreversible"
-            )
+            reasons.append("Action is irreversible")
         else:
             factors["irreversible"] = 0
 
@@ -226,9 +215,7 @@ class RiskEngine:
             factors["identity_risk"] = 50
             score += 50 * 0.10
 
-            reasons.append(
-                "Agent identity is not trusted"
-            )
+            reasons.append("Agent identity is not trusted")
         else:
             factors["identity_risk"] = 0
 
@@ -245,9 +232,7 @@ class RiskEngine:
         score += anomaly * 0.10
 
         if anomaly >= 70:
-            reasons.append(
-                "Behavioral anomaly detected"
-            )
+            reasons.append("Behavioral anomaly detected")
 
         score = min(100.0, round(score, 2))
 
@@ -259,11 +244,12 @@ class RiskEngine:
             decision = RiskDecision.BLOCK
             level = RiskLevel.CRITICAL
 
-        elif data.irreversible and score >= 45:
-            decision = RiskDecision.REVIEW
-            level = RiskLevel.HIGH
-
-        elif data.external_side_effect and score >= 65:
+        elif (
+            data.irreversible
+            and score >= 45
+            or data.external_side_effect
+            and score >= 65
+        ):
             decision = RiskDecision.REVIEW
             level = RiskLevel.HIGH
 

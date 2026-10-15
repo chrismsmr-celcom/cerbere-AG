@@ -6,10 +6,14 @@ Usage:
     export AGENTGUARD_API_KEY=ta-cle
     python test_connection.py
 """
+
 import os
+
 import requests
 
-COLLECTOR = os.environ.get("AGENTGUARD_COLLECTOR_URL", "https://agentguard-aqal.onrender.com")
+COLLECTOR = os.environ.get(
+    "AGENTGUARD_COLLECTOR_URL", "https://agentguard-aqal.onrender.com"
+)
 API_KEY = os.environ.get("AGENTGUARD_API_KEY")
 HEADERS = {"Content-Type": "application/json"}
 if API_KEY:
@@ -43,17 +47,23 @@ try:
             "input_data": {"prompt": "hello"},
             "output_data": {"response": "world"},
             "security_checks": [
-                {"check_name": "injection", "passed": True, "risk_level": "low", "details": "ok", "metadata": {}}
+                {
+                    "check_name": "injection",
+                    "passed": True,
+                    "risk_level": "low",
+                    "details": "ok",
+                    "metadata": {},
+                }
             ],
             "blocked": False,
             "block_reason": None,
-            "cost_usd": 0.001
+            "cost_usd": 0.001,
         },
         timeout=15,
-        headers=HEADERS
+        headers=HEADERS,
     )
     print(f"   Status: {r.status_code}")
-    print(f"   ✅ Span reçue!" if r.status_code == 201 else f"   ⚠️ Code inattendu")
+    print("   ✅ Span reçue!" if r.status_code == 201 else "   ⚠️ Code inattendu")
 except Exception as e:
     print(f"   ❌ ÉCHEC: {e}")
 
@@ -64,9 +74,9 @@ try:
     data = r.json()
     print(f"   Traces trouvées: {len(data)}")
     if data:
-        print(f"   ✅ La span est stockée!")
+        print("   ✅ La span est stockée!")
     else:
-        print(f"   ⚠️ Aucune trace (DB vide ou span non stockée)")
+        print("   ⚠️ Aucune trace (DB vide ou span non stockée)")
 except Exception as e:
     print(f"   ❌ ÉCHEC: {e}")
 

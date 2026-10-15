@@ -41,14 +41,16 @@ WHITELIST DES OUTILS :
     (fail-closed : mieux vaut un échec de config clair qu'une gateway qui
     bloque tout ou, pire, qui laisserait tout passer par accident de config).
 """
-import asyncio
+
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agentguard.sdk import AgentGuard, SecurityException
 from concurrent.futures import ThreadPoolExecutor
+
+from agentguard.sdk import AgentGuard
+
 _executor = ThreadPoolExecutor(
     max_workers=int(os.environ.get("AGENTGUARD_MCP_WORKERS", "4"))
 )
@@ -117,11 +119,11 @@ sys.stderr.write(
 
 
 async def run_gateway(upstream_command: list[str]) -> None:
-    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
     from mcp.server import Server
-    from mcp.server.stdio import stdio_server
-    from mcp.types import TextContent, Tool
+    from mcp.types import Tool
+
+    from mcp import ClientSession, StdioServerParameters
 
     upstream_params = StdioServerParameters(
         command=upstream_command[0],
@@ -139,4 +141,4 @@ async def run_gateway(upstream_command: list[str]) -> None:
                 # tools/list n'exécute rien côté agent -> pas besoin d'AgentGuard,
                 # on forward tel quel ce que le serveur upstream annonce.
                 result = await upstream.list_tools()
-                return result.sort                                # <-- non, voir note
+                return result.sort  # <-- non, voir note

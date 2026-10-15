@@ -8,6 +8,7 @@ schéma et toutes les requêtes `WHERE org_id = ...` échouaient.
 
 Ce test recrée l'ancien schéma AVANT init_db() et vérifie la migration.
 """
+
 import sqlite3
 
 import pytest
@@ -38,16 +39,19 @@ def client(tmp_path, monkeypatch):
 
     conn = sqlite3.connect(db_path)
     conn.execute(OLD_SCHEMA)
-    conn.execute("INSERT INTO approval_requests (id, agent_id, tool_name, params, reason) "
-                 "VALUES ('legacy-1', 'a1', 'send_email', '{}', 'ancienne demande')")
+    conn.execute(
+        "INSERT INTO approval_requests (id, agent_id, tool_name, params, reason) "
+        "VALUES ('legacy-1', 'a1', 'send_email', '{}', 'ancienne demande')"
+    )
     conn.commit()
     conn.close()
 
-    import collector.auth as auth
+    from collector import auth
+
     monkeypatch.setattr(auth, "resolve_org_id", lambda key: KEYS.get(key))
 
-    from collector.db import init_db
     from collector.app import create_app
+    from collector.db import init_db
 
     init_db()
     app = create_app()
@@ -57,10 +61,17 @@ def client(tmp_path, monkeypatch):
 
 
 def test_old_table_gets_org_id_column(client):
-    r = client.post("/api/approvals", headers={"X-API-Key": "key-a"},
-                    json={"approval_id": "req-1", "agent_id": "a1",
-                          "tool_name": "send_email", "params": {"to": "x@gmail.com"},
-                          "reason": "domaine personnel"})
+    r = client.post(
+        "/api/approvals",
+        headers={"X-API-Key": "key-a"},
+        json={
+            "approval_id": "req-1",
+            "agent_id": "a1",
+            "tool_name": "send_email",
+            "params": {"to": "x@gmail.com"},
+            "reason": "domaine personnel",
+        },
+    )
     assert r.status_code == 201, r.get_data(as_text=True)
 
     r = client.get("/api/approvals?status=pending", headers={"X-API-Key": "key-a"})
@@ -70,9 +81,13 @@ def test_old_table_gets_org_id_column(client):
 
 
 def test_legacy_rows_are_kept_in_default_org(client):
-    conn = sqlite3.connect(client.application.config.get("DB_PATH") or
-                           __import__("os").environ["AGENTGUARD_DB_PATH"])
-    row = conn.execute("SELECT org_id FROM approval_requests WHERE id='legacy-1'").fetchone()
+    conn = sqlite3.connect(
+        client.application.config.get("DB_PATH")
+        or __import__("os").environ["AGENTGUARD_DB_PATH"]
+    )
+    row = conn.execute(
+        "SELECT org_id FROM approval_requests WHERE id='legacy-1'"
+    ).fetchone()
     conn.close()
     assert row[0] == "default"
 
@@ -101,16 +116,20 @@ def client_wrong_schema(tmp_path, monkeypatch):
 
     conn = sqlite3.connect(db_path)
     conn.execute(HITL_MODULE_SCHEMA)
-    conn.execute("INSERT INTO approval_requests (approval_id, org_id, tool_name, arguments, status, requested_at, expires_at) "
-                 "VALUES ('old-1', 'org-a', 'send_email', '{}', 'pending', '2026-09-19', '2026-09-20')")
+    conn.execute(
+        "INSERT INTO approval_requests (approval_id, org_id, tool_name, arguments, status, requested_at, expires_at) "
+        "VALUES ('old-1', 'org-a', 'send_email', '{}', 'pending', '2026-09-19', '2026-09-20')"
+    )
     conn.commit()
     conn.close()
 
-    import collector.auth as auth
+    from collector import auth
+
     monkeypatch.setattr(auth, "resolve_org_id", lambda key: KEYS.get(key))
 
-    from collector.db import init_db
     from collector.app import create_app
+    from collector.db import init_db
+
     init_db()
     app = create_app()
     app.config["TESTING"] = True
@@ -122,19 +141,30 @@ def test_wrong_schema_table_is_renamed_kept_and_recreated(client_wrong_schema):
     c, db_path = client_wrong_schema
 
     r = c.get("/api/approvals?status=pending", headers={"X-API-Key": "key-a"})
-    assert r.status_code == 200, r.get_data(as_text=True)          # plus de HTTP 500
+    assert r.status_code == 200, r.get_data(as_text=True)  # plus de HTTP 500
     assert r.get_json()["approvals"] == []
 
-    r = c.post("/api/approvals", headers={"X-API-Key": "key-a"},
-               json={"approval_id": "req-1", "tool_name": "send_email", "params": {}})
+    r = c.post(
+        "/api/approvals",
+        headers={"X-API-Key": "key-a"},
+        json={"approval_id": "req-1", "tool_name": "send_email", "params": {}},
+    )
     assert r.status_code == 201
-    assert [a["id"] for a in c.get("/api/approvals?status=pending",
-                                   headers={"X-API-Key": "key-a"}).get_json()["approvals"]] == ["req-1"]
+    assert [
+        a["id"]
+        for a in c.get(
+            "/api/approvals?status=pending", headers={"X-API-Key": "key-a"}
+        ).get_json()["approvals"]
+    ] == ["req-1"]
 
     conn = sqlite3.connect(db_path)
-    legacy = [t[0] for t in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'approval_requests_legacy_%'")]
-    assert len(legacy) == 1                                          # données anciennes conservées
+    legacy = [
+        t[0]
+        for t in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'approval_requests_legacy_%'"
+        )
+    ]
+    assert len(legacy) == 1  # données anciennes conservées
     assert conn.execute(f"SELECT COUNT(*) FROM {legacy[0]}").fetchone()[0] == 1
     conn.close()
 
@@ -142,14 +172,17 @@ def test_wrong_schema_table_is_renamed_kept_and_recreated(client_wrong_schema):
 def test_hitl_module_never_touches_the_api_table(client_wrong_schema):
     """Avant : approvals.ensure_approval_schema() supprimait la table des routes API (et inversement)."""
     c, db_path = client_wrong_schema
-    c.post("/api/approvals", headers={"X-API-Key": "key-a"},
-           json={"approval_id": "req-9", "tool_name": "wire_transfer", "params": {}})
+    c.post(
+        "/api/approvals",
+        headers={"X-API-Key": "key-a"},
+        json={"approval_id": "req-9", "tool_name": "wire_transfer", "params": {}},
+    )
 
     from collector.approvals import ensure_approval_schema
+
     ensure_approval_schema()
     ensure_approval_schema()
 
     listed = c.get("/api/approvals?status=pending", headers={"X-API-Key": "key-a"})
     assert listed.status_code == 200
     assert [a["id"] for a in listed.get_json()["approvals"]] == ["req-9"]
-

@@ -2,28 +2,31 @@
 
 SQLite/PostgreSQL compatible persistence for the alert-rule API.
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from .db import get_db, is_postgres, sql_placeholder
 
 logger = logging.getLogger("agentguard.alerts")
 
-VALID_METRICS = frozenset({
-    "cost_usd",
-    "input_tokens",
-    "output_tokens",
-    "latency_ms",
-    "total_spans",
-    "blocked_spans",
-    "block_rate",
-    "error_rate",
-})
+VALID_METRICS = frozenset(
+    {
+        "cost_usd",
+        "input_tokens",
+        "output_tokens",
+        "latency_ms",
+        "total_spans",
+        "blocked_spans",
+        "block_rate",
+        "error_rate",
+    }
+)
 
 VALID_COMPARISONS = frozenset({"above", "below", "equal", "gte", "lte"})
 MAX_LABEL_LENGTH = 200
@@ -46,13 +49,21 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         except Exception:
             pass
     columns = [
-        "id", "org_id", "metric", "comparison", "threshold", "label",
-        "active", "created_by", "created_at", "updated_at",
+        "id",
+        "org_id",
+        "metric",
+        "comparison",
+        "threshold",
+        "label",
+        "active",
+        "created_by",
+        "created_at",
+        "updated_at",
     ]
     return dict(zip(columns, row))
 
 
-def _normalize_label(label: Any) -> Optional[str]:
+def _normalize_label(label: Any) -> str | None:
     if label is None:
         return None
     value = str(label).strip()
@@ -126,9 +137,15 @@ def _ensure_schema() -> None:
                 )
             """)
 
-        db.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_org ON alert_rules(org_id)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_org_active ON alert_rules(org_id, active)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_metric ON alert_rules(org_id, metric)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_rules_org ON alert_rules(org_id)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_rules_org_active ON alert_rules(org_id, active)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_rules_metric ON alert_rules(org_id, metric)"
+        )
         db.commit()
     except Exception:
         try:
@@ -170,9 +187,15 @@ def _serialize_rule(row: Any) -> dict[str, Any]:
     }
 
 
-def create_alert_rule(*, org_id: str, metric: str, comparison: str = "above",
-                      threshold: Any = None, label: Optional[str] = None,
-                      created_by: Optional[str] = None) -> dict[str, Any]:
+def create_alert_rule(
+    *,
+    org_id: str,
+    metric: str,
+    comparison: str = "above",
+    threshold: Any = None,
+    label: str | None = None,
+    created_by: str | None = None,
+) -> dict[str, Any]:
     """Create one organization-scoped alert rule."""
     org_id = str(org_id or "").strip()
     if not org_id:
@@ -192,23 +215,37 @@ def create_alert_rule(*, org_id: str, metric: str, comparison: str = "above",
     timestamp = _now_iso()
 
     try:
-        db.execute(f"""
+        db.execute(
+            f"""
             INSERT INTO alert_rules
                 (id, org_id, metric, comparison, threshold, label, active,
                  created_by, created_at, updated_at)
             VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
-        """, (
-            rule_id, org_id, metric, comparison, threshold, label,
-            True if is_postgres() else 1, created_by, timestamp, timestamp,
-        ))
+        """,
+            (
+                rule_id,
+                org_id,
+                metric,
+                comparison,
+                threshold,
+                label,
+                True if is_postgres() else 1,
+                created_by,
+                timestamp,
+                timestamp,
+            ),
+        )
         db.commit()
-        cursor = db.execute(f"""
+        cursor = db.execute(
+            f"""
             SELECT id, org_id, metric, comparison, threshold, label, active,
                    created_by, created_at, updated_at
             FROM alert_rules
             WHERE id = {p} AND org_id = {p}
             LIMIT 1
-        """, (rule_id, org_id))
+        """,
+            (rule_id, org_id),
+        )
         row = cursor.fetchone()
         if row is None:
             raise RuntimeError("Alert rule was created but could not be retrieved")
@@ -242,7 +279,9 @@ def list_alert_rules(*, org_id: str, active_only: bool = False) -> list[dict[str
         query += f" AND active = {sql_true_for_query()}"
     query += " ORDER BY created_at DESC"
     try:
-        return [_serialize_rule(row) for row in db.execute(query, tuple(params)).fetchall()]
+        return [
+            _serialize_rule(row) for row in db.execute(query, tuple(params)).fetchall()
+        ]
     finally:
         db.close()
 
@@ -252,7 +291,7 @@ def sql_true_for_query() -> str:
     return "TRUE" if is_postgres() else "1"
 
 
-def get_alert_rule(alert_id: str, *, org_id: str) -> Optional[dict[str, Any]]:
+def get_alert_rule(alert_id: str, *, org_id: str) -> dict[str, Any] | None:
     """Retrieve one rule, scoped to its organization."""
     alert_id = str(alert_id or "").strip()
     org_id = str(org_id or "").strip()
@@ -264,13 +303,16 @@ def get_alert_rule(alert_id: str, *, org_id: str) -> Optional[dict[str, Any]]:
     db = get_db()
     p = sql_placeholder()
     try:
-        row = db.execute(f"""
+        row = db.execute(
+            f"""
             SELECT id, org_id, metric, comparison, threshold, label, active,
                    created_by, created_at, updated_at
             FROM alert_rules
             WHERE id = {p} AND org_id = {p}
             LIMIT 1
-        """, (alert_id, org_id)).fetchone()
+        """,
+            (alert_id, org_id),
+        ).fetchone()
         return _serialize_rule(row) if row is not None else None
     finally:
         db.close()
@@ -305,7 +347,9 @@ def delete_alert_rule(alert_id: str, *, org_id: str) -> bool:
         db.close()
 
 
-def set_alert_rule_active(alert_id: str, *, org_id: str, active: bool) -> Optional[dict[str, Any]]:
+def set_alert_rule_active(
+    alert_id: str, *, org_id: str, active: bool
+) -> dict[str, Any] | None:
     """Enable/disable a rule without deleting it."""
     alert_id = str(alert_id or "").strip()
     org_id = str(org_id or "").strip()
@@ -317,22 +361,33 @@ def set_alert_rule_active(alert_id: str, *, org_id: str, active: bool) -> Option
     db = get_db()
     p = sql_placeholder()
     try:
-        cursor = db.execute(f"""
+        cursor = db.execute(
+            f"""
             UPDATE alert_rules
             SET active = {p}, updated_at = {p}
             WHERE id = {p} AND org_id = {p}
-        """, (True if is_postgres() else (1 if active else 0), _now_iso(), alert_id, org_id))
+        """,
+            (
+                True if is_postgres() else (1 if active else 0),
+                _now_iso(),
+                alert_id,
+                org_id,
+            ),
+        )
         if getattr(cursor, "rowcount", 0) == 0:
             db.rollback()
             return None
         db.commit()
-        row = db.execute(f"""
+        row = db.execute(
+            f"""
             SELECT id, org_id, metric, comparison, threshold, label, active,
                    created_by, created_at, updated_at
             FROM alert_rules
             WHERE id = {p} AND org_id = {p}
             LIMIT 1
-        """, (alert_id, org_id)).fetchone()
+        """,
+            (alert_id, org_id),
+        ).fetchone()
         return _serialize_rule(row) if row is not None else None
     except Exception:
         try:
@@ -365,24 +420,30 @@ def comparison_matches(value: Any, comparison: str, threshold: Any) -> bool:
     return False
 
 
-def evaluate_alert_rules(*, org_id: str, metrics: dict[str, Any]) -> list[dict[str, Any]]:
+def evaluate_alert_rules(
+    *, org_id: str, metrics: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Return active rules triggered by the supplied metrics."""
     triggered = []
     for rule in list_alert_rules(org_id=org_id, active_only=True):
         metric = rule["metric"]
-        if metric in metrics and comparison_matches(metrics[metric], rule["comparison"], rule["threshold"]):
-            triggered.append({**rule, "current_value": metrics[metric], "triggered": True})
+        if metric in metrics and comparison_matches(
+            metrics[metric], rule["comparison"], rule["threshold"]
+        ):
+            triggered.append(
+                {**rule, "current_value": metrics[metric], "triggered": True}
+            )
     return triggered
 
 
 __all__ = [
-    "VALID_METRICS",
     "VALID_COMPARISONS",
-    "create_alert_rule",
-    "list_alert_rules",
-    "get_alert_rule",
-    "delete_alert_rule",
-    "set_alert_rule_active",
+    "VALID_METRICS",
     "comparison_matches",
+    "create_alert_rule",
+    "delete_alert_rule",
     "evaluate_alert_rules",
+    "get_alert_rule",
+    "list_alert_rules",
+    "set_alert_rule_active",
 ]

@@ -1,5 +1,3 @@
-import pytest
-
 from agentguard.decision_engine import (
     Decision,
     DecisionEngine,
@@ -86,9 +84,7 @@ def test_explicit_approval_policy():
         policies=[
             PolicyRule(
                 name="default",
-                require_approval_for={
-                    "send_email"
-                },
+                require_approval_for={"send_email"},
             )
         ]
     )
@@ -103,10 +99,7 @@ def test_explicit_approval_policy():
         )
     )
 
-    assert (
-        result.decision
-        == Decision.REQUIRE_APPROVAL
-    )
+    assert result.decision == Decision.REQUIRE_APPROVAL
 
 
 def test_unknown_tool_is_blocked():

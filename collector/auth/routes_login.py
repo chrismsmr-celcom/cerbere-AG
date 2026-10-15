@@ -1,7 +1,7 @@
 """Routes /login (GET Supabase / POST magic link legacy) et /auth/verify."""
 
-from datetime import timedelta
 import secrets
+from datetime import timedelta
 
 import structlog
 from flask import g, redirect, render_template_string, request, url_for
@@ -54,9 +54,7 @@ def login():
             success=None,
         ), 503
 
-    email = _normalize_email(
-        request.form.get("email", "")
-    )
+    email = _normalize_email(request.form.get("email", ""))
 
     if not _valid_email(email):
         return render_template_string(
@@ -106,24 +104,13 @@ def login():
         user_id = user[0]
 
         # Invalidate previous links.
-        _invalidate_existing_magic_links(
-            user_id
-        )
+        _invalidate_existing_magic_links(user_id)
 
-        raw_token = secrets.token_urlsafe(
-            MAGIC_LINK_TOKEN_BYTES
-        )
+        raw_token = secrets.token_urlsafe(MAGIC_LINK_TOKEN_BYTES)
 
-        token_hash = _hash_magic_token(
-            raw_token
-        )
+        token_hash = _hash_magic_token(raw_token)
 
-        expires_at = (
-            _utcnow()
-            + timedelta(
-                seconds=MAGIC_LINK_TTL_SECONDS
-            )
-        )
+        expires_at = _utcnow() + timedelta(seconds=MAGIC_LINK_TTL_SECONDS)
 
         _store_magic_link(
             user_id=user_id,
@@ -131,9 +118,7 @@ def login():
             expires_at=expires_at,
         )
 
-        link = _build_magic_link(
-            raw_token
-        )
+        link = _build_magic_link(raw_token)
 
         _send_magic_link_email(
             email,
@@ -151,9 +136,7 @@ def login():
             LOGIN_HTML,
             error=None,
             success=(
-                "Check your inbox. "
-                "Your secure sign-in link expires in "
-                "10 minutes."
+                "Check your inbox. Your secure sign-in link expires in 10 minutes."
             ),
         )
 
@@ -165,10 +148,7 @@ def login():
 
         return render_template_string(
             LOGIN_HTML,
-            error=(
-                "Unable to send the sign-in link. "
-                "Please try again."
-            ),
+            error=("Unable to send the sign-in link. Please try again."),
             success=None,
         ), 500
 
@@ -192,9 +172,7 @@ def verify_magic_link():
     try:
         _ensure_magic_link_table()
 
-        user = _consume_magic_link(
-            token
-        )
+        user = _consume_magic_link(token)
 
         if not user:
             _audit_login(
@@ -205,8 +183,7 @@ def verify_magic_link():
             return render_template_string(
                 LOGIN_HTML,
                 error=(
-                    "This sign-in link is invalid, "
-                    "expired, or has already been used."
+                    "This sign-in link is invalid, expired, or has already been used."
                 ),
                 success=None,
             ), 401
@@ -215,9 +192,7 @@ def verify_magic_link():
         org_id = user[1]
         email = user[3]
 
-        response = redirect(
-            url_for("auth.dashboard")
-        )
+        response = redirect(url_for("auth.dashboard"))
 
         _set_human_session(
             response,

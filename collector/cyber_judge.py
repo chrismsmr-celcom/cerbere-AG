@@ -23,7 +23,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 class JudgeVerdict(str, Enum):
@@ -69,15 +69,15 @@ def _is_didactic_context(text: str) -> bool:
 class CyberVerdict:
     verdict: JudgeVerdict
     risk_score: int
-    reasoning: List[str] = field(default_factory=list)
+    reasoning: list[str] = field(default_factory=list)
     confidence: float = 0.0
-    attack_type: Optional[AttackType] = None
-    mitre_tactic: Optional[str] = None
-    cwe_id: Optional[str] = None
-    exploitability: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    attack_type: AttackType | None = None
+    mitre_tactic: str | None = None
+    cwe_id: str | None = None
+    exploitability: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "verdict": self.verdict.value,
             "risk_score": self.risk_score,
@@ -101,7 +101,7 @@ class CyberJudge:
     explainability; the primary enforcement decision comes from explicit rules.
     """
 
-    TOOL_RISK: Dict[str, int] = {
+    TOOL_RISK: dict[str, int] = {
         "send_email": 55,
         "send_message": 55,
         "webhook": 60,
@@ -131,24 +131,46 @@ class CyberJudge:
     }
 
     EXTERNAL_TOOLS = {
-        "http_request", "fetch", "webhook", "send_email", "send_message",
-        "upload_file", "publish", "post_message", "browser_navigate",
+        "http_request",
+        "fetch",
+        "webhook",
+        "send_email",
+        "send_message",
+        "upload_file",
+        "publish",
+        "post_message",
+        "browser_navigate",
     }
 
     PRIVILEGED_TOOLS = {
-        "execute_command", "run_shell", "subprocess", "sudo",
-        "admin_action", "grant_access", "change_permissions", "delete_all",
+        "execute_command",
+        "run_shell",
+        "subprocess",
+        "sudo",
+        "admin_action",
+        "grant_access",
+        "change_permissions",
+        "delete_all",
     }
 
     IRREVERSIBLE_TOOLS = {
-        "delete", "delete_file", "delete_all", "drop_database", "drop_table",
-        "execute_command", "run_shell", "subprocess", "transfer_funds",
-        "send_email", "publish", "upload_file",
+        "delete",
+        "delete_file",
+        "delete_all",
+        "drop_database",
+        "drop_table",
+        "execute_command",
+        "run_shell",
+        "subprocess",
+        "transfer_funds",
+        "send_email",
+        "publish",
+        "upload_file",
     }
 
     # These patterns are intentionally high-signal. Generic words such as
     # "export" or "send" alone are not enough to block.
-    ATTACK_SIGNATURES: Tuple[Tuple[AttackType, Tuple[str, ...], int, str, str], ...] = (
+    ATTACK_SIGNATURES: tuple[tuple[AttackType, tuple[str, ...], int, str, str], ...] = (
         (
             AttackType.PROMPT_INJECTION,
             (
@@ -237,9 +259,19 @@ class CyberJudge:
     )
 
     SENSITIVE_PARAM_NAMES = {
-        "api_key", "apikey", "access_token", "auth_token", "password",
-        "passwd", "secret", "private_key", "client_secret", "refresh_token",
-        "authorization", "credential", "credentials",
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth_token",
+        "password",
+        "passwd",
+        "secret",
+        "private_key",
+        "client_secret",
+        "refresh_token",
+        "authorization",
+        "credential",
+        "credentials",
     }
 
     def __init__(
@@ -253,7 +285,7 @@ class CyberJudge:
         self.alert_threshold = int(alert_threshold)
         self.block_threshold = int(block_threshold)
         self.immediate_threshold = int(immediate_threshold)
-        self._baseline: Dict[str, Dict[str, int]] = {}
+        self._baseline: dict[str, dict[str, int]] = {}
 
     @staticmethod
     def _serialize(value: Any, limit: int = 8000) -> str:
@@ -263,7 +295,9 @@ class CyberJudge:
             text = str(value)
         return text[:limit]
 
-    def _detect_attack(self, text: str) -> Tuple[Optional[AttackType], int, Optional[str], Optional[str], List[str]]:
+    def _detect_attack(
+        self, text: str
+    ) -> tuple[AttackType | None, int, str | None, str | None, list[str]]:
         lowered = text.lower()
         for attack_type, patterns, base_risk, tactic, cwe in self.ATTACK_SIGNATURES:
             for pattern in patterns:
@@ -277,10 +311,10 @@ class CyberJudge:
                     )
         return None, 0, None, None, []
 
-    def _tool_risk(self, tool_name: str) -> Tuple[int, List[str]]:
+    def _tool_risk(self, tool_name: str) -> tuple[int, list[str]]:
         tool = (tool_name or "unknown").lower()
         risk = self.TOOL_RISK.get(tool, 15)
-        reasons: List[str] = []
+        reasons: list[str] = []
         if tool in self.PRIVILEGED_TOOLS:
             reasons.append(f"privileged tool: {tool}")
         if tool in self.IRREVERSIBLE_TOOLS:
@@ -291,11 +325,13 @@ class CyberJudge:
             reasons.append(f"critical-impact tool: {tool}")
         return risk, reasons
 
-    def _param_risk(self, params: Dict[str, Any], external: bool) -> Tuple[int, List[str]]:
+    def _param_risk(
+        self, params: dict[str, Any], external: bool
+    ) -> tuple[int, list[str]]:
         if not params:
             return 0, []
 
-        reasons: List[str] = []
+        reasons: list[str] = []
         risk = 0
 
         keys = {str(k).lower() for k in params}
@@ -311,7 +347,9 @@ class CyberJudge:
             serialized,
         ):
             risk += 45
-            reasons.append("credential/token-like value detected in external tool parameters")
+            reasons.append(
+                "credential/token-like value detected in external tool parameters"
+            )
 
         if re.search(r"\b(all|everything|entire|whole)\b", serialized):
             risk += 15
@@ -319,12 +357,14 @@ class CyberJudge:
 
         return min(risk, 70), reasons
 
-    def _context_risk(self, span_data: Dict[str, Any]) -> Tuple[int, List[str]]:
+    def _context_risk(self, span_data: dict[str, Any]) -> tuple[int, list[str]]:
         context = span_data.get("context") or {}
         risk = 0
-        reasons: List[str] = []
+        reasons: list[str] = []
 
-        role = str(span_data.get("agent_role") or context.get("agent_role") or "user").lower()
+        role = str(
+            span_data.get("agent_role") or context.get("agent_role") or "user"
+        ).lower()
         if role == "admin":
             risk += 10
             reasons.append("admin execution context")
@@ -341,7 +381,7 @@ class CyberJudge:
 
         return risk, reasons
 
-    def _ml_signal(self, span_data: Dict[str, Any]) -> Tuple[int, List[str]]:
+    def _ml_signal(self, span_data: dict[str, Any]) -> tuple[int, list[str]]:
         ml = span_data.get("ml_result") or {}
         if not isinstance(ml, dict):
             return 0, []
@@ -365,7 +405,7 @@ class CyberJudge:
 
         return int(min(score, 100) * 0.25), [f"ML signal contributes {int(score)} risk"]
 
-    def _baseline_signal(self, span_data: Dict[str, Any]) -> Tuple[int, List[str]]:
+    def _baseline_signal(self, span_data: dict[str, Any]) -> tuple[int, list[str]]:
         agent_id = str(span_data.get("agent_id") or "default")
         tool = str(span_data.get("tool_name") or "unknown")
         key = f"{agent_id}:{tool}"
@@ -381,7 +421,7 @@ class CyberJudge:
 
         return 0, []
 
-    def _confidence(self, reasons: List[str], hard_attack: bool) -> float:
+    def _confidence(self, reasons: list[str], hard_attack: bool) -> float:
         if hard_attack:
             return 0.98
         if len(reasons) >= 4:
@@ -392,7 +432,7 @@ class CyberJudge:
             return 0.70
         return 0.60
 
-    def judge(self, span_data: Dict[str, Any]) -> CyberVerdict:
+    def judge(self, span_data: dict[str, Any]) -> CyberVerdict:
         start = time.perf_counter()
 
         tool_name = str(
@@ -429,10 +469,12 @@ class CyberJudge:
         reasons.extend(baseline_reasons)
 
         # Hard security rules take precedence over aggregate scoring.
-        hard_block_reason: Optional[str] = None
+        hard_block_reason: str | None = None
         taint = str(span_data.get("taint_level") or "").upper()
 
-        if taint == "MALICIOUS" and (external or tool_name.lower() in self.PRIVILEGED_TOOLS):
+        if taint == "MALICIOUS" and (
+            external or tool_name.lower() in self.PRIVILEGED_TOOLS
+        ):
             hard_block_reason = "MALICIOUS taint reaches a high-impact sink"
         elif taint == "SECRET" and external:
             hard_block_reason = "SECRET taint reaches an external sink"
@@ -520,7 +562,7 @@ class CyberJudge:
             },
         )
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         return {
             "enabled": True,
             "type": "deterministic_cyber_judge",
@@ -541,8 +583,8 @@ class HybridCyberJudge:
 
     def __init__(
         self,
-        deterministic: Optional[CyberJudge] = None,
-        ambiguous_callback: Optional[Any] = None,
+        deterministic: CyberJudge | None = None,
+        ambiguous_callback: Any | None = None,
         ambiguous_min: int = 30,
         ambiguous_max: int = 59,
     ):
@@ -551,7 +593,7 @@ class HybridCyberJudge:
         self.ambiguous_min = int(ambiguous_min)
         self.ambiguous_max = int(ambiguous_max)
 
-    def judge(self, span_data: Dict[str, Any]) -> CyberVerdict:
+    def judge(self, span_data: dict[str, Any]) -> CyberVerdict:
         result = self.deterministic.judge(span_data)
 
         if (
@@ -574,7 +616,9 @@ class HybridCyberJudge:
             return result
 
         try:
-            external_score = int(max(0, min(100, float(external.get("risk_score", result.risk_score)))))
+            external_score = int(
+                max(0, min(100, float(external.get("risk_score", result.risk_score))))
+            )
         except (TypeError, ValueError):
             external_score = result.risk_score
 

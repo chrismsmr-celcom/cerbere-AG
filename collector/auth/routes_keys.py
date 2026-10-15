@@ -25,7 +25,9 @@ def create_api_key():
 
         org_id = getattr(g, "org_id", None)
         if not org_id:
-            return jsonify({"error": "Organization ID not found in session. Please log in again."}), 403
+            return jsonify(
+                {"error": "Organization ID not found in session. Please log in again."}
+            ), 403
 
         data = request.get_json(silent=True) or {}
         name = data.get("name", "Default API Key").strip() or "Default API Key"
@@ -44,10 +46,13 @@ def create_api_key():
             conn = get_pg_conn()
             try:
                 cur = conn.cursor()
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     INSERT INTO user_api_keys (id, org_id, key_hash, name, active, created_at)
                     VALUES ({p}, {p}, {p}, {p}, TRUE, CURRENT_TIMESTAMP)
-                """, (key_id, org_id, key_hash, name))
+                """,
+                    (key_id, org_id, key_hash, name),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -55,27 +60,32 @@ def create_api_key():
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO user_api_keys (id, org_id, key_hash, name, active, created_at)
                     VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-                """, (key_id, org_id, key_hash, name))
+                """,
+                    (key_id, org_id, key_hash, name),
+                )
                 conn.commit()
             finally:
                 conn.close()
 
         logger.info("api_key_created", org_id=org_id, key_id=key_id)
 
-        return jsonify({
-            "status": "success",
-            "key": raw_key,
-            "key_id": key_id,
-            "name": name,
-            "message": "⚠️ IMPORTANT : Copiez cette clé maintenant. Elle ne sera plus jamais affichée."
-        }), 201
+        return jsonify(
+            {
+                "status": "success",
+                "key": raw_key,
+                "key_id": key_id,
+                "name": name,
+                "message": "⚠️ IMPORTANT : Copiez cette clé maintenant. Elle ne sera plus jamais affichée.",
+            }
+        ), 201
 
     except Exception as e:
         logger.error("create_api_key_crashed", error=str(e), exc_info=True)
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": f"Internal server error: {e!s}"}), 500
 
 
 @auth_bp.get("/api/keys")
@@ -95,12 +105,15 @@ def list_api_keys():
             conn = get_pg_conn()
             try:
                 cur = conn.cursor()
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     SELECT id, name, active, created_at
                     FROM user_api_keys
                     WHERE org_id = {p}
                     ORDER BY created_at DESC
-                """, (org_id,))
+                """,
+                    (org_id,),
+                )
                 rows = cur.fetchall()
             finally:
                 conn.close()
@@ -108,31 +121,37 @@ def list_api_keys():
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, name, active, created_at
                     FROM user_api_keys
                     WHERE org_id = ?
                     ORDER BY created_at DESC
-                """, (org_id,))
+                """,
+                    (org_id,),
+                )
                 rows = cur.fetchall()
             finally:
                 conn.close()
 
         keys = []
         for row in rows:
-            keys.append({
-                "id": row[0],
-                "name": row[1],
-                "active": bool(row[2]),
-                "created_at": row[3],
-                "key_preview": "ag_live_..." + (str(row[0])[-4:] if row[0] else "????")
-            })
-        
+            keys.append(
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "active": bool(row[2]),
+                    "created_at": row[3],
+                    "key_preview": "ag_live_..."
+                    + (str(row[0])[-4:] if row[0] else "????"),
+                }
+            )
+
         return jsonify({"keys": keys}), 200
 
     except Exception as e:
         logger.error("list_api_keys_crashed", error=str(e), exc_info=True)
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": f"Internal server error: {e!s}"}), 500
 
 
 @auth_bp.delete("/api/keys/<key_id>")
@@ -150,11 +169,14 @@ def revoke_api_key(key_id):
             conn = get_pg_conn()
             try:
                 cur = conn.cursor()
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     UPDATE user_api_keys
                     SET active = FALSE
                     WHERE id = {p} AND org_id = {p}
-                """, (key_id, org_id))
+                """,
+                    (key_id, org_id),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -162,17 +184,22 @@ def revoke_api_key(key_id):
             conn = sqlite3.connect(_get_db_path())
             try:
                 cur = conn.cursor()
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE user_api_keys
                     SET active = 0
                     WHERE id = ? AND org_id = ?
-                """, (key_id, org_id))
+                """,
+                    (key_id, org_id),
+                )
                 conn.commit()
             finally:
                 conn.close()
 
-        return jsonify({"status": "success", "message": "Clé révoquée avec succès"}), 200
+        return jsonify(
+            {"status": "success", "message": "Clé révoquée avec succès"}
+        ), 200
 
     except Exception as e:
         logger.error("revoke_api_key_crashed", error=str(e), exc_info=True)
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": f"Internal server error: {e!s}"}), 500

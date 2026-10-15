@@ -26,10 +26,24 @@ else:
 # Mots-cles JS et methodes DOM qui apparaissent dans les handlers inline
 # mais ne sont pas des fonctions definies par le dashboard.
 _IGNORED_CALLS = {
-    "if", "for", "while", "switch", "catch", "with",
-    "stopPropagation", "preventDefault", "closest", "querySelector",
-    "getElementById", "contains", "add", "remove", "toggle",
-    "focus", "select", "click",
+    "if",
+    "for",
+    "while",
+    "switch",
+    "catch",
+    "with",
+    "stopPropagation",
+    "preventDefault",
+    "closest",
+    "querySelector",
+    "getElementById",
+    "contains",
+    "add",
+    "remove",
+    "toggle",
+    "focus",
+    "select",
+    "click",
 }
 
 
@@ -72,10 +86,7 @@ def _defined_functions():
 def test_every_onclick_handler_is_defined():
     missing = sorted(_onclick_calls() - _defined_functions())
 
-    assert not missing, (
-        "onclick pointe vers des fonctions inexistantes : "
-        f"{missing}"
-    )
+    assert not missing, f"onclick pointe vers des fonctions inexistantes : {missing}"
 
 
 def test_approval_and_agent_panels_are_present():

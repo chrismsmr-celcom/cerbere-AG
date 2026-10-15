@@ -10,10 +10,10 @@ import json
 import os
 import time
 
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
-from cryptography.hazmat.primitives import serialization
 
 
 class DecisionSigner:
@@ -29,13 +29,10 @@ class DecisionSigner:
         enabled for local development.
         """
 
-        allow_ephemeral = (
-            os.getenv(
-                "AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY",
-                "false",
-            ).lower()
-            in {"1", "true", "yes", "on"}
-        )
+        allow_ephemeral = os.getenv(
+            "AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY",
+            "false",
+        ).lower() in {"1", "true", "yes", "on"}
 
         if private_key_pem:
             self._key = serialization.load_pem_private_key(
@@ -55,10 +52,14 @@ class DecisionSigner:
                 "AGENTGUARD_ALLOW_EPHEMERAL_SIGNING_KEY=true."
             )
 
-        self._public_pem = self._key.public_key().public_bytes(
-            serialization.Encoding.PEM,
-            serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        self._public_pem = (
+            self._key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
 
     def public_key_pem(self) -> str:
         """Return the public key in PEM format."""
@@ -102,13 +103,9 @@ class DecisionSigner:
             separators=(",", ":"),
         )
 
-        signature = self._key.sign(
-            canonical.encode()
-        )
+        signature = self._key.sign(canonical.encode())
 
-        payload["signature"] = base64.b64encode(
-            signature
-        ).decode()
+        payload["signature"] = base64.b64encode(signature).decode()
 
         return payload
 
@@ -117,9 +114,7 @@ class DecisionVerifier:
     """Côté SDK : vérifie qu'une décision vient bien du collector."""
 
     def __init__(self, public_key_pem: str):
-        self._pub = serialization.load_pem_public_key(
-            public_key_pem.encode()
-        )
+        self._pub = serialization.load_pem_public_key(public_key_pem.encode())
 
     def verify(self, signed: dict) -> bool:
         """Verify signature and expiration."""
@@ -146,11 +141,7 @@ class DecisionVerifier:
         except (TypeError, ValueError):
             return False
 
-        payload = {
-            key: value
-            for key, value in signed.items()
-            if key != "signature"
-        }
+        payload = {key: value for key, value in signed.items() if key != "signature"}
 
         canonical = json.dumps(
             payload,

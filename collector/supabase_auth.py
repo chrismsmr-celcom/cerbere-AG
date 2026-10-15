@@ -30,10 +30,10 @@ Config requise (Supabase Dashboard > Project Settings > API) :
     AGENTGUARD_SUPABASE_ANON_KEY=eyJ...        (publique, utilisée côté front)
     AGENTGUARD_SUPABASE_JWT_SECRET=...         (secrète, JAMAIS exposée au front)
 """
+
 import os
 import sqlite3
 import uuid
-from typing import Optional
 
 import requests
 import structlog
@@ -87,9 +87,7 @@ def verify_supabase_jwt(token: str) -> dict:
         raise SupabaseAuthError(f"Supabase injoignable : {exc}")
 
     if resp.status_code != 200:
-        raise SupabaseAuthError(
-            f"token Supabase invalide (HTTP {resp.status_code})"
-        )
+        raise SupabaseAuthError(f"token Supabase invalide (HTTP {resp.status_code})")
 
     data = resp.json()
     user_id = data.get("id")
@@ -231,8 +229,16 @@ def get_or_provision_user(payload: dict):
                      role, active, supabase_user_id, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 """,
-                (user_id, org_id, tenant_id, email, display_name,
-                 "admin", True, supabase_user_id),
+                (
+                    user_id,
+                    org_id,
+                    tenant_id,
+                    email,
+                    display_name,
+                    "admin",
+                    True,
+                    supabase_user_id,
+                ),
             )
             conn.commit()
         finally:
@@ -258,8 +264,16 @@ def get_or_provision_user(payload: dict):
                      role, active, supabase_user_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
-                (user_id, org_id, tenant_id, email, display_name,
-                 "admin", 1, supabase_user_id),
+                (
+                    user_id,
+                    org_id,
+                    tenant_id,
+                    email,
+                    display_name,
+                    "admin",
+                    1,
+                    supabase_user_id,
+                ),
             )
             conn.commit()
         finally:
@@ -272,4 +286,4 @@ def get_or_provision_user(payload: dict):
         provider=(payload.get("app_metadata") or {}).get("provider", "email"),
     )
 
-    return (user_id, org_id, tenant_id, email, display_name, "admin", True) 
+    return (user_id, org_id, tenant_id, email, display_name, "admin", True)

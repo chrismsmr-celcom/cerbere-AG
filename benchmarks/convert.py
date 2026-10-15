@@ -10,6 +10,7 @@ Sources :
     - injecagent  (fichier local benchmarks/corpus/attacks.json — format maison)
     - benign      (HF: tool-calling / conversations légitimes)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,6 +24,7 @@ OUT_ATTACKS = Path("benchmarks/corpus/attacks.json")
 
 # ---------------------------------------------------------------- helpers
 
+
 def _write_jsonl(records: list[dict], out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
@@ -30,10 +32,18 @@ def _write_jsonl(records: list[dict], out: Path) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     print(f"[convert] écrit {len(records)} entrées → {out}")
 
-def _make_span(idx: int, label: str, source: str, expected: str,
-               prompt: str, tool_name: str | None = None,
-               tool_arguments: dict | None = None, context: dict | None = None,
-               attack_type: str | None = None) -> dict:
+
+def _make_span(
+    idx: int,
+    label: str,
+    source: str,
+    expected: str,
+    prompt: str,
+    tool_name: str | None = None,
+    tool_arguments: dict | None = None,
+    context: dict | None = None,
+    attack_type: str | None = None,
+) -> dict:
     return {
         "id": f"{source}_{label}_{idx:05d}",
         "label": label,
@@ -52,6 +62,7 @@ def _make_span(idx: int, label: str, source: str, expected: str,
         },
     }
 
+
 # ---------------------------------------------------------------- injecagent (maison)
 def convert_local_attacks() -> list[dict]:
     """Convertit benchmarks/corpus/attacks.json (dict: catégories -> liste d'entrées)."""
@@ -60,7 +71,15 @@ def convert_local_attacks() -> list[dict]:
         return []
     raw = json.loads(OUT_ATTACKS.read_text(encoding="utf-8"))
 
-    PROMPT_KEYS = ("prompt", "text", "payload", "injection", "content", "message", "instruction")
+    PROMPT_KEYS = (
+        "prompt",
+        "text",
+        "payload",
+        "injection",
+        "content",
+        "message",
+        "instruction",
+    )
     out, skipped = [], []
     idx = 0
     for category, entries in raw.items():
@@ -74,32 +93,43 @@ def convert_local_attacks() -> list[dict]:
                 skipped.append({**e, "_category": category})
                 continue
             tool_name, tool_args = _extract_tool(prompt)
-            is_benign = (category == "benign" or e.get("category") == "benign")
-            out.append(_make_span(
-                idx,
-                "benign" if is_benign else "attack",
-                "injecagent",
-                "allow" if is_benign else "block",
-                prompt, tool_name, tool_args,
-                context={
-                    "severity": e.get("severity"),
-                    "lang": e.get("lang", "en"),
-                    "category": e.get("category", category),
-                },
-                attack_type=None if is_benign else e.get("category", category),
-            ))
+            is_benign = category == "benign" or e.get("category") == "benign"
+            out.append(
+                _make_span(
+                    idx,
+                    "benign" if is_benign else "attack",
+                    "injecagent",
+                    "allow" if is_benign else "block",
+                    prompt,
+                    tool_name,
+                    tool_args,
+                    context={
+                        "severity": e.get("severity"),
+                        "lang": e.get("lang", "en"),
+                        "category": e.get("category", category),
+                    },
+                    attack_type=None if is_benign else e.get("category", category),
+                )
+            )
             idx += 1
     if skipped:
-        print(f"[convert] ⚠ {len(skipped)} entrées sans prompt — 1er exemple : {skipped[0]}")
+        print(
+            f"[convert] ⚠ {len(skipped)} entrées sans prompt — 1er exemple : {skipped[0]}"
+        )
     return out
 
+
 _TOOL_PATTERNS = [
-    (r"\btransfer(?:_funds)?\b", "transfer_funds",
-     lambda m: {"amount": 10000, "to": "attacker_account"}),
+    (
+        r"\btransfer(?:_funds)?\b",
+        "transfer_funds",
+        lambda m: {"amount": 10000, "to": "attacker_account"},
+    ),
     (r"\bsend_(?:email|mail)\b", "send_email", lambda m: {"to": "attacker@evil.com"}),
     (r"\bdelete_(?:file|email)s?\b", "delete_file", lambda m: {"path": "/etc/passwd"}),
     (r"\b(?!ignore\b)(\w+)\s+tool\b", None, None),  # générique, capturé ci-dessous
 ]
+
 
 def _extract_tool(prompt: str) -> tuple[str | None, dict | None]:
     p = prompt.lower()
@@ -110,6 +140,7 @@ def _extract_tool(prompt: str) -> tuple[str | None, dict | None]:
                 return name, args(m)
             return m.group(1), {"raw": prompt[:200]}
     return None, None
+
 
 # ---------------------------------------------------------------- agentdojo
 def convert_agentdojo(max_items: int = 10000) -> list[dict]:
@@ -130,12 +161,17 @@ def convert_agentdojo(max_items: int = 10000) -> list[dict]:
 
         # Introspection initiale (à retirer après validation)
         if idx == 0:
-            print(f"[convert][debug] attributs suite: {[a for a in dir(suite) if 'inject' in a.lower() or 'task' in a.lower()]}")
+            print(
+                f"[convert][debug] attributs suite: {[a for a in dir(suite) if 'inject' in a.lower() or 'task' in a.lower()]}"
+            )
 
         # Injection tasks (attaques)
         try:
-            injections = list(suite.get_injection_tasks() if callable(getattr(suite, "get_injection_tasks", None))
-                              else suite.injection_tasks)
+            injections = list(
+                suite.get_injection_tasks()
+                if callable(getattr(suite, "get_injection_tasks", None))
+                else suite.injection_tasks
+            )
         except Exception as e:  # noqa: BLE001
             print(f"[convert] injections {suite_name}: {e}")
             injections = []
@@ -147,30 +183,46 @@ def convert_agentdojo(max_items: int = 10000) -> list[dict]:
             if not payload:
                 # les payloads sont souvent dans un attribut complémentaire
                 payload = goal
-            out.append(_make_span(
-                idx, "attack", "agentdojo", "block",
-                str(payload),
-                tool_name="get_email",
-                tool_arguments={"body": str(payload)},
-                context={"domain": suite_name, "goal": str(goal)[:300]},
-                attack_type="indirect_prompt_injection",
-            ))
+            out.append(
+                _make_span(
+                    idx,
+                    "attack",
+                    "agentdojo",
+                    "block",
+                    str(payload),
+                    tool_name="get_email",
+                    tool_arguments={"body": str(payload)},
+                    context={"domain": suite_name, "goal": str(goal)[:300]},
+                    attack_type="indirect_prompt_injection",
+                )
+            )
             idx += 1
 
         # User tasks bénins (goal légitime)
         try:
-            user_tasks = list(suite.user_tasks.values()) if isinstance(suite.user_tasks, dict) else list(suite.user_tasks)
+            user_tasks = (
+                list(suite.user_tasks.values())
+                if isinstance(suite.user_tasks, dict)
+                else list(suite.user_tasks)
+            )
         except Exception:  # noqa: BLE001
             user_tasks = []
         for t in user_tasks:
             goal = getattr(t, "goal", "") or getattr(t, "prompt", "")
             if goal and idx < max_items:
-                out.append(_make_span(
-                    idx, "benign", "agentdojo", "allow", str(goal),
-                    context={"domain": suite_name},
-                ))
+                out.append(
+                    _make_span(
+                        idx,
+                        "benign",
+                        "agentdojo",
+                        "allow",
+                        str(goal),
+                        context={"domain": suite_name},
+                    )
+                )
                 idx += 1
     return out[:max_items]
+
 
 # ---------------------------------------------------------------- benign (function-calling)
 def convert_benign_tools(max_items: int = 10000) -> list[dict]:
@@ -202,25 +254,38 @@ def convert_benign_tools(max_items: int = 10000) -> list[dict]:
             text = str(text)[:4000]
             if not text.strip():
                 continue
-            out.append(_make_span(
-                i, "benign", "lmsys", "allow", text,
-                tool_name=random.choice([None, "get_email", "search", "read_file", "get_weather"]),
-                context={"domain": "generic"},
-            ))
+            out.append(
+                _make_span(
+                    i,
+                    "benign",
+                    "lmsys",
+                    "allow",
+                    text,
+                    tool_name=random.choice(
+                        [None, "get_email", "search", "read_file", "get_weather"]
+                    ),
+                    context={"domain": "generic"},
+                )
+            )
         break
     return out
+
 
 # ---------------------------------------------------------------- main
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sources", default="all",
-                    help="all | injecagent,agentdojo,benign,...")
+    ap.add_argument(
+        "--sources", default="all", help="all | injecagent,agentdojo,benign,..."
+    )
     ap.add_argument("--max-per-source", type=int, default=10000)
     ap.add_argument("--out", type=Path, default=OUT_DEFAULT)
     args = ap.parse_args()
 
-    sources = (["injecagent", "agentdojo", "benign"]
-               if args.sources == "all" else args.sources.split(","))
+    sources = (
+        ["injecagent", "agentdojo", "benign"]
+        if args.sources == "all"
+        else args.sources.split(",")
+    )
 
     records: list[dict] = []
     for s in sources:
@@ -233,10 +298,11 @@ def main() -> None:
         else:
             print(f"[convert] source inconnue: {s}")
 
-    random.Random(42).shuffle(records)   # reproductible
+    random.Random(42).shuffle(records)  # reproductible
     _write_jsonl(records, args.out)
     n_att = sum(1 for r in records if r["label"] == "attack")
     print(f"[convert] {n_att} attaques / {len(records) - n_att} bénignes")
+
 
 if __name__ == "__main__":
     main()

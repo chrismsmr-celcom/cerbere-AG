@@ -8,6 +8,7 @@ Le résultat est un seul script classique (pas de modules ES) : les handlers inl
 `onclick="..."` du HTML continuent de fonctionner, et les déclarations `function` sont
 hoistées sur l'ensemble du fichier, donc l'ordre des modules n'a pas d'impact sur les appels.
 """
+
 import sys
 from pathlib import Path
 
@@ -25,7 +26,9 @@ def build() -> str:
     if not files:
         raise SystemExit(f"Aucun module trouvé dans {SRC}")
     parts = [
-        f"/* ---- {f.name} ---- */\n" + f.read_text(encoding="utf-8").rstrip("\n") + "\n"
+        f"/* ---- {f.name} ---- */\n"
+        + f.read_text(encoding="utf-8").rstrip("\n")
+        + "\n"
         for f in files
     ]
     return HEADER + "\n".join(parts)
@@ -36,12 +39,16 @@ def main() -> int:
     if "--check" in sys.argv:
         current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
         if current != out:
-            print("dashboard.js n'est pas à jour : lance `python tools/build_dashboard.py`")
+            print(
+                "dashboard.js n'est pas à jour : lance `python tools/build_dashboard.py`"
+            )
             return 1
         print("dashboard.js à jour")
         return 0
     OUT.write_text(out, encoding="utf-8", newline="\n")
-    print(f"{OUT.relative_to(ROOT)} <- {len(list(SRC.glob('*.js')))} modules, {len(out.splitlines())} lignes")
+    print(
+        f"{OUT.relative_to(ROOT)} <- {len(list(SRC.glob('*.js')))} modules, {len(out.splitlines())} lignes"
+    )
     return 0
 
 

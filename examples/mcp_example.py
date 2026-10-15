@@ -25,10 +25,11 @@ pas agentguard_sdk.py.
 Installer : pip install mcp
 Lancer    : python mcp_example.py
 """
+
 import asyncio
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -67,7 +68,7 @@ def guard_mcp_session(session: Any, guard: AgentGuard, server_label: str) -> Any
     """
     original_call_tool = session.call_tool
 
-    async def guarded_call_tool(name: str, arguments: Optional[dict] = None, **kwargs):
+    async def guarded_call_tool(name: str, arguments: dict | None = None, **kwargs):
         tool_name = f"mcp:{server_label}:{name}"
         params = dict(arguments or {})
 
@@ -95,8 +96,9 @@ def guard_mcp_session(session: Any, guard: AgentGuard, server_label: str) -> Any
 # EXEMPLE COMPLET — client stdio MCP branché sur AgentGuard
 # ─────────────────────────────────────────────────────────────────
 async def demo():
-    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+
+    from mcp import ClientSession, StdioServerParameters
 
     # N'importe quel serveur MCP standard fonctionne ici (filesystem,
     # github, slack, ta propre implémentation Composio, etc.)
@@ -113,7 +115,9 @@ async def demo():
             session = guard_mcp_session(session, guard, server_label="filesystem")
 
             tools = await session.list_tools()
-            print(f"Outils exposés par le serveur MCP : {[t.name for t in tools.tools]}")
+            print(
+                f"Outils exposés par le serveur MCP : {[t.name for t in tools.tools]}"
+            )
 
             try:
                 result = await session.call_tool(
@@ -123,8 +127,10 @@ async def demo():
             except SecurityException as e:
                 print(f"🛡️ Bloqué par AgentGuard avant d'atteindre le serveur MCP : {e}")
             except FileNotFoundError:
-                print("(fichier de démo absent, normal — le point important "
-                      "est que l'appel a bien transité par AgentGuard)")
+                print(
+                    "(fichier de démo absent, normal — le point important "
+                    "est que l'appel a bien transité par AgentGuard)"
+                )
 
 
 if __name__ == "__main__":
