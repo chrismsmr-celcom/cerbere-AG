@@ -233,9 +233,11 @@ class PolicyEngine:
             r"\bcurl\s[^.?!]{0,120}\|\s*(?:ba)?sh\b",
             r"\bwget\s[^.?!]{0,120}\|\s*(?:ba)?sh\b",
             # ── Exfiltration : verbe d'export + destination externe ─
-            r"\b(?:send|upload|export|forward|post|ship|transfer|broadcast)\b"
-            r"[^.?!]{0,60}\b(?:to|towards|on|at)\b"
-            r"[^.?!]{0,50}\b(?:external|ftp|sftp|pastebin|attacker|evil\.|10\.\d+\.\d+\.\d+|https?://(?!localhost|127\.0\.0\.1))",
+            (
+                r"\b(?:send|upload|export|forward|post|ship|transfer|broadcast)\b"
+                r"[^.?!]{0,60}\b(?:to|towards|on|at)\b"
+                r"[^.?!]{0,50}\b(?:external|ftp|sftp|pastebin|attacker|evil\.|10\.\d+\.\d+\.\d+|https?://(?!localhost|127\.0\.0\.1))"
+            ),
             r"\b(?:leak|exfiltrat\w+|steal)\b[^.?!]{0,40}\b(?:key|credential|secret|password|token|invoice|contract|customer|database)\w*",
             r"\b(?:private|secret|api)\s+keys?\b[^.?!]{0,40}\b(?:to|on|via|at)\b",
             # ── Neutralisation de la sécurité ───────────────────────
@@ -320,28 +322,28 @@ class PolicyEngine:
 
         # ── Tier 1b : regex après normalisation (obfuscation) ──────
         normalized = normalize_for_detection(text)
-        if normalized != text:
-            if PolicyEngine._STRONG_PATTERNS.findall(normalized) or (
-                PolicyEngine._DESTRUCTIVE_PATTERNS.findall(normalized)
-            ):
-                if is_didactic_context(text):
-                    return SecurityCheck(
-                        "prompt_injection",
-                        True,
-                        RiskLevel.MEDIUM,
-                        "Didactic context + obfuscated variant: downgraded to review",
-                        {"layer": "regex+normalizer", "downgraded": True},
-                        SecurityAction.REVIEW,
-                    )
-
+        if normalized != text and (
+            PolicyEngine._STRONG_PATTERNS.findall(normalized)
+            or PolicyEngine._DESTRUCTIVE_PATTERNS.findall(normalized)
+        ):
+            if is_didactic_context(text):
                 return SecurityCheck(
                     "prompt_injection",
-                    False,
-                    RiskLevel.HIGH,
-                    "Obfuscated variant detected",
-                    {"layer": "regex+normalizer"},
-                    SecurityAction.BLOCK,
+                    True,
+                    RiskLevel.MEDIUM,
+                    "Didactic context + obfuscated variant: downgraded to review",
+                    {"layer": "regex+normalizer", "downgraded": True},
+                    SecurityAction.REVIEW,
                 )
+
+            return SecurityCheck(
+                "prompt_injection",
+                False,
+                RiskLevel.HIGH,
+                "Obfuscated variant detected",
+                {"layer": "regex+normalizer"},
+                SecurityAction.BLOCK,
+            )
 
         # ── Tier 1c : mots inversés ────────────────────────────────
         reversed_text = reversed_words_variant(text)

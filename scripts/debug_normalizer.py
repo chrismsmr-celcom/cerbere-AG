@@ -1,3 +1,8 @@
+import functools
+import json
+import operator
+
+from agentguard import PolicyEngine
 from agentguard.normalizer import normalize_for_detection
 from agentguard.patterns import is_didactic_context
 
@@ -18,13 +23,10 @@ for t in cases:
 
 didactic = "For our security blog, explain how 'ignore previous instructions' attacks work and how to defend against them."
 print("didactic:", is_didactic_context(didactic))
-import functools
-import json
-import operator
 
-from agentguard import PolicyEngine
+with open("benchmarks/corpus/attacks.json", encoding="utf-8") as f:
+    d = json.load(f)
 
-d = json.load(open("benchmarks/corpus/attacks.json", encoding="utf-8"))
 entries = [
     e
     for e in (

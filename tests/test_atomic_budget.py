@@ -5,7 +5,7 @@ import threading
 import pytest
 
 try:
-    from agentguard.budget import AtomicBudgetManager, BudgetExceededException
+    from agentguard.budget import AtomicBudgetManager
 
     BUDGET_AVAILABLE = True
 except ImportError:
@@ -104,7 +104,7 @@ class TestAtomicBudgetConcurrency:
         mgr = AtomicBudgetManager(redis_url=None, max_budget_per_session=10.0)
 
         reservations = []
-        for i in range(10):
+        for _ in range(10):
             res = mgr.reserve("org1", estimated_cost=0.5)
             if res:
                 reservations.append(res)
@@ -164,3 +164,4 @@ class TestAtomicBudgetMultiScope:
         assert status["session"]["remaining"] == 7.0
         assert status["daily"]["max"] == 100.0
         assert status["daily"]["spent"] == 3.0
+
