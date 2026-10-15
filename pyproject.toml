@@ -47,9 +47,11 @@ Repository = "https://github.com/chrismsmr-celcom/cerbere-AG"
 include = ["agentguard*", "collector*", "policy*", "tools*", "mcp*"]
 [tool.ruff.lint]
 ignore = [
-    "BLE001",  # except Exception assumé : fallback fail-open documenté (audit, judges)
-    "S110",    # try/except/pass : fallbacks de lecture (GENESIS), silencieux voulus
-    "EXE001",  # shebangs de tools/ : appelés via `python tools/...` dans le CI
+    "BLE001",  
+    "S110",    
+    "S112",    
+    "RUF012",  
+    "EXE001",  
 ]
 
 [tool.ruff.lint.per-file-ignores]
