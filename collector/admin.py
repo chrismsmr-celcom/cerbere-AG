@@ -24,7 +24,7 @@ from flask import (
 )
 
 from collector.auth import hash_key, safe_compare
-from collector.db import get_pg_conn, is_postgres
+from collector.db import _get_db_path, get_pg_conn, is_postgres
 
 logger = structlog.get_logger("agentguard.admin")
 
@@ -38,10 +38,12 @@ admin_bp = Blueprint(
 # SQLITE
 # ==============================================================
 
+# Le chemin est lu a l'appel (_get_db_path) et non fige a l'import :
+# une base definie apres l'import (tests, CLI) serait sinon ignoree.
 DB_SQLITE_PATH = os.environ.get(
     "AGENTGUARD_DB_PATH",
     "/tmp/agentguard.db",
-)
+)  # conserve pour compatibilite des imports externes
 
 
 # ==============================================================
@@ -223,6 +225,10 @@ def create_customer():
 
     key_hash = hash_key(new_key)
 
+    # Schema canonique api_keys : (id, org_id, key_hash, name, active, created_at).
+    # `org_name` est stocke dans `name` ; le plan n'a plus de colonne dediee.
+    key_id = "key_" + secrets.token_urlsafe(8)
+
     # ----------------------------------------------------------
     # DATABASE INSERT
     # ----------------------------------------------------------
@@ -237,25 +243,14 @@ def create_customer():
                 cur.execute(
                     """
                     INSERT INTO api_keys
-                        (
-                            key_hash,
-                            org_id,
-                            org_name,
-                            plan
-                        )
-                    VALUES
-                        (
-                            %s,
-                            %s,
-                            %s,
-                            %s
-                        )
+                        (id, org_id, key_hash, name, active)
+                        VALUES (%s, %s, %s, %s, TRUE)
                     """,
                     (
-                        key_hash,
+                        key_id,
                         org_id,
+                        key_hash,
                         org_name,
-                        plan,
                     ),
                 )
 
@@ -269,7 +264,7 @@ def create_customer():
                 conn.close()
 
         else:
-            conn = sqlite3.connect(DB_SQLITE_PATH)
+            conn = sqlite3.connect(_get_db_path())
 
             try:
                 cur = conn.cursor()
@@ -277,25 +272,14 @@ def create_customer():
                 cur.execute(
                     """
                     INSERT INTO api_keys
-                        (
-                            key_hash,
-                            org_id,
-                            org_name,
-                            plan
-                        )
-                    VALUES
-                        (
-                            ?,
-                            ?,
-                            ?,
-                            ?
-                        )
+                        (id, org_id, key_hash, name, active)
+                        VALUES (?, ?, ?, ?, 1)
                     """,
                     (
-                        key_hash,
+                        key_id,
                         org_id,
+                        key_hash,
                         org_name,
-                        plan,
                     ),
                 )
 
@@ -458,7 +442,7 @@ def revoke_customer(org_id):
                 conn.close()
 
         else:
-            conn = sqlite3.connect(DB_SQLITE_PATH)
+            conn = sqlite3.connect(_get_db_path())
 
             try:
                 cur = conn.cursor()

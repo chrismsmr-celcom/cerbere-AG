@@ -8,6 +8,7 @@ from agentguard.decision_engine import DecisionRequest
 from collector.api.helpers import (
     _reject_if_agent_disconnected,
     api_bp,
+    decision_engine,
     get_decision_signer,
     is_server_registered_tool,
     logger,

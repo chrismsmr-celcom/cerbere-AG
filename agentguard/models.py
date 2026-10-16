@@ -97,7 +97,10 @@ class RuntimeRiskDecision:
     @property
     def allowed(self) -> bool:
         return self.action == "ALLOW"
-
+    @property
+    def reason(self) -> str:
+        """Alias rétrocompatible du champ details."""
+        return self.details
 
 @dataclass
 class TrajectoryEvent:
