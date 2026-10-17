@@ -9,6 +9,8 @@ Usage (PowerShell) :
 import os
 import time
 
+import requests
+
 from agentguard import (
     AgentGuard,
     ApprovalRejectedException,
@@ -19,32 +21,38 @@ from agentguard import (
 COLLECTOR = os.environ.get("CERBERE_URL", "https://app.cerbereag.site")
 API_KEY = os.environ["CERBERE_API_KEY"]
 PAUSE = float(os.environ.get("DEMO_PAUSE", "2.5"))
-import requests
+SLOW_THRESHOLD_S = 0.8
 
 
-def preflight():
-    t = []
+def preflight() -> float:
+    """Ping /healthz 3 fois ; retourne la pire latence (quitte si injoignable)."""
+    timings: list[tuple[int, float]] = []
     for _ in range(3):
-        s = time.time()
+        start = time.time()
         try:
             r = requests.get(f"{COLLECTOR}/healthz", timeout=30)
-            t.append((r.status_code, time.time() - s))
-        except Exception as e:
+        except requests.RequestException as e:
             print(f"✗ collector unreachable: {e}")
-            raise SystemExit(1)
+            raise SystemExit(1) from e
+        timings.append((r.status_code, time.time() - start))
 
+    bad = [code for code, _ in timings if code != 200]
+    if bad:
+        print(f"✗ collector unhealthy (HTTP {bad[0]})")
+        raise SystemExit(1)
 
-worst = max(elapsed for _, elapsed in timings)
-print(f"✓ Collector reachable — worst latency {worst:.2f}s")
-
-if worst > 0.8:
-    print(
-        "⚠ Collector response is slow. "
-        "Continuing the demo, but event calls may also be slow."
-    )
+    worst = max(elapsed for _, elapsed in timings)
+    print(f"✓ Collector reachable — worst latency {worst:.2f}s")
+    if worst > SLOW_THRESHOLD_S:
+        print(
+            "⚠ Collector response is slow. "
+            "Continuing the demo, but event calls may also be slow."
+        )
+    return worst
 
 
 preflight()
+
 # Faux secret au format reconnu (ou reprends la constante SECRET de tests/test_taint_flow.py)
 SECRET = "sk-proj-" + "A1b2C3d4E5f6G7h8" * 3
 

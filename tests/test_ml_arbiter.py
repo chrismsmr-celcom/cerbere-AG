@@ -54,6 +54,9 @@ def engine(verdict=None):
     policy_engine = PolicyEngine()
     policy_engine.ml_detector = FakeML()
     policy_engine._ml_arbiter = FakeArbiter(verdict) if verdict is not None else None
+    # _arbiter_available() exige aussi _arbiter_method (posé dans __init__
+    # uniquement avec un vrai LLMCascadeJudge configuré).
+    policy_engine._arbiter_method = "evaluate" if verdict is not None else None
     return policy_engine
 
 
@@ -133,23 +136,14 @@ def test_unconfigured_without_key(monkeypatch):
 
 def test_llm_clear_never_bypasses_deterministic_normalized_pass():
     """A SAFE LLM verdict must not override a normalized regex detection."""
-    policy_engine = engine(JudgeVerdict.SAFE)
-    arbiter = policy_engine._ml_arbiter
+    result = engine(JudgeVerdict.SAFE).check_injection(HOMOGLYPH_ATTACK)
 
-    result = policy_engine.check_injection(HOMOGLYPH_ATTACK)
-
-    # The normalized deterministic pass must block the attack.
+    # The deterministic pass on normalized variants must block the attack,
+    # whatever the LLM verdict says.
     assert not result.passed
-    assert result.metadata["layer"] == "regex+normalizer"
+    assert result.metadata["layer"] == "regex+variants"
 
-    # The LLM verdict must not change the final security decision.
-    assert result.passed is False
-
-    # Verify arbitration was attempted if the implementation reaches the
-    # arbiter before the normalized deterministic pass.
-    assert arbiter is not None
-
-    # If the implementation exposes this field, it must reflect the SAFE
-    # verdict without implying that the attack was allowed.
+    # If the implementation exposes this field, it must not imply the attack
+    # was allowed.
     if "ml_cleared_by_llm" in result.metadata:
         assert result.metadata["ml_cleared_by_llm"] is True

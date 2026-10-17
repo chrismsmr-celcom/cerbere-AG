@@ -1,0 +1,99 @@
+{
+  "benchmark": "cerbere-ag-public-benchmark",
+  "version": "1.0.0",
+  "generated_at": "2026-10-17T11:48:42.414539+00:00",
+  "environment": {
+    "sdk_version": "0.6.1",
+    "python_version": "3.14.2",
+    "platform": "Windows-10-10.0.19045-SP0"
+  },
+  "corpus": {
+    "directory": "C:\\Users\\USER\\Downloads\\cerbere-AG\\benchmarks\\corpus_2k",
+    "name": "cerbere-ag-corpus-2k",
+    "source": {},
+    "manifest_sha256": "6bc560f6756f4ee5b2a314b2fa77092483441cd2716755ad8f1c5979b9bf54e2",
+    "attacks_sha256": "b1c89be698ea48f489da6a190fb848aa0e788545a7b666f1f1e4165684b31524",
+    "benign_sha256": "11d3f56f8e76c9a94cc7f62b354e50c4a5c418d3b00c488813afcc6178ef0c55",
+    "hard_negatives_sha256": "a2b8baa8a869850010618286c6558af863ff7d0a3cddd0b7063ad6b6fd1a94ad"
+  },
+  "note_llm_layer": "LLM results may depend on external API availability, provider configuration, and model version. Regex/ML results are only reproducible when the model artifacts and runtime environment are held constant.",
+  "limited_run": false,
+  "degraded_any": false,
+  "runs": [
+    {
+      "layers": [
+        "regex",
+        "ml",
+        "llm"
+      ],
+      "layers_active": [
+        "regex",
+        "ml",
+        "llm"
+      ],
+      "degraded": false,
+      "ml": {
+        "model_name": "protectai/deberta-v3-base-prompt-injection-v2",
+        "model_path": "./agentguard-model",
+        "threshold": 0.6,
+        "dual_pass": true
+      },
+      "recall_overall": 1.0,
+      "recall_per_category": {
+        "dangerous_commands": 1.0,
+        "direct_injection": 1.0,
+        "encoded_obfuscated": 1.0,
+        "exfiltration": 1.0,
+        "indirect_injection": 1.0,
+        "jailbreak": 1.0,
+        "system_extraction": 1.0
+      },
+      "false_positive_rate_benign": 0.0,
+      "false_positive_rate_hard_negatives": 0.0,
+      "recall_ci95": [
+        0.9962,
+        1.0
+      ],
+      "fpr_benign_ci95": [
+        0.0,
+        0.0054
+      ],
+      "fpr_hard_negatives_ci95": [
+        0.0,
+        0.0126
+      ],
+      "latency_ms": {
+        "p50": 380.626,
+        "p95": 2837.227,
+        "p99": 3757.0
+      },
+      "latency_ms_by_subset": {
+        "attacks": {
+          "p50": 0.663,
+          "p95": 2788.005,
+          "p99": 3387.909
+        },
+        "benign": {
+          "p50": 417.223,
+          "p95": 1328.064,
+          "p99": 2783.601
+        },
+        "hard_negatives": {
+          "p50": 690.456,
+          "p95": 3638.403,
+          "p99": 5278.029
+        }
+      },
+      "counts": {
+        "attacks": 1000,
+        "benign": 703,
+        "hard_negatives": 300
+      },
+      "failures": {
+        "attacks_missed": [],
+        "benign_blocked": [],
+        "hard_negatives_blocked": []
+      }
+    }
+  ]
+}

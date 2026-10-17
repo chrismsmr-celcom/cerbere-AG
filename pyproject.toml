@@ -11,8 +11,7 @@ description = "Runtime security & observability guard for AI agents — intercep
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-# Note: setuptools détecte automatiquement les fichiers "LICENSE".
-# Vous pouvez garder cette ligne, mais assurez-vous que votre fichier s'appelle bien exactement "LICENSE" (et non LICENSE.txt).
+# Le fichier doit s'appeler exactement "LICENSE" (et non LICENSE.txt).
 license-files = ["LICENSE"]
 authors = [
     { name = "Christopher Dikesa" }
@@ -23,7 +22,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Topic :: Security",
-    # SUPPRIMÉ : "License :: OSI Approved :: Apache Software License" (Conflit PEP 639)
+    # Pas de classifier "License :: ..." (conflit PEP 639)
 ]
 dependencies = [
     "requests>=2.31.0,<3.0.0",
@@ -54,6 +53,10 @@ ignore = [
     "S112",      # try/except/continue : pattern acceptable dans certains cas
     "RUF012",    # Mutable class attributes avec annotations de type
     "EXE001",    # shebangs de tools/ : appelés via `python tools/...` dans le CI
+    # Contrat public : les validateurs (policy/loader.py, benchmarks, alerts)
+    # lèvent ValueError ; les appelants et les tests l'attendent. Pydantic
+    # lève aussi des ValueError (ValidationError en hérite).
+    "TRY004",
 ]
 
 [tool.ruff.lint.per-file-ignores]
