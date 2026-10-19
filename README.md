@@ -130,6 +130,10 @@ Optional extras:
 
 <br/>
 
+## 🚀 Quick demo
+
+![Cerbère demo](https://raw.githubusercontent.com/chrismsmr-celcom/cerbere-AG/main/docs/demo.gif)
+
 ## 🧬 Taint tracking
 
 Cerbère follows **the data**, not only the prompt. A secret or PII the agent reads is remembered in memory (never sent to the collector).
