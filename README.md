@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/collector.mp4" alt="Cerbere AG" width="140" />
+<img src="docs/logo.png" alt="Cerbere AG" width="140" />
 
 # Cerbere AG
 
@@ -19,7 +19,7 @@ Runtime security & observability for autonomous agents: it sits between the mode
 
 <br/>
 
-<img src="docs/dashboard.png" alt="Cerbère dashboard: health, requests, cost, guardrails and approvals" width="900" />
+<img src="docs/collector.mp4" alt="Cerbère dashboard: health, requests, cost, guardrails and approvals" width="900" />
 
 </div>
 
