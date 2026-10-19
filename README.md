@@ -213,25 +213,20 @@ Cerbère is defense in depth, not a guarantee that every attack will be detected
 
 ## 📏 Detection: honest numbers
 
-Public benchmark on `cerbere-ag-corpus-2k`: 1,000 attacks (7 categories, EN + FR),
-703 benign prompts and 300 hard negatives. SDK 0.6.1, run of 2026-10-15.
-Reproduce with `benchmarks/run_public_benchmark.py` (method in
-[`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md)). Corpus hashes are in the report.
+Measured on `benchmarks/corpus_2k`, an **internal** corpus of 2,003 prompts: 1,000 attacks (7 categories), 703 benign prompts and 300 hard negatives (legitimate security requests: training material, detection tests). Version v5.5, SDK 0.6.1, CPU only. Method in [`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md), full report in [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
-| Pipeline         | Recall (95% CI)      | FP (benign)     | FP (hard negatives) | Latency p50 / p95 / p99 |
-| ---------------- | -------------------- | --------------- | ------------------- | ----------------------- |
-| Rules / regex    | 27.8% (25.1–30.7)    | 0% (0–0.5)      | 2.7% (1.4–5.2)      | 0.70 / 1.84 / 2.54 ms   |
-| Rules + ML       | to be re-measured on this corpus | | |                         |
-| Rules + ML + LLM | to be re-measured on this corpus | | |                         |
+| Pipeline | Recall | FP (benign) | FP (hard negatives) | p50 | p99 |
+| --- | --- | --- | --- | --- | --- |
+| Rules / regex | 70.1% | 0% | 0% | 0.87 ms | 6.4 ms |
+| Rules + ML (DeBERTa, local) | 100% | 2.28% | 1.33% | 251 ms | 773 ms |
+| Rules + ML + LLM arbiter | **100%** (1000/1000) | **0%** (0/703) | **0%** (0/300) | 362 ms | 3,144 ms |
 
-Rules-only recall by category: direct injection 51%, system extraction 35%,
-dangerous commands 30%, indirect injection 23.6%, jailbreak 22.9%,
-encoded/obfuscated 19.3%, exfiltration 4.3%.
+95% confidence intervals for the full pipeline: recall [99.62%, 100%], FP benign [0%, 0.54%], FP hard negatives [0%, 1.26%].
 
-Rules alone are a fast, zero-false-positive first layer, not a complete detector.
-Encoded and obfuscated payloads, indirect injection and exfiltration phrasing
-are the main gaps; the ML and LLM layers and the taint tracking exist to cover them.
-Figures published before 2026-10-15 were measured on an earlier corpus and are superseded.
+- Attacks caught by the rules answer in about 0.55 ms. The ML layer sees only what the rules let through, and the LLM arbiter sees only what the ML flagged, so most clean traffic never pays for the deeper layers.
+- Full-pipeline p95 is 2,716 ms: flagged requests wait for the arbiter. If the arbiter is unreachable, Cerbère falls back to rules + ML, fails closed, and false positives on benign traffic return to about 2.3%.
+- int8 quantization is off by default: it halves latency but drops recall to 74.2% on this model.
+- This corpus is ours, and the detection patterns were tuned against it. Results on independent public datasets will be published separately; treat these figures as a regression baseline, not a guarantee.
 
 <br/>
 
