@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.png" alt="Cerbere AG" width="140" />
+<img src="docs/collector.mp4" alt="Cerbere AG" width="140" />
 
 # Cerbere AG
 
@@ -213,14 +213,25 @@ Cerbère is defense in depth, not a guarantee that every attack will be detected
 
 ## 📏 Detection: honest numbers
 
-Public benchmark, reproducible with `benchmarks/run_public_benchmark.py` (method in [`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md)).
+Public benchmark on `cerbere-ag-corpus-2k`: 1,000 attacks (7 categories, EN + FR),
+703 benign prompts and 300 hard negatives. SDK 0.6.1, run of 2026-10-15.
+Reproduce with `benchmarks/run_public_benchmark.py` (method in
+[`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md)). Corpus hashes are in the report.
 
-| Pipeline | Recall | False positives (benign) | False positives (hard negatives) | Latency |
-|---|:---:|:---:|:---:|---|
-| Rules / regex | 91.5% | 0% | n/a | sub-millisecond |
-| Rules + ML | 98.1% | 5% | 33% | ML p95 ≈ 450 ms |
+| Pipeline         | Recall (95% CI)      | FP (benign)     | FP (hard negatives) | Latency p50 / p95 / p99 |
+| ---------------- | -------------------- | --------------- | ------------------- | ----------------------- |
+| Rules / regex    | 27.8% (25.1–30.7)    | 0% (0–0.5)      | 2.7% (1.4–5.2)      | 0.70 / 1.84 / 2.54 ms   |
+| Rules + ML       | to be re-measured on this corpus | | |                         |
+| Rules + ML + LLM | to be re-measured on this corpus | | |                         |
 
-The ML layer buys recall at the price of false positives and latency; it is optional. The LLM judge is reserved for ambiguous cases and can be disabled.
+Rules-only recall by category: direct injection 51%, system extraction 35%,
+dangerous commands 30%, indirect injection 23.6%, jailbreak 22.9%,
+encoded/obfuscated 19.3%, exfiltration 4.3%.
+
+Rules alone are a fast, zero-false-positive first layer, not a complete detector.
+Encoded and obfuscated payloads, indirect injection and exfiltration phrasing
+are the main gaps; the ML and LLM layers and the taint tracking exist to cover them.
+Figures published before 2026-10-15 were measured on an earlier corpus and are superseded.
 
 <br/>
 
