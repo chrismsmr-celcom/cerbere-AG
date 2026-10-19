@@ -49,3 +49,6 @@ coverage.xml
 # Benchmarks générés (en cours de développement)
 benchmarks/corpus_*/
 benchmarks/results/
+
+rapport_*.json
+agentguard-model-onnx/
