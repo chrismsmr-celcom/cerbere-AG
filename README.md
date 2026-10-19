@@ -19,7 +19,7 @@ Runtime security & observability for autonomous agents: it sits between the mode
 
 <br/>
 
-<img src="docs/collector.mp4" alt="Cerbère dashboard: health, requests, cost, guardrails and approvals" width="900" />
+<img src="docs/dashboard.png" alt="Cerbère dashboard: health, requests, cost, guardrails and approvals" width="900" />
 
 </div>
 
