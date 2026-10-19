@@ -132,7 +132,7 @@ Optional extras:
 
 ## 🚀 Quick demo
 
-![Cerbère demo](https://raw.githubusercontent.com/chrismsmr-celcom/cerbere-AG/main/docs/demo.gif)
+![Cerbère demo](docs/demo.gif)
 
 ## 🧬 Taint tracking
 
