@@ -5,7 +5,7 @@ Application factory and Flask configuration for Cerbere / AgentGuard.
 import os
 import secrets
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import structlog
 from flask import Flask, jsonify
@@ -538,7 +538,7 @@ def _register_blueprints(app: Flask):
         return jsonify(
             {
                 "status": ("healthy" if is_healthy else "unhealthy"),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "version": os.environ.get(
                     "AGENTGUARD_VERSION",
                     "unknown",
@@ -563,7 +563,7 @@ def _register_blueprints(app: Flask):
         return jsonify(
             {
                 "ready": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         ), 200
 

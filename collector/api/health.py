@@ -1,7 +1,7 @@
 """Health / readiness."""
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import current_app, jsonify
 
@@ -38,7 +38,7 @@ def health_check():
     return jsonify(
         {
             "status": "healthy" if is_healthy else "unhealthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": "0.2.1",
             "checks": checks,
         }
@@ -47,4 +47,6 @@ def health_check():
 
 @api_bp.route("/readiness", methods=["GET"])
 def readiness_check():
-    return jsonify({"ready": True, "timestamp": datetime.utcnow().isoformat()}), 200
+    return jsonify(
+        {"ready": True, "timestamp": datetime.now(timezone.utc).isoformat()}
+    ), 200

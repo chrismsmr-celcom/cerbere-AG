@@ -1,3 +1,5 @@
+from datetime import timezone
+
 """Audit log routes + singleton instance."""
 
 import os
@@ -75,7 +77,7 @@ def audit_verify():
             {
                 "valid": is_valid,
                 "report": report,
-                "verified_at": datetime.utcnow().isoformat(),
+                "verified_at": datetime.now(timezone.utc).isoformat(),
             }
         )
     except Exception as e:

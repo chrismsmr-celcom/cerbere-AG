@@ -394,7 +394,7 @@ def _authorize_platform(
     granular action restrictions.
     """
     try:
-        from collector.platform_identity import PlatformPermission
+        from collector.platform_identity import PlatformPermission  # noqa: F401
     except ImportError:
         logger.error("authz_platform_module_missing")
         return False

@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 
+logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from collector.db import get_db
 
@@ -40,17 +41,17 @@ def add_indexes():
         try:
             cursor.execute(sql)
             db.commit()
-            logging.info(f"✅ Index créé ou déjà présent : {name}")
+            logger.info(f"✅ Index créé ou déjà présent : {name}")
         except Exception as e:
             if 'near "WHERE"' in str(e):
-                logging.warning(
+                logger.warning(
                     f"⚠️ Index {name} ignoré (fonctionnalité Postgres uniquement, SQLite OK)"
                 )
             else:
-                logging.error(f"❌ Erreur sur l'index {name}: {e}")
+                logger.error(f"❌ Erreur sur l'index {name}: {e}")
 
 
 if __name__ == "__main__":
-    logging.info("🚀 Optimisation des index de base de données...")
+    logger.info("🚀 Optimisation des index de base de données...")
     add_indexes()
-    logging.info("✨ Terminé.")
+    logger.info("✨ Terminé.")

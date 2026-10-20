@@ -26,6 +26,7 @@ def restore_postgres(backup_file: Path):
         sys.exit(1)
     result = subprocess.run(
         ["pg_restore", "--clean", "--if-exists", "-d", DATABASE_URL, str(backup_file)],
+        check=False,
         capture_output=True,
         text=True,
     )

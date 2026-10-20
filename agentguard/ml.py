@@ -56,7 +56,7 @@ except ImportError:
     NUMPY_AVAILABLE = False
 
 try:
-    import onnxruntime as _ort
+    import onnxruntime  # noqa: F401
 
     ONNX_AVAILABLE = True
 except ImportError:
@@ -135,8 +135,10 @@ class MLDetector:
 
     def _init_backend(self):
         """v5.6 : choisit et initialise le backend (ONNX prioritaire)."""
-        onnx_ready = ONNX_AVAILABLE and NUMPY_AVAILABLE and os.path.exists(
-            os.path.join(self.onnx_model_path, "model.onnx")
+        onnx_ready = (
+            ONNX_AVAILABLE
+            and NUMPY_AVAILABLE
+            and os.path.exists(os.path.join(self.onnx_model_path, "model.onnx"))
         )
 
         if self.backend in ("auto", "onnx") and onnx_ready:
@@ -183,9 +185,7 @@ class MLDetector:
                 except (TypeError, ValueError):
                     logger.warning("ml_invalid_onnx_threads_env: %s", threads_env)
 
-            so.graph_optimization_level = (
-                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            )
+            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             self._onnx_session = ort.InferenceSession(
                 model_file,
                 sess_options=so,

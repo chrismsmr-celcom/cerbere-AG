@@ -373,9 +373,7 @@ class PolicyEngine:
                 r"\b(?:leak|exfiltrat\w+|steal)\b.{0,40}"
                 r"\b(?:key|credential|secret|password|token|invoice|contract|customer|database)\w*"
             ),
-            (
-                r"\b(?:private|secret|api)\s+keys?\b.{0,40}\b(?:to|on|via|at)\b"
-            ),
+            (r"\b(?:private|secret|api)\s+keys?\b.{0,40}\b(?:to|on|via|at)\b"),
             (
                 r"\b(?:send|upload|export)\b.{0,60}"
                 r"\b(?:salaries?|credentials?|logs?|messages?|archives?|invoices?)\b"
@@ -402,12 +400,8 @@ class PolicyEngine:
                 r"\b(?:bypass|skip|ignore)\b.{0,40}"
                 r"\b(?:approval|verification|workflow|review|checks?)\b"
             ),
-            (
-                r"\b(?:change|reset)\b.{0,30}\badmin\s+password\b"
-            ),
-            (
-                r"\b(?:rewrite|modify|change)\b.{0,30}\b(?:your\s+)?polic(?:y|ies)\b"
-            ),
+            (r"\b(?:change|reset)\b.{0,30}\badmin\s+password\b"),
+            (r"\b(?:rewrite|modify|change)\b.{0,30}\b(?:your\s+)?polic(?:y|ies)\b"),
             (
                 r"\b(?:rewrite|modify|change)\b.{0,40}\b(?:access\s+controls?)\b.{0,30}allow\s+everyone\b"
             ),

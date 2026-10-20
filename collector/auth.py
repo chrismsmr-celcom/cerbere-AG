@@ -3805,7 +3805,7 @@ def create_api_key():
         ), 201
 
     except Exception as e:
-        logger.error("create_api_key_crashed", error=str(e), exc_info=True)
+        logger.exception("create_api_key_crashed", error=str(e))
         return jsonify({"error": f"Internal server error: {e!s}"}), 500
 
 
@@ -3871,7 +3871,7 @@ def list_api_keys():
         return jsonify({"keys": keys}), 200
 
     except Exception as e:
-        logger.error("list_api_keys_crashed", error=str(e), exc_info=True)
+        logger.exception("list_api_keys_crashed", error=str(e))
         return jsonify({"error": f"Internal server error: {e!s}"}), 500
 
 
@@ -3922,5 +3922,5 @@ def revoke_api_key(key_id):
         ), 200
 
     except Exception as e:
-        logger.error("revoke_api_key_crashed", error=str(e), exc_info=True)
+        logger.exception("revoke_api_key_crashed", error=str(e))
         return jsonify({"error": f"Internal server error: {e!s}"}), 500

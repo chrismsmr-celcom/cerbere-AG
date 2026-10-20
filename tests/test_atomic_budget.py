@@ -164,4 +164,3 @@ class TestAtomicBudgetMultiScope:
         assert status["session"]["remaining"] == 7.0
         assert status["daily"]["max"] == 100.0
         assert status["daily"]["spent"] == 3.0
-

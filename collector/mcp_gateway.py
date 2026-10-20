@@ -132,13 +132,13 @@ async def run_gateway(upstream_command: list[str]) -> None:
 
     gateway = Server(f"agentguard-mcp-gateway::{SERVER_LABEL}")
 
-    async with stdio_client(upstream_params) as (up_read, up_write):
-        async with ClientSession(up_read, up_write) as upstream:
-            await upstream.initialize()
+    async with (
+        stdio_client(upstream_params) as (up_read, up_write),
+        ClientSession(up_read, up_write) as upstream,
+    ):
+        await upstream.initialize()
 
-            @gateway.list_tools()
-            async def list_tools() -> list[Tool]:
-                # tools/list n'exécute rien côté agent -> pas besoin d'AgentGuard,
-                # on forward tel quel ce que le serveur upstream annonce.
-                result = await upstream.list_tools()
-                return result.sort  # <-- non, voir note
+        @gateway.list_tools()
+        async def list_tools() -> list[Tool]:
+            result = await upstream.list_tools()
+            return result.tools

@@ -107,30 +107,30 @@ async def demo():
         args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
     )
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
 
-            # ── Le seul changement requis dans du code MCP existant ──
-            session = guard_mcp_session(session, guard, server_label="filesystem")
+        # ── Le seul changement requis dans du code MCP existant ──
+        session = guard_mcp_session(session, guard, server_label="filesystem")
 
-            tools = await session.list_tools()
-            print(
-                f"Outils exposés par le serveur MCP : {[t.name for t in tools.tools]}"
+        tools = await session.list_tools()
+        print(f"Outils exposés par le serveur MCP : {[t.name for t in tools.tools]}")
+
+        try:
+            result = await session.call_tool(
+                "read_file", {"path": "/tmp/does-not-exist-yet.txt"}
             )
-
-            try:
-                result = await session.call_tool(
-                    "read_file", {"path": "/tmp/does-not-exist-yet.txt"}
-                )
-                print(f"✅ Résultat : {result}")
-            except SecurityException as e:
-                print(f"🛡️ Bloqué par AgentGuard avant d'atteindre le serveur MCP : {e}")
-            except FileNotFoundError:
-                print(
-                    "(fichier de démo absent, normal — le point important "
-                    "est que l'appel a bien transité par AgentGuard)"
-                )
+            print(f"✅ Résultat : {result}")
+        except SecurityException as e:
+            print(f"🛡️ Bloqué par AgentGuard avant d'atteindre le serveur MCP : {e}")
+        except FileNotFoundError:
+            print(
+                "(fichier de démo absent, normal — le point important "
+                "est que l'appel a bien transité par AgentGuard)"
+            )
 
 
 if __name__ == "__main__":
