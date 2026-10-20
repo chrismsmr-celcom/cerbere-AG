@@ -19,7 +19,7 @@ from agentguard import (
 )
 
 COLLECTOR = os.environ.get("CERBERE_URL", "https://app.cerbereag.site")
-API_KEY = os.environ["CERBERE_API_KEY"]
+API_KEY = os.environ["AGENTGUARD_API_KEY"]
 PAUSE = float(os.environ.get("DEMO_PAUSE", "2.5"))
 SLOW_THRESHOLD_S = 0.8
 
