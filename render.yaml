@@ -7,10 +7,10 @@ services:
     # ✅ FIX perf : --threads 4 permet de traiter plusieurs requetes
     # I/O-bound (attente reseau DB) en concurrence sans multiplier la
     # RAM comme le ferait plusieurs --workers (important sur le plan free).
-    startCommand: gunicorn "collector.app:create_app()" --workers 4 --threads 4 --worker-class gthread --timeout 120
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
+    startCommand: gunicorn "collector.app:create_app()" --workers 1 --threads 8 --worker-class gthread --timeout 120
+   envVars:
+     - key: WEB_CONCURRENCY
+       value: "1"
       - key: AGENTGUARD_DB_TYPE
         value: postgres
       # BUG CORRIGÉ : collector/app.py lit AGENTGUARD_ENVIRONMENT

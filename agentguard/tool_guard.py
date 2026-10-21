@@ -23,7 +23,12 @@ Safe:
 
 HITL lifecycle:
     REQUIRE_APPROVAL -> persisted approval request -> human decision
-    -> APPROVED retry -> ALLOW
+    -> APPROVED retry -> (all controls re-evaluated) -> ALLOW, once
+
+An approval authorizes ONE precise action. It never disables the other
+controls: tool registration, identity, argument size and hard BLOCK decisions
+are re-evaluated on every retry, and the approval is consumed atomically so it
+cannot be replayed.
 
 The guard never executes a tool itself. It only authorizes or rejects
 execution before the caller performs the actual side effect.
@@ -151,10 +156,20 @@ def _approval_matches_request(
     request: ToolRequest,
 ) -> bool:
     """
-    Ensure an approval cannot be replayed for another action.
+    Ensure an approval cannot be replayed for another action or context.
+
+    Every binding is mandatory: organization, tenant, tool, agent, session
+    and the exact arguments hash. An approval without an arguments hash
+    never matches.
     """
 
     if approval.get("status") != "approved":
+        return False
+
+    if (approval.get("org_id") or "") != (request.org_id or ""):
+        return False
+
+    if (approval.get("tenant_id") or "") != (request.tenant_id or ""):
         return False
 
     if approval.get("tool_name") != request.tool_name:
@@ -162,15 +177,15 @@ def _approval_matches_request(
 
     expected_agent = request.agent_id or request.identity
 
-    if approval.get("agent_id") and approval.get("agent_id") != expected_agent:
+    if (approval.get("agent_id") or "") != (expected_agent or ""):
         return False
 
-    if approval.get("session_id") and approval.get("session_id") != request.session_id:
+    if (approval.get("session_id") or "") != (request.session_id or ""):
         return False
 
     approved_hash = approval.get("arguments_hash")
 
-    return not (approved_hash and approved_hash != _arguments_hash(request.arguments))
+    return bool(approved_hash) and approved_hash == _arguments_hash(request.arguments)
 
 
 class ToolGuard:
@@ -223,35 +238,195 @@ class ToolGuard:
         self._sync_engine_policies()
 
     # -------------------------------------------------------------
+    # Static checks (always run, with or without an approval)
+    # -------------------------------------------------------------
+
+    def _static_checks(
+        self,
+        request: ToolRequest,
+    ) -> tuple[ToolPolicy | None, ToolDecision | None]:
+        """
+        Tool registration, identity and argument-size checks.
+
+        Returns (policy, None) when the request passes, or
+        (None, decision) with the blocking decision otherwise.
+        """
+
+        policy = self.policies.get(request.tool_name)
+
+        # Unknown tool
+        if policy is None:
+            return None, ToolDecision(
+                allowed=False,
+                decision="block",
+                reason=("Tool is not registered in AgentGuard policy"),
+                risk_score=100,
+                metadata={
+                    "reason_code": "tool",
+                    "tool": request.tool_name,
+                },
+            )
+
+        # Identity
+        if (
+            policy.allowed_identities
+            and request.identity not in policy.allowed_identities
+        ):
+            return None, ToolDecision(
+                allowed=False,
+                decision="block",
+                reason=("Agent identity is not authorized for this tool"),
+                risk_score=100,
+                metadata={
+                    "reason_code": "identity",
+                    "tool": request.tool_name,
+                    "identity": request.identity,
+                },
+            )
+
+        # Serialize arguments safely
+        try:
+            serialized = json.dumps(
+                request.arguments,
+                default=str,
+                ensure_ascii=False,
+            )
+
+            argument_size = len(serialized.encode("utf-8"))
+
+        except Exception:
+            return None, ToolDecision(
+                allowed=False,
+                decision="block",
+                reason=("Tool arguments could not be serialized safely"),
+                risk_score=100,
+                metadata={"reason_code": "validation"},
+            )
+
+        # Argument size
+        if argument_size > policy.max_argument_bytes:
+            return None, ToolDecision(
+                allowed=False,
+                decision="block",
+                reason=("Tool argument size exceeds policy limit"),
+                risk_score=90,
+                metadata={
+                    "reason_code": "argument_size",
+                    "argument_bytes": argument_size,
+                    "limit": policy.max_argument_bytes,
+                },
+            )
+
+        return policy, None
+
+    # -------------------------------------------------------------
+    # Unified decision engine
+    # -------------------------------------------------------------
+
+    def _evaluate_engine(
+        self,
+        request: ToolRequest,
+        policy: ToolPolicy,
+    ):
+        metadata = dict(request.metadata)
+
+        metadata.update(
+            {
+                "policy": "tool_guard",
+                "tool_category": policy.category,
+                "session_id": request.session_id,
+            }
+        )
+
+        return self.decision_engine.evaluate(
+            DecisionRequest(
+                agent_id=(request.agent_id or request.identity),
+                tool_name=request.tool_name,
+                tool_category=policy.category,
+                identity_trusted=True,
+                model_score=request.model_score,
+                anomaly_score=request.anomaly_score,
+                taint_level=request.taint_level,
+                trajectory_length=(request.trajectory_length),
+                previous_risky_actions=(request.previous_risky_actions),
+                external_side_effect=(policy.external_side_effect),
+                irreversible=(policy.irreversible),
+                tool_registered=True,
+                metadata=metadata,
+            )
+        )
+
+    # -------------------------------------------------------------
     # Approved retry
     # -------------------------------------------------------------
 
     def _approved_retry(
         self,
         request: ToolRequest,
-    ) -> ToolDecision | None:
+        engine_result,
+    ) -> ToolDecision:
         """
         Validate a previously approved request.
 
-        The approval is bound to:
-        - organization
-        - tool
-        - agent
-        - session
-        - exact arguments
+        Called AFTER the static checks and a fresh engine evaluation, so the
+        approval can never override a hard BLOCK, a revoked identity or an
+        unregistered tool.
+
+        The approval is bound to organization, tenant, tool, agent, session
+        and exact arguments, and is consumed atomically (single use).
         """
 
-        approval_id = request.metadata.get("approval_id")
+        approval_id = str(request.metadata.get("approval_id"))
 
-        if not approval_id:
-            return None
+        # A hard BLOCK still blocks, approval or not.
+        if engine_result.decision == Decision.BLOCK:
+            return ToolDecision(
+                allowed=False,
+                decision="block",
+                reason=(
+                    "Approved action is now blocked by policy: "
+                    + "; ".join(engine_result.reasons)
+                ),
+                risk_score=engine_result.risk_score,
+                metadata={
+                    **engine_result.to_dict(),
+                    "reason_code": "approval_revalidation_blocked",
+                    "approval_id": approval_id,
+                },
+            )
 
-        from collector.approvals import get_approval
+        # An authenticated organization is mandatory.
+        if not request.org_id:
+            return ToolDecision(
+                allowed=False,
+                decision="block",
+                reason="Approval requires an authenticated organization",
+                risk_score=100,
+                metadata={
+                    "reason_code": "approval_org_required",
+                    "approval_id": approval_id,
+                },
+            )
 
-        approval = get_approval(
-            str(approval_id),
-            org_id=request.org_id or None,
-        )
+        from collector.approvals import consume_approval, get_approval
+
+        try:
+            approval = get_approval(
+                approval_id,
+                org_id=request.org_id,
+            )
+        except Exception as exc:
+            return ToolDecision(
+                allowed=False,
+                decision="block",
+                reason="Approval could not be verified; action blocked",
+                risk_score=100,
+                metadata={
+                    "reason_code": "approval_lookup_failure",
+                    "approval_id": approval_id,
+                    "error": str(exc)[:200],
+                },
+            )
 
         if approval is None:
             return ToolDecision(
@@ -280,15 +455,48 @@ class ToolGuard:
                 },
             )
 
+        # Spend the approval LAST, once everything else has passed, so a
+        # request blocked above does not burn a valid approval.
+        try:
+            consumed = consume_approval(
+                approval_id,
+                org_id=request.org_id,
+            )
+        except Exception as exc:
+            return ToolDecision(
+                allowed=False,
+                decision="block",
+                reason="Approval could not be consumed; action blocked",
+                risk_score=100,
+                metadata={
+                    "reason_code": "approval_consume_failure",
+                    "approval_id": approval_id,
+                    "error": str(exc)[:200],
+                },
+            )
+
+        if not consumed:
+            return ToolDecision(
+                allowed=False,
+                decision="block",
+                reason="Approval was already used or has expired",
+                risk_score=100,
+                metadata={
+                    "reason_code": "approval_already_used",
+                    "approval_id": approval_id,
+                },
+            )
+
         return ToolDecision(
             allowed=True,
             decision="allow",
             reason="Human approval granted",
-            risk_score=0.0,
+            risk_score=engine_result.risk_score,
             metadata={
                 "reason_code": "human_approval",
                 "approval_id": approval_id,
                 "approved_by": approval.get("decided_by"),
+                "arguments_hash": approval.get("arguments_hash"),
             },
         )
 
@@ -390,122 +598,21 @@ class ToolGuard:
         request: ToolRequest,
     ) -> ToolDecision:
 
-        # A previously approved action can be retried.
-        #
-        # This check happens before the normal policy evaluation so
-        # the human approval becomes the explicit authorization for
-        # this exact action.
+        # Static checks ALWAYS run first, including for approved retries:
+        # an approval must never bypass tool registration, identity or
+        # argument-size controls.
+        policy, early_decision = self._static_checks(request)
+
+        if early_decision is not None:
+            return early_decision
+
+        # Fresh engine evaluation, also for approved retries.
+        result = self._evaluate_engine(request, policy)
+
+        # A previously approved action can be retried: the approval
+        # authorizes this exact action once, nothing else.
         if request.metadata.get("approval_id"):
-            return self._approved_retry(request)
-
-        policy = self.policies.get(request.tool_name)
-
-        # ---------------------------------------------------------
-        # Unknown tool
-        # ---------------------------------------------------------
-
-        if policy is None:
-            return ToolDecision(
-                allowed=False,
-                decision="block",
-                reason=("Tool is not registered in AgentGuard policy"),
-                risk_score=100,
-                metadata={
-                    "reason_code": "tool",
-                    "tool": request.tool_name,
-                },
-            )
-
-        # ---------------------------------------------------------
-        # Identity
-        # ---------------------------------------------------------
-
-        if (
-            policy.allowed_identities
-            and request.identity not in policy.allowed_identities
-        ):
-            return ToolDecision(
-                allowed=False,
-                decision="block",
-                reason=("Agent identity is not authorized for this tool"),
-                risk_score=100,
-                metadata={
-                    "reason_code": "identity",
-                    "tool": request.tool_name,
-                    "identity": request.identity,
-                },
-            )
-
-        # ---------------------------------------------------------
-        # Serialize arguments safely
-        # ---------------------------------------------------------
-
-        try:
-            serialized = json.dumps(
-                request.arguments,
-                default=str,
-                ensure_ascii=False,
-            )
-
-            argument_size = len(serialized.encode("utf-8"))
-
-        except Exception:
-            return ToolDecision(
-                allowed=False,
-                decision="block",
-                reason=("Tool arguments could not be serialized safely"),
-                risk_score=100,
-                metadata={"reason_code": "validation"},
-            )
-
-        # ---------------------------------------------------------
-        # Argument size
-        # ---------------------------------------------------------
-
-        if argument_size > policy.max_argument_bytes:
-            return ToolDecision(
-                allowed=False,
-                decision="block",
-                reason=("Tool argument size exceeds policy limit"),
-                risk_score=90,
-                metadata={
-                    "reason_code": "argument_size",
-                    "argument_bytes": argument_size,
-                    "limit": policy.max_argument_bytes,
-                },
-            )
-
-        # ---------------------------------------------------------
-        # Unified decision engine
-        # ---------------------------------------------------------
-
-        metadata = dict(request.metadata)
-
-        metadata.update(
-            {
-                "policy": "tool_guard",
-                "tool_category": policy.category,
-                "session_id": request.session_id,
-            }
-        )
-
-        result = self.decision_engine.evaluate(
-            DecisionRequest(
-                agent_id=(request.agent_id or request.identity),
-                tool_name=request.tool_name,
-                tool_category=policy.category,
-                identity_trusted=True,
-                model_score=request.model_score,
-                anomaly_score=request.anomaly_score,
-                taint_level=request.taint_level,
-                trajectory_length=(request.trajectory_length),
-                previous_risky_actions=(request.previous_risky_actions),
-                external_side_effect=(policy.external_side_effect),
-                irreversible=(policy.irreversible),
-                tool_registered=True,
-                metadata=metadata,
-            )
-        )
+            return self._approved_retry(request, result)
 
         # ---------------------------------------------------------
         # BLOCK

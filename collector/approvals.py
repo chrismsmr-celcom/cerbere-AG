@@ -3,8 +3,16 @@ Approval lifecycle storage for Cerbere / AgentGuard.
 
 HITL flow:
     ToolGuard -> REQUIRE_APPROVAL -> create_approval() -> PENDING -> APPROVED/REJECTED/EXPIRED
+    APPROVED -> consume_approval() -> usable exactly once, within a short window
 
 This module only manages the approval lifecycle. It does NOT execute tools.
+
+Security properties enforced here:
+- an approval is SINGLE-USE: consume_approval() is atomic (UPDATE ... WHERE
+  consumed_at IS NULL) so two concurrent retries cannot both succeed;
+- an approval is only usable for a limited time after the human decision
+  (AGENTGUARD_APPROVED_USE_TTL_SECONDS, default 600 s);
+- consuming requires an explicit org_id (no cross-organization use).
 """
 
 from __future__ import annotations
@@ -19,6 +27,9 @@ from typing import Any
 from .db import get_db, is_postgres, sql_placeholder
 
 APPROVAL_TTL_SECONDS = int(os.getenv("AGENTGUARD_APPROVAL_TTL_SECONDS", "600"))
+
+# How long an APPROVED decision stays usable before the agent must ask again.
+APPROVED_USE_TTL_SECONDS = int(os.getenv("AGENTGUARD_APPROVED_USE_TTL_SECONDS", "600"))
 
 PENDING = "pending"
 APPROVED = "approved"
@@ -114,6 +125,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
             "decided_at",
             "decided_by",
             "decision_reason",
+            "consumed_at",
         ]
         data = dict(zip(columns, row))
     data["arguments"] = _deserialize_arguments(data.get("arguments"))
@@ -135,6 +147,24 @@ def _ensure_arguments_hash_column() -> None:
     columns = {str(row[1]) for row in cursor.fetchall()}
     if "arguments_hash" not in columns:
         db.execute("ALTER TABLE hitl_approvals ADD COLUMN arguments_hash TEXT")
+        db.commit()
+
+
+def _ensure_consumed_at_column() -> None:
+    """Add the single-use marker column to tables created before this change."""
+    db = get_db()
+
+    if is_postgres():
+        db.execute(
+            "ALTER TABLE hitl_approvals ADD COLUMN IF NOT EXISTS consumed_at TEXT"
+        )
+        db.commit()
+        return
+
+    cursor = db.execute("PRAGMA table_info(hitl_approvals)")
+    columns = {str(row[1]) for row in cursor.fetchall()}
+    if "consumed_at" not in columns:
+        db.execute("ALTER TABLE hitl_approvals ADD COLUMN consumed_at TEXT")
         db.commit()
 
 
@@ -166,7 +196,8 @@ def ensure_approval_schema() -> None:
             expires_at TEXT NOT NULL,
             decided_at TEXT,
             decided_by TEXT,
-            decision_reason TEXT
+            decision_reason TEXT,
+            consumed_at TEXT
         )
     """
     db.execute(query)
@@ -174,6 +205,7 @@ def ensure_approval_schema() -> None:
 
     # 3. Upgrade existing tables
     _ensure_arguments_hash_column()
+    _ensure_consumed_at_column()
 
     # 4. Backfill hashes for existing records
     cursor = db.execute(
@@ -226,8 +258,9 @@ def create_approval(
         INSERT INTO hitl_approvals (
             approval_id, org_id, tenant_id, agent_id, session_id, trace_id, span_id,
             tool_name, arguments, arguments_hash, risk_score, reason, policy_name,
-            status, requested_at, expires_at, decided_at, decided_by, decision_reason
-        ) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})
+            status, requested_at, expires_at, decided_at, decided_by, decision_reason,
+            consumed_at
+        ) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})
     """
     params = (
         approval_id,
@@ -246,6 +279,7 @@ def create_approval(
         PENDING,
         _iso(now),
         _iso(expires_at),
+        None,
         None,
         None,
         None,
@@ -290,6 +324,13 @@ def _expire_if_needed(approval: dict[str, Any]) -> dict[str, Any]:
 def get_approval(
     approval_id: str, *, org_id: str | None = None
 ) -> dict[str, Any] | None:
+    """
+    Fetch one approval.
+
+    SECURITY: org_id=None performs an UNSCOPED lookup (any organization).
+    Only internal code paths that have no organization context may call it
+    that way. Anything that authorizes an action must pass an explicit org_id.
+    """
     ensure_approval_schema()
     db = get_db()
     p = sql_placeholder()
@@ -424,3 +465,42 @@ def reject_approval(
         decision_reason=decision_reason,
         org_id=org_id,
     )
+
+
+def consume_approval(approval_id: str, *, org_id: str) -> bool:
+    """
+    Spend an APPROVED approval. Returns True exactly once per approval.
+
+    Fails closed (returns False) when:
+    - org_id is missing or does not own the approval,
+    - the approval is not in the APPROVED state,
+    - it was already consumed,
+    - the human decision is older than APPROVED_USE_TTL_SECONDS,
+    - another caller consumed it first (atomic UPDATE, rowcount must be 1).
+    """
+    if not org_id:
+        return False
+
+    approval = get_approval(approval_id, org_id=org_id)
+    if approval is None or approval.get("status") != APPROVED:
+        return False
+    if approval.get("consumed_at"):
+        return False
+
+    decided_at = _parse_datetime(approval.get("decided_at"))
+    if decided_at is None:
+        return False
+    if _now() > decided_at + timedelta(seconds=APPROVED_USE_TTL_SECONDS):
+        return False
+
+    db = get_db()
+    p = sql_placeholder()
+    query = f"""
+        UPDATE hitl_approvals
+        SET consumed_at = {p}
+        WHERE approval_id = {p} AND org_id = {p}
+          AND status = {p} AND consumed_at IS NULL
+    """
+    cursor = db.execute(query, (_iso(_now()), approval_id, org_id, APPROVED))
+    db.commit()
+    return getattr(cursor, "rowcount", 0) == 1

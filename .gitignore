@@ -52,3 +52,5 @@ benchmarks/results/
 
 rapport_*.json
 agentguard-model-onnx/
+
+bandit-local.*
