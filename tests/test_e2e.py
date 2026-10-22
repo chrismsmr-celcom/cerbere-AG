@@ -544,9 +544,9 @@ class TestE2EInjectionInTools:
         with pytest.raises(SecurityException) as exc_info:
             execute_command(command="rm -rf /")
 
-        # Le nouveau message d'erreur contient "DENY" ou "risk"
+        # Le message contient "DENY", "BLOCK" ou "risk" selon la couche qui refuse
         msg = str(exc_info.value).lower()
-        assert "deny" in msg or "blocked" in msg or "denied" in msg or "risk" in msg
+        assert any(w in msg for w in ("deny", "block", "denied", "risk"))
 
     def test_safe_command_allowed(self, live_server, agent_setup):
         """Safe commands pass through."""
@@ -684,6 +684,11 @@ class TestE2ESignedDecisions:
 
     def test_forged_signed_decision_rejected(self, live_server, agent_setup):
         """If SDK tries to use a forged signed decision, it's rejected."""
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+        )
+
         from agentguard.sdk import AgentGuard
         from agentguard.signing import DecisionSigner
 
@@ -692,9 +697,22 @@ class TestE2ESignedDecisions:
             api_key=agent_setup["api_key"],
         )
 
+        # L'attaquant utilise sa propre clé, explicitement fournie : DecisionSigner
+        # refuse désormais de générer une clé éphémère sans opt-in, et ce test ne doit
+        # pas dépendre de l'environnement (ni l'activer globalement).
+        attacker_pem = (
+            Ed25519PrivateKey.generate()
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode()
+        )
+
         # Even if attacker creates their own signer, collector's public key
         # won't match → verification fails on SDK side
-        fake_signer = DecisionSigner()
+        fake_signer = DecisionSigner(private_key_pem=attacker_pem)
 
         # Forge an ALLOW decision
         forged = fake_signer.sign_decision(

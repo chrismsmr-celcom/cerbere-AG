@@ -62,7 +62,7 @@ _SECRET_PATTERNS = [
     re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),  # GitHub PAT
     re.compile(r"\b-----BEGIN (?:RSA |EC )?PRIVATE KEY-----"),
     re.compile(
-        r"\b(api[_-]?key|password|secret|token)\s*[:=]\s*['\"]?[\w\-]{16,}['\"]?",
+        r"\b(api[_-]?key|password|secret|token)\s*[:=]\s*['\"]?[\w-]{16,}['\"]?",
         re.IGNORECASE,
     ),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),  # JWT
@@ -423,13 +423,16 @@ class FlowTracker:
             for needle, lvl in self._extract(text):
                 self._remember(needle, lvl)
             if (
-                level in (TaintLevel.SECRET, TaintLevel.CONFIDENTIAL)
+                level
+                in (TaintLevel.SECRET, TaintLevel.CONFIDENTIAL, TaintLevel.UNTRUSTED)
                 and len(text) >= _MIN_TRACKED_LEN
             ):
                 # Valeur déclarée sensible par l'appelant : on la suit en entier.
+                # UNTRUSTED inclus : sans needle, le label ne se propage jamais
+                # dans level_in() et le runtime ne voit rien.
                 self._remember(text.strip(), level)
-        if final > self._session_level and final != TaintLevel.UNTRUSTED:
-            self._session_level = final
+            if final > self._session_level and final != TaintLevel.UNTRUSTED:
+                self._session_level = final
         return label
 
     def mark_malicious(self, source: str = "injection_detected") -> None:

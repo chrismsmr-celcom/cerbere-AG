@@ -79,6 +79,9 @@ class TrajectoryAnalyzer:
         if taint_level in {"MALICIOUS", "SECRET"} and (external or privileged):
             score += 70
             reasons.append("sensitive taint reaches high-impact sink")
+        if taint_level == "UNTRUSTED" and (external or privileged or irreversible):
+            score += 40
+            reasons.append("untrusted data in play")
         if irreversible:
             score += 25
             reasons.append("irreversible side effect")
@@ -121,6 +124,11 @@ class RuntimeRiskEngine:
             reasons.append(f"local policy: {local_check.details}")
 
         taint = str(taint_level or "").upper()
+
+        # ── Règles de flux (matrice complète de la spec taint.py) ──────────
+
+        # MALICIOUS → n'importe où : DENY
+        # SECRET + sink externe ou outil privilégié : DENY
         if taint == "MALICIOUS" or (taint == "SECRET" and metadata.get("external")):
             return RuntimeRiskDecision(
                 "DENY",
@@ -130,6 +138,7 @@ class RuntimeRiskEngine:
                 metadata,
             )
 
+        # CONFIDENTIAL + sink externe : REQUIRE_APPROVAL
         if taint == "CONFIDENTIAL" and metadata.get("external"):
             return RuntimeRiskDecision(
                 "REQUIRE_APPROVAL",
@@ -138,6 +147,31 @@ class RuntimeRiskEngine:
                 reasons + ["confidential data to external sink requires approval"],
                 metadata,
             )
+
+        # Spec taint.py : le contenu non fiable (email, web, pdf) qui atteint un
+        # sink externe ne passe pas seul — approbation humaine.
+        if taint == "UNTRUSTED" and metadata.get("external"):
+            return RuntimeRiskDecision(
+                "REQUIRE_APPROVAL",
+                max(score, 55.0),
+                RiskLevel.HIGH,
+                reasons + ["untrusted data reaches external sink — approval required"],
+                metadata,
+            )
+
+        # Spec taint.py : UNTRUSTED → tool dangereux = DENY.
+        if taint == "UNTRUSTED" and (
+            metadata.get("privileged") or metadata.get("irreversible")
+        ):
+            return RuntimeRiskDecision(
+                "DENY",
+                max(score, 80.0),
+                RiskLevel.CRITICAL,
+                reasons + ["untrusted data in privileged/irreversible tool"],
+                metadata,
+            )
+
+        # ── Seuils de score (trajectoire + policies locales) ───────────────
 
         if score >= 85:
             return RuntimeRiskDecision(

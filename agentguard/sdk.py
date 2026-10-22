@@ -6,6 +6,7 @@ import os
 import time
 import warnings
 from collections.abc import Callable
+from datetime import datetime, timezone
 from functools import wraps
 from typing import Any
 
@@ -13,6 +14,8 @@ import requests
 import structlog
 import tiktoken
 
+from .masking import SpanMasker
+from .vault import IncidentVault
 from .models import (
     AgentDisconnectedException,
     ApprovalRejectedException,
@@ -31,10 +34,39 @@ from .taint import FlowTracker, TaintLevel
 
 logger = structlog.get_logger("agentguard.sdk")
 
-SDK_VERSION = "0.6.0"
+SDK_VERSION = "0.6.1"
 
 
 _ENCODING_CACHE: dict[str, Any] = {}
+
+# Outils dont le résultat est une source NON FIABLE par nature
+# (le contenu peut porter des instructions injectées).
+_UNTRUSTED_SOURCE_TOOLS = (
+    "email",
+    "mail",
+    "inbox",  # emails
+    "web",
+    "fetch",
+    "http_get",
+    "browser",
+    "scrape",
+    "crawl",  # web
+    "pdf",
+    "document",
+    "attachment",  # pièces jointes
+    "message",
+    "chat",
+    "comment",
+    "review",
+    "transcript",  # canaux tiers
+    "user_input",
+    "search",  # input utilisateur / résultats externes
+)
+
+
+def _is_untrusted_source(tool_name: str) -> bool:
+    name = (tool_name or "").lower()
+    return any(tok in name for tok in _UNTRUSTED_SOURCE_TOOLS)
 
 
 def _get_encoding(model: str):
@@ -130,7 +162,9 @@ class AgentGuard:
             if approval_poll_interval is not None
             else os.getenv("AGENTGUARD_APPROVAL_POLL_INTERVAL", "2.0")
         )
-        self._approved_cache = set()
+        # approval_id -> timestamp (epoch) de l'approbation observée localement.
+        # Doit rester un dict : le TTL est vérifié à chaque lecture.
+        self._approved_cache: dict[str, float] = {}
         self.notification_webhook = notification_webhook
 
         # Kill switch : l'agent peut être déconnecté depuis le dashboard
@@ -167,10 +201,21 @@ class AgentGuard:
             == "true"
         )
 
+        # Masquage des spans avant envoi au collector.
+        #   redact (défaut) : rien n'est récupérable, jamais.
+        #   incident        : ouverture explicite via start_incident_capture(),
+        #                    mapping chiffré avec TTL (clé détenue par le collector).
+        self._vault: IncidentVault | None = None
+        self._masker = SpanMasker(
+            mode=os.getenv("AGENTGUARD_MASKING", "redact"),
+            vault=None,  # branché au démarrage d'incident
+        )
+
         logger.info(
             "agentguard_initialized",
             agent_id=self.agent_id,
             runtime_risk=self._runtime_enabled,
+            masking=self._masker.mode,
         )
 
     @staticmethod
@@ -189,6 +234,40 @@ class AgentGuard:
         )
         digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
         return f"req_{digest}"
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> float | None:
+        """Convertit un horodatage (epoch numérique ou ISO 8601) en epoch, sinon None."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str) and value.strip():
+            raw = value.strip()
+            try:
+                return float(raw)
+            except ValueError:
+                pass
+            try:
+                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.timestamp()
+            except ValueError:
+                return None
+        return None
+
+    @classmethod
+    def _approval_timestamp(cls, data: dict[str, Any]) -> float | None:
+        """Horodatage le plus pertinent d'une approbation renvoyée par le serveur.
+
+        On préfère la date de décision à la date de création de la demande.
+        """
+        for key in ("resolved_at", "approved_at", "decided_at", "created_at"):
+            ts = cls._parse_timestamp(data.get(key))
+            if ts is not None:
+                return ts
+        return None
 
     def _headers(self):
         h = {
@@ -246,13 +325,17 @@ class AgentGuard:
                 taint_level=span.taint_level,
                 risk_score=span.risk_score,
             ).model_dump()
+            # Masquage PII/secrets AVANT tout envoi :
+            #   redact  → hash unidirectionnel, aucune récupération
+            #   incident → idem + copie chiffrée (AES-256-GCM, clé du collector)
+            #             conservée dans le vault local puis flushée
+            payload = self._masker.mask_span(payload)
             resp = requests.post(
                 f"{self.collector_url}/span",
                 json=payload,
                 headers=self._headers(),
                 timeout=self.collector_timeout,
             )
-            # <-- CORRECTION : Avertissement RuntimeWarning pour les tests
             if resp.status_code in (401, 403):
                 warnings.warn(
                     "Cerbere rejected your API key or agent is disconnected",
@@ -269,6 +352,54 @@ class AgentGuard:
                 )
         except Exception as e:
             logger.warning("collector_send_failed", error=str(e))
+
+        # Flush best-effort du vault d'incident : ne jamais ralentir l'agent
+        # (les mappings restent en mémoire locale en cas d'échec, jusqu'au TTL).
+        if self._vault is not None and self._vault.pending() > 0:
+            try:
+                self._vault.flush()
+            except Exception:
+                pass
+
+    def start_incident_capture(self, ttl_seconds: int = 6 * 3600) -> str:
+        """Ouvre un incident auprès du collector et active la capture
+        scellée jusqu'au TTL. Retourne l'incident_id.
+
+        Le SDK ne reçoit que la clé de CHIFFREMENT (AES-256) : il scelle,
+        il ne peut pas déchiffrer. Le reveal passe par le collector,
+        derrière contrôle d'accès + audit_log.
+        """
+        resp = requests.post(
+            f"{self.collector_url}/v1/incident/start",
+            json={"agent_id": self.agent_id, "ttl_seconds": ttl_seconds},
+            headers=self._headers(),
+            timeout=self.collector_timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        self._vault = IncidentVault(
+            collector_url=self.collector_url,
+            incident_id=data["incident_id"],
+            key=bytes.fromhex(data["key"]),  # clé AES-256 fournie par le collector
+            ttl_seconds=data.get("ttl_seconds", ttl_seconds),
+        )
+        self._masker.mode = "incident"
+        self._masker.vault = self._vault
+        logger.info(
+            "incident_capture_started",
+            incident_id=data["incident_id"],
+            ttl_seconds=ttl_seconds,
+        )
+        return data["incident_id"]
+
+    def stop_incident_capture(self) -> None:
+        """Ferme l'incident : flush final, retour au masquage redact."""
+        if self._vault is not None:
+            self._vault.close()
+        self._vault = None
+        self._masker.mode = "redact"
+        self._masker.vault = None
+        logger.info("incident_capture_stopped")
 
     def _request_signed_decision(
         self, tool_name: str, params: dict[str, Any]
@@ -555,20 +686,33 @@ class AgentGuard:
         self, tool_name: str, params: dict[str, Any], func: Callable
     ):
         self._ensure_connected()
-        span_id = hashlib.sha256(f"{time.time_ns()}".encode()).hexdigest()[:16]
+
+        span_id = hashlib.sha256(f"{time.time_ns()}:{tool_name}".encode()).hexdigest()[
+            :16
+        ]
         start = time.time()
-        budget_remaining = self.max_budget - self.total_spent
+        budget_remaining = max(0.0, self.max_budget - self.total_spent)
 
         check = self.policy_engine.check_tool_policy(
-            tool_name, params, budget_remaining, agent_id=self.agent_id
+            tool_name,
+            params,
+            budget_remaining,
+            agent_id=self.agent_id,
         )
 
+        # 1. Évaluer le taint et le risque d'exécution.
         taint_level = None
         if self._taint_enabled:
-            taint_level = self._flow.level_in(params).level.name
+            taint_label = self._flow.level_in(params)
+            if taint_label is not None:
+                taint_level = taint_label.level.name
+
         if self._runtime_enabled:
             traj_score, traj_reasons, traj_meta = self._trajectory.analyze(
-                self.agent_id, tool_name, params, taint_level=taint_level
+                self.agent_id,
+                tool_name,
+                params,
+                taint_level=taint_level,
             )
             runtime_decision = self._runtime_risk.evaluate(
                 tool_name,
@@ -580,6 +724,7 @@ class AgentGuard:
             )
         else:
             runtime_decision = RuntimeRiskDecision("ALLOW", 0.0, RiskLevel.LOW)
+
         runtime_check = SecurityCheck(
             "runtime_risk",
             runtime_decision.allowed,
@@ -587,7 +732,7 @@ class AgentGuard:
             "; ".join(runtime_decision.reasons[:5]),
         )
 
-        if not runtime_decision.allowed:
+        def record_block(reason: str, message: str) -> None:
             span = GuardSpan(
                 span_id,
                 self.trace_id,
@@ -595,205 +740,245 @@ class AgentGuard:
                 start,
                 (time.time() - start) * 1000,
                 {"tool": tool_name, "params": params},
-                {"blocked": True},
+                {"blocked": True, "reason": reason},
                 [check, runtime_check],
                 True,
-                f"[RUNTIME {runtime_decision.action}] {runtime_decision.reasons[0] if runtime_decision.reasons else 'blocked'}",
+                message,
             )
             self._tag_span(span, taint_level, runtime_decision)
             self.spans.append(span)
             self._send_to_collector(span)
             self._record_trajectory_tool(tool_name, runtime_decision)
-            raise SecurityException(
-                f"\U0001f6a8 Runtime risk {runtime_decision.action}: "
-                f"{runtime_decision.reasons[0] if runtime_decision.reasons else 'blocked'}"
-            )
 
+        # 2. Obtenir la décision du serveur si le vérificateur est configuré.
         signed_decision = None
         if self._verifier:
-            signed_decision = self._request_signed_decision(tool_name, params or {})
+            signed_decision = self._request_signed_decision(tool_name, params)
+
             if signed_decision is None:
-                span = GuardSpan(
-                    span_id,
-                    self.trace_id,
-                    "tool_call",
-                    start,
-                    (time.time() - start) * 1000,
-                    {"tool": tool_name, "params": params},
-                    {"blocked": True, "reason": "signed_decision_unavailable"},
-                    [check, runtime_check],
-                    True,
+                record_block(
+                    "signed_decision_unavailable",
                     "[SECURITY] Signed server decision unavailable",
                 )
-                self._tag_span(span, taint_level, runtime_decision)
-                self.spans.append(span)
-                self._send_to_collector(span)
-                self._record_trajectory_tool(
-                    tool_name,
-                    RuntimeRiskDecision(
-                        "DENY",
-                        100.0,
-                        RiskLevel.CRITICAL,
-                        ["signed server decision unavailable"],
-                    ),
-                )
                 raise SecurityException(
-                    "\U0001f6a8 AgentGuard DENY: server security decision unavailable"
-                )
-            if signed_decision.get("action") == "DENY":
-                raise SecurityException(
-                    f"\U0001f6a8 Signed DENY: {signed_decision.get('reason', 'policy violation')}"
-                )
-            if signed_decision.get("action") == "REQUIRE_APPROVAL":
-                raise SecurityException(
-                    "\U0001f6a8 AgentGuard: human approval required"
+                    "AgentGuard DENY: server security decision unavailable"
                 )
 
-        # --- GESTION DE L'APPROBATION HUMAINE (HITL) avec auto-reprise ---
-        if not check.passed:
-            if check.metadata.get("requires_approval"):
-                # ID deterministe base sur (agent, outil, params)
-                approval_id = self._stable_approval_id(self.agent_id, tool_name, params)
-                cache_key = approval_id
+            signed_action = str(signed_decision.get("action", "DENY")).upper()
 
-                # 0. Verifier si une demande identique existe deja et est approuvee
-                if cache_key not in self._approved_cache:
-                    try:
-                        r = requests.get(
-                            f"{self.collector_url}/api/approvals/{approval_id}",
-                            headers=self._headers(),
-                            timeout=3,
-                        )
-                        if (
-                            r.status_code == 200
-                            and r.json().get("status") == "approved"
-                        ):
-                            self._approved_cache.add(cache_key)
-                    except Exception:
-                        pass
+            if signed_action == "DENY":
+                reason = signed_decision.get("reason", "policy violation")
+                record_block(
+                    "signed_deny",
+                    f"[SECURITY] Signed DENY: {reason}",
+                )
+                raise SecurityException(f"AgentGuard DENY: {reason}")
 
-                if cache_key in self._approved_cache:
-                    logger.info("tool_already_approved_from_cache", tool=tool_name)
-                    # on tombe directement a l'execution ci-dessous
-                else:
-                    # 1. Creer la demande d'approbation cote serveur
+            if signed_action not in ("ALLOW", "REQUIRE_APPROVAL"):
+                record_block(
+                    "invalid_signed_decision",
+                    "[SECURITY] Invalid signed server decision",
+                )
+                raise SecurityException("AgentGuard DENY: invalid server decision")
+
+        # 3. Une décision DENY doit bloquer ; REQUIRE_APPROVAL doit
+        #    rejoindre le flux HITL au lieu d'être bloqué comme un DENY.
+        runtime_action = str(getattr(runtime_decision, "action", "ALLOW")).upper()
+
+        if not runtime_decision.allowed and runtime_action != "REQUIRE_APPROVAL":
+            reason = (
+                runtime_decision.reasons[0]
+                if runtime_decision.reasons
+                else "runtime policy denied the action"
+            )
+            record_block(
+                "runtime_deny",
+                f"[RUNTIME DENY] {reason}",
+            )
+            raise SecurityException(f"AgentGuard DENY: {reason}")
+
+        requires_approval = (
+            (not check.passed and bool(check.metadata.get("requires_approval")))
+            or runtime_action == "REQUIRE_APPROVAL"
+            or (
+                signed_decision is not None
+                and str(signed_decision.get("action", "")).upper() == "REQUIRE_APPROVAL"
+            )
+        )
+
+        # 4. Refuser les violations de politique qui ne sont pas
+        #    explicitement configurées pour une approbation humaine.
+        if not check.passed and not requires_approval:
+            if (
+                check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+                and self.block_on_high
+            ):
+                record_block(
+                    "policy_block",
+                    f"[POLICY] {check.details}",
+                )
+                raise SecurityException(f"AgentGuard BLOCK: {check.details}")
+
+        # 5. Approbation humaine (HITL).
+        if requires_approval:
+            approval_id = self._stable_approval_id(self.agent_id, tool_name, params)
+
+            # Une entrée locale ne doit pas autoriser éternellement
+            # une action. Le serveur doit également expirer ses demandes.
+            now = time.time()
+            cache_ttl = max(
+                1.0,
+                float(os.getenv("AGENTGUARD_APPROVAL_CACHE_TTL", "30")),
+            )
+
+            # Cache local : approval_id -> timestamp d'approbation (dict).
+            cached_ts = self._approved_cache.get(approval_id)
+            if cached_ts is not None and (now - cached_ts) > cache_ttl:
+                self._approved_cache.pop(approval_id, None)  # expiré
+                cached_ts = None
+
+            approved = cached_ts is not None
+
+            if not approved:
+                try:
+                    response = requests.get(
+                        f"{self.collector_url}/api/approvals/{approval_id}",
+                        headers=self._headers(),
+                        timeout=min(3.0, self.collector_timeout),
+                    )
+
+                    if response.status_code == 200:
+                        approval_data = response.json()
+                        status = approval_data.get("status")
+
+                        if status == "rejected":
+                            raise ApprovalRejectedException(
+                                "Action rejetée par l'administrateur.",
+                                approval_id=approval_id,
+                                resolved_by=approval_data.get("resolved_by"),
+                            )
+
+                        if status == "approved":
+                            # L'approbation distante doit aussi être récente.
+                            # Sans horodatage exploitable, on n'accepte pas
+                            # automatiquement une ancienne approbation.
+                            ts = self._approval_timestamp(approval_data)
+                            if ts is not None and (now - ts) <= cache_ttl:
+                                approved = True
+                except ApprovalRejectedException:
+                    raise
+                except Exception as exc:
+                    logger.warning("approval_lookup_failed", error=str(exc))
+
+            if not approved:
+                # Créer la demande et vérifier la réponse HTTP.
+                try:
+                    response = requests.post(
+                        f"{self.collector_url}/api/approvals",
+                        json={
+                            "approval_id": approval_id,
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "params": params,
+                            "reason": getattr(check, "details", "")
+                            or "; ".join(
+                                getattr(runtime_decision, "reasons", [])[:5]
+                            ),
+                        },
+                        headers=self._headers(),
+                        timeout=self.collector_timeout,
+                    )
+                    response.raise_for_status()
+                except Exception as exc:
+                    record_block(
+                        "approval_request_failed",
+                        "[SECURITY] Could not create approval request",
+                    )
+                    raise SecurityException(
+                        "AgentGuard DENY: approval service unavailable"
+                    ) from exc
+
+                if self.notification_webhook:
                     try:
                         requests.post(
-                            f"{self.collector_url}/api/approvals",
+                            self.notification_webhook,
                             json={
+                                "event": "approval_required",
                                 "approval_id": approval_id,
-                                "agent_id": self.agent_id,
-                                "tool_name": tool_name,
-                                "params": params,
-                                "reason": check.details,
+                                "tool": tool_name,
+                                "agent": self.agent_id,
                             },
-                            headers=self._headers(),
-                            timeout=5,
+                            timeout=2,
                         )
-                    except Exception as e:
-                        logger.warning(
-                            "failed_to_notify_collector_of_approval", error=str(e)
-                        )
+                    except Exception as exc:
+                        logger.debug("approval_webhook_failed", error=str(exc))
 
-                    # 1.5. Declencher le Webhook externe (Email/Slack) si configure
-                    if self.notification_webhook:
-                        try:
-                            requests.post(
-                                self.notification_webhook,
-                                json={
-                                    "event": "approval_required",
-                                    "approval_id": approval_id,
-                                    "tool": tool_name,
-                                    "agent": self.agent_id,
-                                },
-                                timeout=2,  # Fire and forget, ne pas bloquer l'agent
-                            )
-                        except Exception:
-                            pass
-
-                    # 2. Mode ASYNC : on leve immediatement, sans poller
-                    if not self.wait_for_approval:
-                        raise ApprovalRequiredException(
-                            f"Approbation requise pour '{tool_name}'. (ID: {approval_id})",
-                            approval_id=approval_id,
-                            details=check.metadata,
-                            timed_out=False,
-                        )
-
-                    # 3. Mode SYNC : on poll jusqu'a decision ou timeout
-                    logger.info(
-                        "waiting_for_human_approval",
+                if not self.wait_for_approval:
+                    raise ApprovalRequiredException(
+                        f"Approbation requise pour '{tool_name}'. (ID: {approval_id})",
                         approval_id=approval_id,
-                        tool=tool_name,
+                        details=check.metadata,
+                        timed_out=False,
                     )
-                    max_wait = self.approval_timeout
-                    poll_interval = self.approval_poll_interval
-                    elapsed = 0.0
-                    decided = False
 
-                    while elapsed < max_wait:
-                        time.sleep(poll_interval)
-                        elapsed += poll_interval
-                        try:
-                            r = requests.get(
-                                f"{self.collector_url}/api/approvals/{approval_id}",
-                                headers=self._headers(),
-                                timeout=3,
-                            )
-                            if r.status_code == 200:
-                                status = r.json().get("status")
-                                if status == "approved":
-                                    logger.info(
-                                        "approval_granted_executing_tool",
-                                        approval_id=approval_id,
-                                        tool=tool_name,
-                                    )
-                                    self._approved_cache.add(cache_key)
-                                    decided = True
-                                    break
-                                if status == "rejected":
-                                    raise ApprovalRejectedException(
-                                        f"Action rejetee par l'administrateur. (ID: {approval_id})",
-                                        approval_id=approval_id,
-                                        resolved_by=r.json().get("resolved_by"),
-                                    )
-                        except ApprovalRejectedException:
-                            raise
-                        except Exception as e:
-                            logger.debug("poll_failed", error=str(e))
+                wait_started = time.time()
+                elapsed = 0.0
+                poll_interval = max(0.25, self.approval_poll_interval)
 
-                    if not decided:
-                        raise ApprovalRequiredException(
-                            f"Approbation expiree apres {max_wait}s. (ID: {approval_id})",
-                            approval_id=approval_id,
-                            details=check.metadata,
-                            timed_out=True,
+                while elapsed < self.approval_timeout:
+                    sleep_for = min(poll_interval, self.approval_timeout - elapsed)
+                    time.sleep(sleep_for)
+                    elapsed += sleep_for
+
+                    try:
+                        response = requests.get(
+                            f"{self.collector_url}/api/approvals/{approval_id}",
+                            headers=self._headers(),
+                            timeout=min(3.0, self.collector_timeout),
                         )
-            else:
-                if (
-                    check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
-                    and self.block_on_high
-                ):
-                    span = GuardSpan(
-                        span_id,
-                        self.trace_id,
-                        "tool_call",
-                        start,
-                        (time.time() - start) * 1000,
-                        {"tool": tool_name, "params": params},
-                        {"blocked": True, "reason": "policy_block_on_high"},
-                        [check, runtime_check],
-                        True,
-                        f"[POLICY] {check.details}",
-                    )
-                    self._tag_span(span, taint_level, runtime_decision)
-                    self.spans.append(span)
-                    self._send_to_collector(span)
-                    self._record_trajectory_tool(tool_name, runtime_decision)
-                    raise SecurityException(f"\U0001f6a8 Tool blocked: {check.details}")
 
+                        if response.status_code != 200:
+                            continue
+
+                        approval_data = response.json()
+                        status = approval_data.get("status")
+
+                        if status == "approved":
+                            # Approbation observée PENDANT l'attente : elle est
+                            # fraîche par construction. On écarte seulement une
+                            # approbation clairement antérieure à cette attente
+                            # (reliquat d'une ancienne demande au même ID).
+                            ts = self._approval_timestamp(approval_data)
+                            if ts is not None and ts < wait_started - cache_ttl:
+                                continue
+
+                            approved = True
+                            self._approved_cache[approval_id] = time.time()
+                            break
+
+                        if status == "rejected":
+                            raise ApprovalRejectedException(
+                                "Action rejetée par l'administrateur.",
+                                approval_id=approval_id,
+                                resolved_by=approval_data.get("resolved_by"),
+                            )
+
+                    except ApprovalRejectedException:
+                        raise
+                    except Exception as exc:
+                        logger.debug("approval_poll_failed", error=str(exc))
+
+                if not approved:
+                    raise ApprovalRequiredException(
+                        f"Approbation absente ou expirée après "
+                        f"{self.approval_timeout}s. (ID: {approval_id})",
+                        approval_id=approval_id,
+                        details=check.metadata,
+                        timed_out=True,
+                    )
+
+        # 6. Exécuter l'outil uniquement après toutes les décisions.
         try:
-            # 3. EXECUTION DE L'OUTIL (se produit automatiquement apres l'approbation)
             result = func(**params)
         except Exception as exc:
             span = GuardSpan(
@@ -809,7 +994,19 @@ class AgentGuard:
             self._tag_span(span, taint_level, runtime_decision)
             self.spans.append(span)
             self._send_to_collector(span)
+            self._record_trajectory_tool(tool_name, runtime_decision)
             raise
+
+        # 7. Suivre le résultat pour les appels suivants.
+        if self._taint_enabled:
+            source_level = (
+                TaintLevel.UNTRUSTED if _is_untrusted_source(tool_name) else None
+            )
+            self._flow.track(
+                result,
+                source=f"tool:{tool_name}",
+                level=source_level,
+            )
 
         span = GuardSpan(
             span_id,
@@ -821,10 +1018,6 @@ class AgentGuard:
             {"result": str(result)[:500]},
             [check, runtime_check],
         )
-        if self._taint_enabled:
-            # Ce que l'outil vient de lire peut contenir des secrets : on le mémorise
-            # pour bloquer sa réapparition dans un appel externe ultérieur.
-            self._flow.track(result, source=f"tool:{tool_name}")
         self._tag_span(span, taint_level, runtime_decision)
         self.spans.append(span)
         self._send_to_collector(span)
@@ -838,6 +1031,9 @@ class AgentGuard:
             "blocked_operations": sum(1 for s in self.spans if s.blocked),
             "total_cost_usd": round(self.total_spent, 6),
             "runtime_risk_enabled": self._runtime_enabled,
+            "masking": self._masker.mode,
+            "incident_capture_active": self._vault is not None
+            and not self._vault.expired,
         }
 
 
