@@ -3,12 +3,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Utilisateur non-root : le serveur n'a pas besoin de privilèges
+RUN useradd --create-home --uid 10001 appuser
+
 # Installation des dépendances
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copie du code du serveur SSE
+# Copie du code du serveur SSE (le fichier vit dans collector/)
 COPY collector/mcp_server_sse.py ./mcp_server_sse.py
+
+USER appuser
 
 # Exposition du port 8080 (standard pour la plupart des hébergeurs)
 EXPOSE 8080
