@@ -113,6 +113,8 @@ def require_auth():
         return True
 
     # ── LEGACY API KEY SESSION ──────────────────────────────
+    # Acceptable for ordinary dashboard/API routes only. It must NEVER
+    # be accepted by require_human_auth() (see below).
 
     org_id = _session_org_id(cookie_value)
 
@@ -137,9 +139,12 @@ def require_human_auth():
     Session HUMAINE uniquement (cookie du dashboard) - les clés API sont refusées.
 
     À utiliser pour toute décision qu'un agent ne doit JAMAIS pouvoir prendre
-    lui-même : approuver/rejeter une action, déconnecter un agent. Avec
-    require_auth(), un agent détenant sa clé API pouvait appeler
-    POST /api/approvals/<id>/approve et s'auto-approuver.
+    lui-même : approuver/rejeter une action, déconnecter un agent.
+
+    Seule une session humaine valide (utilisateur actif, créée par magic link)
+    est acceptée. Les sessions "historiques" créées avec une clé API via
+    POST /api/auth-login ne sont PAS acceptées ici : un agent détenant sa clé
+    API pourrait sinon obtenir un cookie de session puis s'auto-approuver.
     """
     auth_cookie = current_app.config.get("AUTH_COOKIE", MAGIC_LINK_COOKIE)
     cookie_value = request.cookies.get(auth_cookie, "")
@@ -155,15 +160,14 @@ def require_human_auth():
             logger.debug("human_identity_resolution_failed", error=str(exc))
         return True
 
-    org_id = _session_org_id(cookie_value)
-    if org_id:
-        g.org_id = org_id
-        g.human_email = None
-        try:
-            resolve_full_identity()
-        except Exception as exc:
-            logger.debug("legacy_identity_resolution_failed", error=str(exc))
-        return True
+    # Audit trail: a valid API-key session trying to take a human decision
+    # is exactly the self-approval attempt this function exists to stop.
+    if cookie_value and _session_org_id(cookie_value):
+        logger.warning(
+            "human_auth_rejected_api_key_session",
+            ip=request.remote_addr,
+            endpoint=request.endpoint,
+        )
 
     return False
 
