@@ -3,61 +3,65 @@ services:
     name: agentguard-collector
     runtime: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    # ✅ FIX perf : --threads 4 permet de traiter plusieurs requetes
-    # I/O-bound (attente reseau DB) en concurrence sans multiplier la
-    # RAM comme le ferait plusieurs --workers (important sur le plan free).
+    buildCommand: pip install -r requirements.txt
+    # Un seul worker + des threads : les requêtes I/O-bound (attente réseau DB)
+    # sont traitées en concurrence sans multiplier la RAM (plan free), ET le
+    # rate limiting en mémoire (memory://) reste cohérent : un seul compteur.
+    # Pour passer à plusieurs workers, configurer d'abord un stockage Redis partagé.
     startCommand: gunicorn "collector.app:create_app()" --workers 1 --threads 8 --worker-class gthread --timeout 120
-   envVars:
-     - key: WEB_CONCURRENCY
-       value: "1"
+    envVars:
+      # Doit refléter le nombre réel de workers (lu par collector/app.py pour
+      # détecter un rate limiting en mémoire incompatible avec le multi-workers).
+      - key: WEB_CONCURRENCY
+        value: "1"
       - key: AGENTGUARD_DB_TYPE
         value: postgres
-      # BUG CORRIGÉ : collector/app.py lit AGENTGUARD_ENVIRONMENT
-      # (pas AGENTGUARD_ENV). Avec l'ancien nom, is_production restait
-      # FAUX en permanence -> FLASK_SECRET jamais imposé (donc généré
-      # aléatoirement à chaque redémarrage = déconnexion de tout le
-      # monde + magic links invalidés), CORS jamais strict, clé API
-      # legacy jamais désactivée.
+      # Branche la base Postgres déclarée plus bas. Vérifier que c'est bien le
+      # nom lu par collector/db.py (git grep -n DATABASE_URL collector/db.py).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentguard-db
+          property: connectionString
+      # collector/app.py lit AGENTGUARD_ENVIRONMENT (pas AGENTGUARD_ENV). Sans
+      # lui, is_production restait faux : FLASK_SECRET non imposé (régénéré à
+      # chaque redémarrage = tout le monde déconnecté, magic links invalidés),
+      # CORS jamais strict, clé API legacy jamais désactivée.
       - key: AGENTGUARD_ENVIRONMENT
         value: production
-    envVarGroups:
-      - name: agentguard-secrets
-        envVars:
-          - key: AGENTGUARD_API_KEY
-            generateValue: true
-          - key: AGENTGUARD_ADMIN_SECRET
-            generateValue: true
-          # Ces deux clés N'ÉTAIENT PAS DÉFINIES sur Render alors que le
-          # code les EXIGE en production (voir collector/app.py) :
-          # sans elles l'app plantait au boot, ou (avant le fix ci-dessus)
-          # tournait avec un secret Flask régénéré à chaque redémarrage.
-          - key: AGENTGUARD_FLASK_SECRET
-            generateValue: true
-          - key: AGENTGUARD_CORS_ORIGINS
-            value: https://agentguard-collector.onrender.com
-          # SMTP requis en production pour que les magic links partent
-          # réellement (sinon _send_magic_link_email lève une RuntimeError
-          # maintenant que AGENTGUARD_ENVIRONMENT=production est correct).
-          # Legacy SMTP maison : gardé en secours si Supabase Auth est
-          # désactivé (SUPABASE_ENABLED=false tant que les 3 clés ci-dessous
-          # ne sont pas toutes renseignées).
-          - key: AGENTGUARD_SMTP_HOST
-            sync: false
-          - key: AGENTGUARD_SMTP_PORT
-            value: "587"
-          - key: AGENTGUARD_SMTP_USER
-            sync: false
-          - key: AGENTGUARD_SMTP_PASS
-            sync: false
-          # Supabase Auth (magic link + Google + GitHub) — voir
-          # Dashboard Supabase > Project Settings > API
-          - key: AGENTGUARD_SUPABASE_URL
-            sync: false
-          - key: AGENTGUARD_SUPABASE_ANON_KEY
-            sync: false
-          - key: AGENTGUARD_SUPABASE_JWT_SECRET
-            sync: false
+
+      # Secrets générés une seule fois par Render à la première synchronisation.
+      - key: AGENTGUARD_API_KEY
+        generateValue: true
+      - key: AGENTGUARD_ADMIN_SECRET
+        generateValue: true
+      # Exigés en production par collector/app.py.
+      - key: AGENTGUARD_FLASK_SECRET
+        generateValue: true
+      - key: AGENTGUARD_CORS_ORIGINS
+        value: https://agentguard-collector.onrender.com
+
+      # SMTP requis en production pour que les magic links partent réellement
+      # (sinon _send_magic_link_email lève une RuntimeError). Gardé en secours
+      # si Supabase Auth est désactivé (SUPABASE_ENABLED=false tant que les
+      # trois clés Supabase ci-dessous ne sont pas toutes renseignées).
+      # sync: false = Render demande la valeur dans le Dashboard.
+      - key: AGENTGUARD_SMTP_HOST
+        sync: false
+      - key: AGENTGUARD_SMTP_PORT
+        value: "587"
+      - key: AGENTGUARD_SMTP_USER
+        sync: false
+      - key: AGENTGUARD_SMTP_PASS
+        sync: false
+
+      # Supabase Auth (magic link + Google + GitHub) : Dashboard Supabase >
+      # Project Settings > API.
+      - key: AGENTGUARD_SUPABASE_URL
+        sync: false
+      - key: AGENTGUARD_SUPABASE_ANON_KEY
+        sync: false
+      - key: AGENTGUARD_SUPABASE_JWT_SECRET
+        sync: false
 
 databases:
   - name: agentguard-db
