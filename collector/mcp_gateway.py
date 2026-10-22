@@ -31,6 +31,12 @@ Installer : pip install mcp
 Lancer    : python mcp_gateway.py -- npx -y @modelcontextprotocol/server-filesystem /tmp
             (tout ce qui suit "--" est la commande du serveur MCP réel à protéger)
 
+GARANTIE D'ENFORCEMENT :
+    Un tools/call n'atteint le serveur amont QUE si guard.guard_tool_call()
+    est revenu sans exception. Toute exception (blocage, approbation requise,
+    collector injoignable, erreur interne) refuse l'appel : fail-closed.
+    stdout est réservé au protocole MCP : la gateway n'écrit que sur stderr.
+
 WHITELIST DES OUTILS :
     AGENTGUARD_MCP_ALLOWED_TOOLS : liste d'outils séparés par virgules.
         Ex : AGENTGUARD_MCP_ALLOWED_TOOLS="read_file,write_file,list_directory"
@@ -42,6 +48,7 @@ WHITELIST DES OUTILS :
     bloque tout ou, pire, qui laisserait tout passer par accident de config).
 """
 
+import asyncio
 import os
 import sys
 
@@ -49,7 +56,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from concurrent.futures import ThreadPoolExecutor
 
+from agentguard import SecurityException
 from agentguard.sdk import AgentGuard
+
+try:
+    from agentguard import ApprovalRequiredException
+except ImportError:  # SDK plus ancien : l'approbation remonte comme SecurityException
+    ApprovalRequiredException = SecurityException
 
 _executor = ThreadPoolExecutor(
     max_workers=int(os.environ.get("AGENTGUARD_MCP_WORKERS", "4"))
@@ -118,9 +131,25 @@ sys.stderr.write(
 )
 
 
+def _authorize(tool_name: str, arguments: dict) -> None:
+    """Fait autoriser l'appel par AgentGuard. Lève une exception s'il est refusé.
+
+    Synchrone (le SDK l'est) : la gateway l'exécute dans un thread.
+    La fonction passée à guard_tool_call est volontairement un no-op : le
+    VRAI appel amont est fait par la gateway, uniquement si cette fonction
+    revient sans exception.
+    """
+    guard.guard_tool_call(
+        f"mcp:{SERVER_LABEL}:{tool_name}",
+        params=arguments,
+        func=lambda *args, **kwargs: None,
+    )
+
+
 async def run_gateway(upstream_command: list[str]) -> None:
     from mcp.client.stdio import stdio_client
     from mcp.server import Server
+    from mcp.server.stdio import stdio_server
     from mcp.types import Tool
 
     from mcp import ClientSession, StdioServerParameters
@@ -142,3 +171,56 @@ async def run_gateway(upstream_command: list[str]) -> None:
         async def list_tools() -> list[Tool]:
             result = await upstream.list_tools()
             return result.tools
+
+        @gateway.call_tool()
+        async def call_tool(name: str, arguments: dict | None) -> list:
+            args = arguments or {}
+            loop = asyncio.get_running_loop()
+
+            # 1. Autorisation AVANT tout forward. Fail-closed sur toute exception.
+            try:
+                await loop.run_in_executor(_executor, _authorize, name, args)
+            except (ApprovalRequiredException, SecurityException) as exc:
+                approval_id = getattr(exc, "approval_id", None)
+                suffix = f" (approval_id={approval_id})" if approval_id else ""
+                sys.stderr.write(f"[agentguard-mcp-gateway] BLOCKED {name}: {exc}\n")
+                raise RuntimeError(f"Blocked by CerbereAG: {exc}{suffix}") from exc
+            except Exception as exc:
+                sys.stderr.write(
+                    f"[agentguard-mcp-gateway] DENIED {name}: authorization error: {exc}\n"
+                )
+                raise RuntimeError(
+                    "Blocked by CerbereAG: authorization unavailable (fail-closed)"
+                ) from exc
+
+            # 2. Seulement ici : transmission au serveur MCP réel.
+            result = await upstream.call_tool(name, args)
+
+            if result.isError:
+                text = " ".join(getattr(c, "text", "") for c in result.content).strip()
+                raise RuntimeError(text or "Upstream tool error")
+
+            return list(result.content)
+
+        # 3. Le transport vers l'agent démarre une fois les handlers en place.
+        async with stdio_server() as (read, write):
+            await gateway.run(read, write, gateway.create_initialization_options())
+
+
+def main() -> None:
+    argv = sys.argv[1:]
+
+    if "--" not in argv or not argv[argv.index("--") + 1 :]:
+        sys.stderr.write(
+            "Usage: python mcp_gateway.py -- <commande du serveur MCP amont>\n"
+            "Ex   : python mcp_gateway.py -- npx -y "
+            "@modelcontextprotocol/server-filesystem /tmp\n"
+        )
+        sys.exit(2)
+
+    upstream_command = argv[argv.index("--") + 1 :]
+    asyncio.run(run_gateway(upstream_command))
+
+
+if __name__ == "__main__":
+    main()
