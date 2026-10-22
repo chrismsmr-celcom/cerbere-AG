@@ -110,8 +110,12 @@ class PolicyEngine:
         self._arbiter_open_until = 0.0
         self._arbiter_breaker_logged = False
 
+        # Whitelist : FERMÉE par défaut. Un agent non couvert par une
+        # whitelist (policy scoped à d'autres agents) est refusé.
+        # AGENTGUARD_WHITELIST_FAIL_MODE=open rétablit l'ancien
+        # comportement historique (agent non couvert -> autorisé).
         self._whitelist_fail_closed = os.getenv(
-            "AGENTGUARD_WHITELIST_FAIL_MODE", "open"
+            "AGENTGUARD_WHITELIST_FAIL_MODE", "closed"
         ).strip().lower() in ("closed", "fail_closed", "true", "1")
 
         self._redis_client = None

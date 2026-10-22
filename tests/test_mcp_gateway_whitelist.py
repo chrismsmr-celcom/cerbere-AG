@@ -5,6 +5,9 @@ Tests de la correction "Whitelist MCP symbolique" :
    (entrées "xxx:*") — c'est ce qui rendait la gateway inopérante.
 2. La gateway construit sa whitelist depuis AGENTGUARD_MCP_ALLOWED_TOOLS
    et refuse de démarrer (exit 2) si elle est vide.
+3. Le mode d'échec de la whitelist est FERMÉ par défaut : un agent non
+   couvert par une policy scoped est refusé (opt-in "open" pour l'ancien
+   comportement historique).
 
 Aucun test ne nécessite le package `mcp` : on teste les fonctions
 pures (_tool_matches_whitelist, _build_allowed_tools) et le
@@ -70,7 +73,9 @@ class TestPolicyEngineWildcard:
         assert engine.check_tool_policy("web_search", {}, 10.0).passed
         assert not engine.check_tool_policy("web_search_v2", {}, 10.0).passed
 
-    def test_scoped_agent_wildcard(self):
+    def test_scoped_agent_wildcard(self, monkeypatch):
+        # Mode par défaut (fermé) : on retire toute surcharge de l'environnement.
+        monkeypatch.delenv("AGENTGUARD_WHITELIST_FAIL_MODE", raising=False)
         engine = PolicyEngine(
             policies=[
                 {
@@ -88,11 +93,9 @@ class TestPolicyEngineWildcard:
         assert not engine.check_tool_policy(
             "mcp:db2:query", {"sql": "SELECT 1"}, 10.0, agent_id="agent-42"
         ).passed
-        # COMPORTEMENT DOCUMENTÉ (fail-open, historique) : un agent NON
-        # listé dans une policy scoped et sans whitelist globale n'est
-        # soumis à AUCUNE whitelist -> ALLOW. Voir audit point "whitelist
-        # scoped fail-open" pour la décision éventuelle de durcir.
-        assert engine.check_tool_policy(
+        # Fail-closed par défaut : un agent NON listé dans une policy scoped
+        # est refusé (il n'est couvert par aucune whitelist).
+        assert not engine.check_tool_policy(
             "mcp:db:query", {"sql": "SELECT 1"}, 10.0, agent_id="other-agent"
         ).passed
 
@@ -155,10 +158,10 @@ class TestBuildAllowedTools:
         # La policy envoyée à AgentGuard est bien la whitelist explicite
         policies = mod.guard.policy_engine.policies
         assert policies[0]["allowed_tools"] == mod.ALLOWED_TOOLS
-        # ==============================================================
 
 
-# 3. FAIL MODE DE LA WHITELIST SCOPED (open par défaut, closed opt-in)
+# ==============================================================
+# 3. FAIL MODE DE LA WHITELIST SCOPED (closed par défaut, open opt-in)
 # ==============================================================
 
 
@@ -166,33 +169,35 @@ class TestWhitelistFailMode:
     def _engine(self, policies):
         return PolicyEngine(policies=policies)
 
-    def test_default_open_keeps_historical_behavior(self, monkeypatch):
+    def _scoped_policy(self):
+        return [
+            {
+                "type": "tool_whitelist",
+                "allowed_tools": ["mcp:db:*"],
+                "agents": ["agent-42"],
+            }
+        ]
+
+    def test_default_is_closed_for_uncovered_agent(self, monkeypatch):
         monkeypatch.delenv("AGENTGUARD_WHITELIST_FAIL_MODE", raising=False)
-        engine = self._engine(
-            [
-                {
-                    "type": "tool_whitelist",
-                    "allowed_tools": ["mcp:db:*"],
-                    "agents": ["agent-42"],
-                }
-            ]
-        )
-        # Comportement historique : agent non couvert -> ALLOW
+        engine = self._engine(self._scoped_policy())
+        # Défaut sécurisé : un agent non déclaré est refusé.
+        check = engine.check_tool_policy("anything", {}, 10.0, agent_id="other-agent")
+        assert not check.passed
+        assert check.risk_level.name == "CRITICAL"
+        assert check.metadata["fail_mode"] == "closed"
+
+    def test_open_opt_in_keeps_historical_behavior(self, monkeypatch):
+        monkeypatch.setenv("AGENTGUARD_WHITELIST_FAIL_MODE", "open")
+        engine = self._engine(self._scoped_policy())
+        # Ancien comportement, désormais explicite : agent non couvert -> ALLOW
         assert engine.check_tool_policy(
             "anything", {}, 10.0, agent_id="other-agent"
         ).passed
 
     def test_closed_blocks_uncovered_agent(self, monkeypatch):
         monkeypatch.setenv("AGENTGUARD_WHITELIST_FAIL_MODE", "closed")
-        engine = self._engine(
-            [
-                {
-                    "type": "tool_whitelist",
-                    "allowed_tools": ["mcp:db:*"],
-                    "agents": ["agent-42"],
-                }
-            ]
-        )
+        engine = self._engine(self._scoped_policy())
         check = engine.check_tool_policy(
             "mcp:db:query", {"sql": "SELECT 1"}, 10.0, agent_id="other-agent"
         )
@@ -202,15 +207,7 @@ class TestWhitelistFailMode:
 
     def test_closed_still_allows_scoped_agent(self, monkeypatch):
         monkeypatch.setenv("AGENTGUARD_WHITELIST_FAIL_MODE", "closed")
-        engine = self._engine(
-            [
-                {
-                    "type": "tool_whitelist",
-                    "allowed_tools": ["mcp:db:*"],
-                    "agents": ["agent-42"],
-                }
-            ]
-        )
+        engine = self._engine(self._scoped_policy())
         assert engine.check_tool_policy(
             "mcp:db:query", {"sql": "SELECT 1"}, 10.0, agent_id="agent-42"
         ).passed
