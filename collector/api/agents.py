@@ -3,7 +3,6 @@
 import json
 import secrets
 
-from flask import g, jsonify
 from flask import g, jsonify, request
 
 from collector.api.helpers import (

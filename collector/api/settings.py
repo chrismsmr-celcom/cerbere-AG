@@ -26,6 +26,7 @@ from collector.api.helpers import (
     _db_run,
     _human_auth,
     _iso_utc,
+    _request_agent_id,
     api_bp,
     logger,
 )
@@ -45,6 +46,18 @@ SETTINGS_SCHEMA = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (org_id, agent_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_runtime_modes (
+        org_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'enforce',
+        updated_by TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (org_id, agent_id),
+        CHECK (mode IN ('enforce', 'shadow'))
     )
     """,
     """
@@ -645,3 +658,121 @@ def api_test_alert_destination():
         return jsonify({"ok": False, "error": "Could not reach the destination"}), 502
     ok = 200 <= resp.status_code < 300
     return jsonify({"ok": ok, "status": resp.status_code}), (200 if ok else 502)
+# ═══════════════════════════════════════════════════════════════
+# MODE D'EXÉCUTION PAR AGENT : ENFORCE / SHADOW
+# ═══════════════════════════════════════════════════════════════
+
+AGENT_RUNTIME_MODES = ("enforce", "shadow")
+
+
+@api_bp.route("/api/agent/mode", methods=["GET"], endpoint="api_agent_runtime_mode")
+def api_agent_runtime_mode():
+    """Configuration du mode consultée par le SDK avec sa clé API."""
+    if not require_auth():
+        return _err("Unauthorized", 401)
+
+    agent_id = _request_agent_id()
+    if not _valid_agent_id(agent_id):
+        return _err("Invalid agent id")
+
+    try:
+        ensure_settings_tables()
+        row, _ = _db_run(
+            """
+            SELECT mode, updated_at
+            FROM agent_runtime_modes
+            WHERE org_id = ? AND agent_id = ?
+            """,
+            (g.org_id, agent_id),
+            fetch="one",
+        )
+    except Exception as exc:
+        logger.error(
+            "agent_runtime_mode_read_failed",
+            agent_id=agent_id,
+            error=str(exc),
+        )
+        return _err("Unable to load agent runtime mode", 500)
+
+    # Le mode par défaut est toujours Enforce.
+    return jsonify({
+        "agent_id": agent_id,
+        "mode": row[0] if row else "enforce",
+        "updated_at": _iso_utc(row[1]) if row and row[1] else None,
+    })
+
+
+@api_bp.route(
+    "/api/agents/<agent_id>/mode",
+    methods=["PUT"],
+    endpoint="api_set_agent_runtime_mode",
+)
+def api_set_agent_runtime_mode(agent_id):
+    """Modification du mode réservée à une session humaine authentifiée."""
+    if not _human_auth():
+        return _err("Human session required", 401)
+
+    if not _valid_agent_id(agent_id):
+        return _err("Invalid agent id")
+
+    body = request.get_json(silent=True) or {}
+    mode = str(body.get("mode") or "").strip().lower()
+
+    if mode not in AGENT_RUNTIME_MODES:
+        return _err("mode must be 'enforce' or 'shadow'")
+
+    org_id = g.org_id
+    actor = _actor()
+
+    try:
+        ensure_settings_tables()
+
+        # Vérifie que l'agent appartient bien à l'organisation.
+        agent, _ = _db_run(
+            """
+            SELECT 1 FROM connected_agents
+            WHERE org_id = ? AND agent_id = ?
+            """,
+            (org_id, agent_id),
+            fetch="one",
+        )
+
+        if not agent:
+            return _err("Agent not found", 404)
+
+        _db_run(
+            """
+            INSERT INTO agent_runtime_modes
+                (org_id, agent_id, mode, updated_by)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (org_id, agent_id) DO UPDATE SET
+                mode = excluded.mode,
+                updated_by = excluded.updated_by,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (org_id, agent_id, mode, actor),
+            commit=True,
+        )
+
+    except Exception as exc:
+        logger.error(
+            "agent_runtime_mode_write_failed",
+            agent_id=agent_id,
+            mode=mode,
+            error=str(exc),
+        )
+        return _err("Unable to save agent runtime mode", 500)
+
+    logger.warning(
+        "agent_runtime_mode_changed",
+        org_id=org_id,
+        agent_id=agent_id,
+        mode=mode,
+        by=actor,
+    )
+
+    return jsonify({
+        "agent_id": agent_id,
+        "mode": mode,
+        "updated": True,
+    }), 200

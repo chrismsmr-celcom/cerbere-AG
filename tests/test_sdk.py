@@ -223,3 +223,46 @@ class TestTokenCountingOffline:
             sdk_module._count_text_tokens("gpt-4o", "hello world, this is a test") > 0
         )
         assert sdk_module._count_text_tokens("gpt-4o", "") == 0
+    def test_shadow_mode_records_would_block_but_executes_tool(
+        self, guard, monkeypatch
+    ):
+        """Shadow logs a local deny but still executes the tool."""
+        monkeypatch.setenv("AGENTGUARD_SHADOW_MODE", "true")
+        guard.shadow_mode = True
+        guard._ensure_connected = Mock()
+        guard._send_to_collector = Mock()
+
+        guard.policy_engine.check_tool_policy = Mock(
+            return_value=SecurityCheck(
+                "policy",
+                False,
+                RiskLevel.CRITICAL,
+                "dangerous command",
+            )
+        )
+
+        executed = []
+
+        def dangerous_tool(**kwargs):
+            executed.append(kwargs)
+            return "executed"
+
+        result = guard.guard_tool_call(
+            "execute_command",
+            {"command": "rm -rf /"},
+            dangerous_tool,
+        )
+
+        assert result == "executed"
+        assert executed == [{"command": "rm -rf /"}]
+
+        shadow = guard.spans[-1].output_data["cerbere_shadow"]
+
+        assert shadow["would_have_action"] == "BLOCK"
+        assert shadow["would_have_blocked"] is True
+        assert guard.spans[-1].blocked is False
+
+    def test_shadow_mode_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("AGENTGUARD_SHADOW_MODE", raising=False)
+
+        assert AgentGuard().shadow_mode is False
