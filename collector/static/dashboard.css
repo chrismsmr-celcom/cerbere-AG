@@ -896,3 +896,25 @@ button.pill:hover { border-color: #5a4b3f; color: var(--text); }
 #policyEditorModal {
   z-index: 2000;
 }
+/* ── Shadow mode toggle (85-agent-mode.js) ── */
+.agent-mode-toggle {
+    margin-left: auto;
+    border: 1px solid var(--border, #2a2f3a);
+    background: transparent;
+    color: var(--text, #d7dce5);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .15s ease;
+    white-space: nowrap;
+}
+.agent-mode-toggle:hover { border-color: var(--accent, #4f8cff); }
+.agent-mode-toggle:disabled { opacity: .5; cursor: wait; }
+.agent-mode-toggle.shadow-on {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    color: #1a1a1a;
+}
+.connect-agent-row .agent-mode-toggle { flex: none; }
