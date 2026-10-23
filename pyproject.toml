@@ -24,11 +24,13 @@ classifiers = [
     "Topic :: Security",
     # Pas de classifier "License :: ..." (conflit PEP 639)
 ]
+
 dependencies = [
     "requests>=2.31.0,<3.0.0",
     "structlog>=23.2.0,<25.0.0",
     "tiktoken>=0.7.0,<1.0.0",
     "pydantic>=2.7.0,<3.0.0",
+    "argon2-cffi>=23.1.0,<24.0.0",
 ]
 
 [project.optional-dependencies]

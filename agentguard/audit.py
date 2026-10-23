@@ -4,27 +4,33 @@ Log append-only cryptographiquement chaîné pour SOC 2 Type II compliance.
 
 Architecture :
   - Chaque entrée contient le hash SHA256 de l'entrée précédente
-  - Signature Ed25519 périodique de la racine (toutes les N entrées)
+  - Checkpoints signés Ed25519 : la signature couvre le VRAI état de la
+    chaîne (head_hash + compte d'entrées), pas un message cosmétique.
+  - Le déclenchement des checkpoints repose sur le compte PERSISTÉ
+    (DB/fichier), pas sur un compteur RAM perdu au redémarrage.
+  - Ancre externe anti-truncation : publish_anchor() journalise le
+    head_hash dans un système append-only indépendant.
   - Détection instantanée de toute modification
   - Stockage Postgres (primary) + JSON Lines (backup)
 
 Garanties :
   - Append-only (pas de UPDATE/DELETE)
   - Integrity : toute modification casse la chaîne
-  - Non-repudiation : signatures cryptographiques
+  - Non-repudiation : signatures cryptographiques vérifiées
   - Verifiable : rejouer la chaîne = preuve d'intégrité
 """
 
 import hashlib
 import json
+import logging
 import os
-import secrets
-import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any
+
+from agentguard.ids import uuid7
 
 try:
     import psycopg
@@ -33,6 +39,8 @@ try:
     PSYCOPG_AVAILABLE = True
 except ImportError:
     PSYCOPG_AVAILABLE = False
+
+logger = logging.getLogger("agentguard.audit")
 
 
 class AuditEventType(str, Enum):
@@ -69,6 +77,9 @@ class AuditEventType(str, Enum):
     POLICY_LOADED = "policy_loaded"
     POLICY_CHANGED = "policy_changed"
     CONFIG_CHANGED = "config_changed"
+
+    # Ancrage de la hash-chain
+    AUDIT_CHECKPOINT = "audit_checkpoint"
 
     # Opérations
     LLM_CALL = "llm_call"
@@ -123,7 +134,7 @@ class ImmutableAuditLog:
     """
     Audit log append-only avec chaînage cryptographique.
 
-    Usage:
+    Usage :
         log = ImmutableAuditLog(database_url="postgresql://...", signing_key=...)
         log.log_event(
             event_type=AuditEventType.PROMPT_BLOCKED,
@@ -135,14 +146,17 @@ class ImmutableAuditLog:
             risk_level="critical",
         )
 
-        # Vérification d'intégrité
+        # Vérification d'intégrité (chaîne + signatures)
         is_valid, report = log.verify_chain()
     """
 
-    # Signe toutes les N entrées (0 = jamais)
+    # Signe toutes les N entrées persistées (0 = jamais)
     DEFAULT_SIGN_EVERY = 100
     # Limite de taille par entrée (protection anti-DoS)
     MAX_DETAILS_SIZE = 10_000  # caractères
+    # Nom de table unifié (l'ancien code mélangeait audit_log
+    # et agentguard.audit_log — la table est créée sans schéma)
+    _TABLE = "audit_log"
 
     def __init__(
         self,
@@ -150,16 +164,16 @@ class ImmutableAuditLog:
         backup_file: str | None = None,
         signing_key_pem: str | None = None,
         sign_every: int = DEFAULT_SIGN_EVERY,
+        verifying_key_pem: str | None = None,
     ):
         self.database_url = database_url
         self.backup_file = backup_file or os.getenv(
             "AGENTGUARD_AUDIT_BACKUP", "/tmp/agentguard_audit.jsonl"
         )
         self.sign_every = sign_every
-        self._entry_counter = 0
-        self._write_lock = threading.RLock()
+        self._write_lock = __import__("threading").RLock()
 
-        # Signing (optionnel)
+        # Signer (côté collector : clé privée)
         self._signer = None
         if signing_key_pem:
             try:
@@ -167,7 +181,28 @@ class ImmutableAuditLog:
 
                 self._signer = DecisionSigner(signing_key_pem)
             except Exception as e:
-                print(f"[AuditLog] Signing unavailable: {e}")
+                logger.warning("AuditLog signing unavailable: %s", e)
+
+        # Vérificateur (clé publique) : permet à verify_chain()
+        # de VÉRIFIER réellement les checkpoints signés.
+        self._verifier = None
+        verify_pem = verifying_key_pem or os.getenv(
+            "AGENTGUARD_SIGNING_PUBLIC_KEY"
+        )
+        if verify_pem:
+            try:
+                from agentguard.signing import DecisionVerifier
+
+                self._verifier = DecisionVerifier(verify_pem)
+            except Exception as e:
+                logger.warning("AuditLog verification unavailable: %s", e)
+        elif self._signer is not None:
+            try:
+                from agentguard.signing import DecisionVerifier
+
+                self._verifier = DecisionVerifier(self._signer.public_key_pem())
+            except Exception as e:
+                logger.warning("AuditLog self-verification unavailable: %s", e)
 
         # Initialise le stockage
         self._init_storage()
@@ -179,8 +214,8 @@ class ImmutableAuditLog:
                 conn = psycopg.connect(self.database_url)
                 conn.autocommit = True
                 with conn.cursor() as cur:
-                    cur.execute("""
-                        CREATE TABLE IF NOT EXISTS audit_log (
+                    cur.execute(f"""
+                        CREATE TABLE IF NOT EXISTS {self._TABLE} (
                             event_id TEXT PRIMARY KEY,
                             seq_no BIGSERIAL UNIQUE,
                             timestamp DOUBLE PRECISION NOT NULL,
@@ -197,22 +232,24 @@ class ImmutableAuditLog:
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
-                    cur.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_audit_seq 
-                        ON audit_log(seq_no)
+                    cur.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_audit_seq
+                        ON {self._TABLE}(seq_no)
                     """)
-                    cur.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_audit_org_time 
-                        ON audit_log(org_id, timestamp DESC)
+                    cur.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_audit_org_time
+                        ON {self._TABLE}(org_id, timestamp DESC)
                     """)
-                    cur.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_audit_type 
-                        ON audit_log(event_type, timestamp DESC)
+                    cur.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_audit_type
+                        ON {self._TABLE}(event_type, timestamp DESC)
                     """)
                 conn.close()
-                print("[AuditLog] Postgres storage initialized")
+                logger.info("AuditLog Postgres storage initialized")
             except Exception as e:
-                print(f"[AuditLog] Postgres init failed, using file backup: {e}")
+                logger.warning(
+                    "AuditLog Postgres init failed, using file backup: %s", e
+                )
                 self.database_url = None
 
         # Backup file (toujours actif en parallèle)
@@ -227,12 +264,13 @@ class ImmutableAuditLog:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT entry_hash from agentguard.audit_log "
+                        f"SELECT entry_hash FROM {self._TABLE} "
                         "ORDER BY seq_no DESC LIMIT 1"
                     )
                     row = cur.fetchone()
                 conn.close()
                 return row[0] if row else "GENESIS"
+
             except Exception:
                 pass
 
@@ -248,6 +286,64 @@ class ImmutableAuditLog:
                 pass
 
         return "GENESIS"
+
+    def _get_entry_count(self) -> int:
+        """
+        Compte d'entrées PERSISTÉ (DB d'abord, fichier ensuite).
+        Jamais un compteur RAM : il serait perdu au redémarrage et
+        fausserait la périodicité des checkpoints.
+        """
+        if self.database_url and PSYCOPG_AVAILABLE:
+            try:
+                conn = psycopg.connect(self.database_url)
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT COUNT(*) FROM {self._TABLE}")
+                    n = cur.fetchone()[0]
+                conn.close()
+                return n
+            except Exception:
+                pass
+        if os.path.exists(self.backup_file):
+            try:
+                with open(self.backup_file, "r") as f:
+                    return sum(1 for line in f if line.strip())
+            except Exception:
+                pass
+        return 0
+
+    def _sign_checkpoint(self, entry: AuditEntry) -> None:
+        """
+        Signe l'état RÉEL de la chaîne au moment de cette entrée.
+
+        Le payload signé (compatible DecisionSigner.sign_decision) couvre :
+          - request_id  : l'event_id du checkpoint
+          - action      : "audit_checkpoint"
+          - policy_name : le head_hash (racine de la chaîne)
+          - policy_version : le nombre d'entrées de la chaîne
+          - reason      : human-readable
+
+        Vérifier cette signature = prouver que la chaîne avait
+        exactement ce head_hash et ce compte d'entrées à ce moment T.
+        Toute suppression d'entrées antérieures (truncation) casse la preuve.
+        """
+        if not self._signer:
+            return
+        count = self._get_entry_count()
+        signed = self._signer.sign_decision(
+            {
+                "request_id": entry.event_id,
+                "action": "audit_checkpoint",
+                "policy_name": f"chain:{entry.entry_hash}",
+                "policy_version": count,
+                "reason": (
+                    f"Audit chain checkpoint at {count} entries, "
+                    f"head_hash={entry.entry_hash}"
+                ),
+            }
+        )
+        # On stocke le payload signé complet (avec signature + expiration)
+        # pour que verify_chain() puisse vérifier la signature.
+        entry.signature = json.dumps(signed, sort_keys=True)
 
     def log_event(
         self,
@@ -278,7 +374,7 @@ class ImmutableAuditLog:
             prev_hash = self._get_last_hash()
 
             entry = AuditEntry(
-                event_id=secrets.token_hex(16),
+                event_id=uuid7(),
                 timestamp=time.time(),
                 event_type=(
                     event_type.value
@@ -296,28 +392,17 @@ class ImmutableAuditLog:
 
             entry.entry_hash = entry.compute_hash()
 
-            self._entry_counter += 1
-
+            # Checkpoint périodique : déclenché sur le compte PERSISTÉ.
             if (
                 self._signer
                 and self.sign_every > 0
-                and self._entry_counter % self.sign_every == 0
+                and self._get_entry_count() % self.sign_every == 0
             ):
                 try:
-                    payload = {
-                        "request_id": entry.event_id,
-                        "action": "audit_checkpoint",
-                        "policy_name": "audit_chain",
-                        "policy_version": 1,
-                        "reason": (f"Checkpoint at entry {self._entry_counter}"),
-                    }
-
-                    signed = self._signer.sign_decision(payload)
-
-                    entry.signature = signed.get("signature")
-
+                    self._sign_checkpoint(entry)
                 except Exception as exc:
-                    print(f"[AuditLog] Signing failed: {exc}")
+                    # Le checkpoint raté n'est pas fatal, mais visible
+                    logger.warning("AuditLog checkpoint signing failed: %s", exc)
 
             self._persist(entry)
 
@@ -331,9 +416,9 @@ class ImmutableAuditLog:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
                     cur.execute(
-                        """
-                        INSERT INTO audit_log 
-                        (event_id, timestamp, event_type, org_id, actor, resource, 
+                        f"""
+                        INSERT INTO {self._TABLE}
+                        (event_id, timestamp, event_type, org_id, actor, resource,
                          action, details, risk_level, prev_hash, entry_hash, signature)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
@@ -355,20 +440,21 @@ class ImmutableAuditLog:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"[AuditLog] Postgres persist failed: {e}")
+                logger.warning("AuditLog Postgres persist failed: %s", e)
 
         # Backup file (append-only, toujours)
         try:
             with open(self.backup_file, "a") as f:
                 f.write(json.dumps(entry.to_dict()) + "\n")
         except Exception as e:
-            print(f"[AuditLog] File backup failed: {e}")
+            logger.warning("AuditLog file backup failed: %s", e)
 
     def verify_chain(self, limit: int | None = None) -> tuple:
         """
-        Vérifie l'intégrité de toute la chaîne.
+        Vérifie l'intégrité de toute la chaîne : chaînage, hashs,
+        ET signatures de checkpoints (réellement vérifiées).
 
-        Retourne:
+        Retourne :
             (is_valid: bool, report: dict)
         """
         entries = self._load_entries(limit=limit)
@@ -427,10 +513,58 @@ class ImmutableAuditLog:
                     }
                 )
 
-            # Vérifie signature si présente
-            if entry.get("signature") and self._signer:
-                # On pourrait vérifier la signature ici
-                report["signatures_verified"] += 1
+            # Vérifie RÉELLEMENT la signature de checkpoint si présente
+            if entry.get("signature") and self._verifier:
+                try:
+                    signed_payload = json.loads(entry["signature"])
+                except Exception as exc:
+                    report["signatures_failed"] += 1
+                    report["violations"].append(
+                        {
+                            "type": "checkpoint_malformed",
+                            "event_id": entry["event_id"],
+                            "error": str(exc),
+                        }
+                    )
+                    prev_hash = entry.get("entry_hash")
+                    continue
+
+                try:
+                    if self._verifier.verify(signed_payload):
+                        # Cohérence : le head_hash signé doit être celui
+                        # de l'entrée checkpoint elle-même.
+                        signed_head = str(
+                            signed_payload.get("policy_name", "")
+                        ).removeprefix("chain:")
+                        if signed_head and signed_head != entry.get("entry_hash"):
+                            report["signatures_failed"] += 1
+                            report["violations"].append(
+                                {
+                                    "type": "checkpoint_head_mismatch",
+                                    "event_id": entry["event_id"],
+                                    "signed_head": signed_head,
+                                    "actual_head": entry.get("entry_hash"),
+                                }
+                            )
+                        else:
+                            report["signatures_verified"] += 1
+                    else:
+                        report["signatures_failed"] += 1
+                        report["violations"].append(
+                            {
+                                "type": "invalid_checkpoint_signature",
+                                "event_id": entry["event_id"],
+                            }
+                        )
+                except Exception as exc:
+                    report["signatures_failed"] += 1
+                    report["violations"].append(
+                        {
+                            "type": "checkpoint_verify_error",
+                            "event_id": entry["event_id"],
+                            "error": str(exc),
+                        }
+                    )
 
             prev_hash = entry.get("entry_hash")
 
@@ -438,6 +572,34 @@ class ImmutableAuditLog:
         report["status"] = "valid" if is_valid else "tampered"
 
         return is_valid, report
+
+    def publish_anchor(self) -> dict:
+        """
+        Ancre externe anti-truncation : journalise le head_hash dans un
+        système append-only INDÉPENDANT de la DB.
+
+        Sans ancre externe, un attaquant avec accès à la DB peut
+        supprimer les entrées postérieures au dernier checkpoint et
+        rejouer une chaîne "valide". La divergence entre l'ancre
+        publiée et la DB prouve la truncation.
+
+        Options gratuites pour publier (documente celle que tu choisis) :
+          - ce log WARNING ci-dessous, capturé par Loki/CloudWatch
+            (les logs cloud sont append-only et rétentions longues)
+          - un gist GitHub en écriture via API (l'historique de commits
+            est immuable et publiquement horodaté)
+          - un objet versionné dans un bucket S3
+        """
+        head = self._get_last_hash()
+        count = self._get_entry_count()
+        anchor = {
+            "head_hash": head,
+            "entry_count": count,
+            "ts": time.time(),
+        }
+        # Log append-only : simple, aucune dépendance.
+        logger.warning("AUDIT_ANCHOR %s", json.dumps(anchor, sort_keys=True))
+        return anchor
 
     def _load_entries(self, limit: int | None = None) -> list[dict]:
         """Charge les entrées depuis Postgres ou fichier."""
@@ -447,7 +609,7 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-                    query = "SELECT * from agentguard.audit_log ORDER BY seq_no ASC"
+                    query = f"SELECT * FROM {self._TABLE} ORDER BY seq_no ASC"
                     if limit:
                         query += f" LIMIT {int(limit)}"
                     cur.execute(query)
@@ -455,7 +617,7 @@ class ImmutableAuditLog:
                 conn.close()
                 return entries
             except Exception as e:
-                print(f"[AuditLog] Postgres load failed: {e}")
+                logger.warning("AuditLog Postgres load failed: %s", e)
 
         # Fallback fichier
         if os.path.exists(self.backup_file):
@@ -468,7 +630,7 @@ class ImmutableAuditLog:
                             if limit and len(entries) >= limit:
                                 break
             except Exception as e:
-                print(f"[AuditLog] File load failed: {e}")
+                logger.warning("AuditLog file load failed: %s", e)
 
         return entries
 
@@ -487,23 +649,23 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) from agentguard.audit_log")
+                    cur.execute(f"SELECT COUNT(*) FROM {self._TABLE}")
                     stats["total_entries"] = cur.fetchone()[0]
 
-                    cur.execute("""
-                        SELECT event_type, COUNT(*) 
-                        from agentguard.audit_log GROUP BY event_type
+                    cur.execute(f"""
+                        SELECT event_type, COUNT(*)
+                        FROM {self._TABLE} GROUP BY event_type
                     """)
                     stats["by_event_type"] = dict(cur.fetchall())
 
-                    cur.execute("""
-                        SELECT risk_level, COUNT(*) 
-                        from agentguard.audit_log GROUP BY risk_level
+                    cur.execute(f"""
+                        SELECT risk_level, COUNT(*)
+                        FROM {self._TABLE} GROUP BY risk_level
                     """)
                     stats["by_risk_level"] = dict(cur.fetchall())
 
-                    cur.execute("""
-                        SELECT MIN(timestamp), MAX(timestamp) from agentguard.audit_log
+                    cur.execute(f"""
+                        SELECT MIN(timestamp), MAX(timestamp) FROM {self._TABLE}
                     """)
                     row = cur.fetchone()
                     if row and row[0]:
@@ -515,8 +677,8 @@ class ImmutableAuditLog:
                         ).isoformat()
                 conn.close()
             except Exception as e:
-                print(f"[AuditLog] Stats failed: {e}")
-        # ✅ NEW : Fallback SQLite / fichier (pour tests)
+                logger.warning("AuditLog stats failed: %s", e)
+        # Fallback SQLite / fichier (pour tests)
         elif os.path.exists(self.backup_file):
             try:
                 entries = []
@@ -558,7 +720,7 @@ class ImmutableAuditLog:
                             max(timestamps)
                         ).isoformat()
             except Exception as e:
-                print(f"[AuditLog] File stats failed: {e}")
+                logger.warning("AuditLog file stats failed: %s", e)
 
         # Vérification rapide (uniquement les 1000 dernières entrées)
         try:
@@ -602,7 +764,7 @@ class ImmutableAuditLog:
                         conditions.append("timestamp <= %s")
                         params.append(until)
 
-                    query = "SELECT * from agentguard.audit_log"
+                    query = f"SELECT * FROM {self._TABLE}"
                     if conditions:
                         query += " WHERE " + " AND ".join(conditions)
                     query += " ORDER BY seq_no DESC LIMIT %s"
@@ -613,10 +775,11 @@ class ImmutableAuditLog:
                 conn.close()
                 return rows
             except Exception as e:
-                print(f"[AuditLog] Query failed: {e}")
+                logger.warning("AuditLog query failed: %s", e)
 
         # Fallback fichier
         results = []
+
         for entry in reversed(self._load_entries()):
             if org_id and entry.get("org_id") != org_id:
                 continue
