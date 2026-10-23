@@ -33,8 +33,8 @@ from argon2.exceptions import VerifyMismatchError
 
 # Paramètres Argon2id : coûteux à casser par brute force, rapide à vérifier.
 _PH = PasswordHasher(
-    time_cost=3,          # itérations
-    memory_cost=65536,    # 64 Mo de RAM requises par hash
+    time_cost=3,  # itérations
+    memory_cost=65536,  # 64 Mo de RAM requises par hash
     parallelism=2,
     hash_len=32,
     salt_len=16,
@@ -215,6 +215,7 @@ def parse_agent_api_key(key: str) -> dict[str, str] | None:
 # KEY HASHING — Argon2id (v0.6.2+), SHA256 legacy accepté en lecture
 # ═══════════════════════════════════════════════════════════════
 
+
 def hash_key(key: str) -> str:
     """
     Hash une clé API pour stockage DB (ne jamais stocker la clé en clair).
@@ -254,6 +255,7 @@ def verify_key(stored: str, key: str) -> bool:
     # Ancien format SHA256 nu (legacy) — vérification puis re-hash
     # par l'appelant (voir needs_rehash).
     return hashlib.sha256(key.encode()).hexdigest() == stored
+
 
 def needs_rehash(stored: str) -> bool:
     """True si le hash stocké est un SHA256 legacy à migrer vers Argon2id."""

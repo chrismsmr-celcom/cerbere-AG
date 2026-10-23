@@ -1103,7 +1103,6 @@ def init_identity_tables():
 # ═══════════════════════════════════════════════════════════════
 
 
-
 def resolve_agent_identity(api_key: str) -> dict | None:
     if not api_key or not api_key.startswith("ag_"):
         return None

@@ -34,7 +34,8 @@ cryptography>=50.0.0,<51.0.0   # Chiffrement (si besoin) — >=50.0.0 : fix CVE-
 # ----------------------------------------------------------------------------
 # SECURITY - Détection (Budget)
 # ----------------------------------------------------------------------------
-tiktoken>=0.7.0,<1.0.0          # Tokenisation précise pour le calcul de coût
+tiktoken>=0.7.0,<1.0.0             # Tokenisation précise pour le calcul de coût
+argon2-cffi>=23.1.0,<24.0.0         
 # presidio-analyzer / presidio-anonymizer : retirés du core (2026-09-24).
 # Non importés nulle part dans le code actuel, et leur pin cryptography<44.1
 # bloquait la mise à jour de sécurité de `cryptography`. Toujours disponibles

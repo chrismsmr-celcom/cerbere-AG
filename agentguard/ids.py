@@ -29,9 +29,9 @@ def uuid7() -> str:
     b[3] = (ts_ms >> 16) & 0xFF
     b[4] = (ts_ms >> 8) & 0xFF
     b[5] = ts_ms & 0xFF
-    b[6] = (rand[0] & 0x0F) | 0x70   # version 7
+    b[6] = (rand[0] & 0x0F) | 0x70  # version 7
     b[7] = rand[1]
-    b[8] = (rand[2] & 0x3F) | 0x80   # variant RFC 4122
+    b[8] = (rand[2] & 0x3F) | 0x80  # variant RFC 4122
     b[9:] = rand[3:]
     return str(uuid.UUID(bytes=bytes(b)))
 

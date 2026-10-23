@@ -186,9 +186,7 @@ class ImmutableAuditLog:
         # Vérificateur (clé publique) : permet à verify_chain()
         # de VÉRIFIER réellement les checkpoints signés.
         self._verifier = None
-        verify_pem = verifying_key_pem or os.getenv(
-            "AGENTGUARD_SIGNING_PUBLIC_KEY"
-        )
+        verify_pem = verifying_key_pem or os.getenv("AGENTGUARD_SIGNING_PUBLIC_KEY")
         if verify_pem:
             try:
                 from agentguard.signing import DecisionVerifier

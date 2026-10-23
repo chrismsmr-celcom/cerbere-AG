@@ -809,7 +809,7 @@ class AgentGuard:
             )
         )
 
-                # 4. Refuser les violations de politique qui ne sont pas
+        # 4. Refuser les violations de politique qui ne sont pas
         #    explicitement configurées pour une approbation humaine.
         if (
             not check.passed
@@ -825,9 +825,7 @@ class AgentGuard:
 
         # 5. Approbation humaine (HITL).
         if requires_approval:
-            approval_id = self._stable_approval_id(
-                self.agent_id, tool_name, params
-            )
+            approval_id = self._stable_approval_id(self.agent_id, tool_name, params)
 
             # Une entrée locale ne doit pas autoriser éternellement
             # une action. Le serveur doit également expirer ses demandes.
@@ -887,9 +885,7 @@ class AgentGuard:
                             "tool_name": tool_name,
                             "params": params,
                             "reason": getattr(check, "details", "")
-                            or "; ".join(
-                                getattr(runtime_decision, "reasons", [])[:5]
-                            ),
+                            or "; ".join(getattr(runtime_decision, "reasons", [])[:5]),
                         },
                         headers=self._headers(),
                         timeout=self.collector_timeout,

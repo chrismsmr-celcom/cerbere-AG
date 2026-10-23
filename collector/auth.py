@@ -222,8 +222,7 @@ def _ensure_key_lookup_columns() -> None:
                 conn = get_pg_conn()
                 try:
                     conn.cursor().execute(
-                        f"ALTER TABLE {table} "
-                        "ADD COLUMN IF NOT EXISTS key_lookup TEXT"
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS key_lookup TEXT"
                     )
                     conn.commit()
                 finally:
@@ -235,9 +234,7 @@ def _ensure_key_lookup_columns() -> None:
                     cur.execute(f"PRAGMA table_info({table})")
                     cols = [r[1] for r in cur.fetchall()]
                     if "key_lookup" not in cols:
-                        cur.execute(
-                            f"ALTER TABLE {table} ADD COLUMN key_lookup TEXT"
-                        )
+                        cur.execute(f"ALTER TABLE {table} ADD COLUMN key_lookup TEXT")
                     conn.commit()
                 finally:
                     conn.close()
@@ -1263,9 +1260,7 @@ def _lookup_org_by_key(key: str):
 
         if has_name and name:
             try:
-                g.api_key_name = str(
-                    name
-                )  # sert à nommer les agents des anciens SDK
+                g.api_key_name = str(name)  # sert à nommer les agents des anciens SDK
             except RuntimeError:
                 pass
         return org_id
