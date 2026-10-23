@@ -1111,20 +1111,20 @@ def resolve_agent_identity(api_key: str) -> dict | None:
     if len(parts) != 5:
         return None
 
-    _, _tenant_id, _org_id, _agent_id, _ = parts
     key_hash = _hash_key(api_key)
+    row = None
 
     try:
         if is_postgres():
             conn = get_pg_conn()
-            cur = conn.cursor()
             try:
+                cur = conn.cursor()
                 cur.execute(
                     """
                     SELECT agent_id, org_id, tenant_id, name
                     FROM agents
                     WHERE key_hash = %s AND active = TRUE
-                """,
+                    """,
                     (key_hash,),
                 )
                 row = cur.fetchone()
@@ -1132,14 +1132,14 @@ def resolve_agent_identity(api_key: str) -> dict | None:
                 conn.close()
         else:
             conn = sqlite3.connect(_get_db_path())
-            cur = conn.cursor()
             try:
+                cur = conn.cursor()
                 cur.execute(
                     """
                     SELECT agent_id, org_id, tenant_id, name
                     FROM agents
                     WHERE key_hash = ? AND active = 1
-                """,
+                    """,
                     (key_hash,),
                 )
                 row = cur.fetchone()
@@ -1147,6 +1147,11 @@ def resolve_agent_identity(api_key: str) -> dict | None:
                 conn.close()
 
         if not row:
+            logger.warning(
+                "agent_key_lookup_failed",
+                key_prefix="_".join(parts[:4]),
+                db_path=_get_db_path() if not is_postgres() else "postgres",
+            )
             return None
 
         return {
@@ -1155,8 +1160,12 @@ def resolve_agent_identity(api_key: str) -> dict | None:
             "tenant_id": row[2],
             "agent_name": row[3],
         }
+
     except Exception as e:
-        logger.debug("agent_key_resolution_failed", error=str(e))
+        logger.warning(
+            "agent_key_resolution_failed",
+            error=str(e),
+        )
         return None
 
 

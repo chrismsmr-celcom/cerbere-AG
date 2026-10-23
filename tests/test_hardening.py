@@ -1,6 +1,7 @@
 import os
 
 os.environ["AGENTGUARD_FLASK_SECRET"] = "test-secret"
+os.environ["AGENTGUARD_CORS_ORIGINS"] = "http://localhost:3000"
 os.environ["AGENTGUARD_DB_TYPE"] = "sqlite"
 os.environ["AGENTGUARD_API_KEY"] = "test-api-key"
 

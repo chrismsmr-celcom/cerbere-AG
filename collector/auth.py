@@ -1,6 +1,22 @@
-"""Authentication + session management + RBAC + passwordless magic-link login."""
+"""
+Authentication + session management + RBAC + passwordless magic-link login.
+
+CHANGEMENTS v0.6.2 (audit sécurité) :
+  - hash_key : SHA256 non salé -> Argon2id (via agentguard.identity)
+  - Nouvelle colonne key_lookup (HMAC-SHA256 avec pepper serveur) pour
+    retrouver une clé par égalité SQL : Argon2 seul n'est pas cherchable
+    (sel aléatoire). Une DB volée sans le pepper ne révèle rien.
+  - _lookup_org_by_key : lookup key_lookup -> sinon SHA256 legacy ->
+    verify_key -> migration EN LIGNE vers Argon2 (zéro downtime).
+  - _session_org_id : valide les sessions par key_lookup (ou key_hash
+    legacy pour les sessions déjà émises).
+  - create_api_key : stocke key_hash (Argon2) + key_lookup (HMAC).
+  - Migration automatique des colonnes key_lookup au démarrage
+    (api_keys, user_api_keys, agents) — idempotent.
+"""
 
 import hashlib
+import hmac
 import os
 import secrets
 import smtplib
@@ -22,6 +38,15 @@ from flask import (
     url_for,
 )
 
+from agentguard.identity import (
+    hash_key as _argon2_hash_key,
+)
+from agentguard.identity import (
+    needs_rehash as _id_needs_rehash,
+)
+from agentguard.identity import (
+    verify_key as _id_verify_key,
+)
 from collector.db import (
     _get_db_path,
     get_pg_conn,
@@ -148,8 +173,84 @@ def safe_compare(a: str, b: str) -> bool:
         return False
 
 
-def hash_key(key: str) -> str:
+# Pepper serveur pour le token de lookup (déterministe mais non
+# dérivable depuis la seule DB). Ne JAMAIS committer.
+_KEY_LOOKUP_SECRET = (
+    os.environ.get("AGENTGUARD_KEY_LOOKUP_SECRET")
+    or os.environ.get("AGENTGUARD_FLASK_SECRET")
+    or ""
+)
+
+
+def _lookup_token(key: str) -> str:
+    """
+    Token de recherche DÉTERMINISTE pour retrouver une ligne par clé.
+    HMAC-SHA256(clé, pepper) : cherchable en SQL (égalité), mais sans
+    le pepper (env/secret manager), une DB volée ne révèle rien.
+    """
+    if not _KEY_LOOKUP_SECRET:
+        raise RuntimeError(
+            "AGENTGUARD_KEY_LOOKUP_SECRET (or AGENTGUARD_FLASK_SECRET) "
+            "must be configured to authenticate API keys"
+        )
+    return hmac.new(
+        _KEY_LOOKUP_SECRET.encode("utf-8"),
+        str(key).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _legacy_sha256(key: str) -> str:
+    """SHA256 nu — UNIQUEMENT pour retrouver/migrer les anciennes lignes."""
     return hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+
+
+def hash_key(key: str) -> str:
+    """Argon2id (via agentguard.identity) — pour STOCKER/vérifier.
+
+    ⚠️ NON déterministe (sel aléatoire) : ne JAMAIS l'utiliser pour
+    chercher une ligne en SQL. Pour un lookup, utiliser _lookup_token().
+    """
+    return _argon2_hash_key(str(key))
+
+
+def _ensure_key_lookup_columns() -> None:
+    """Ajoute la colonne key_lookup si absente (idempotent, démarrage)."""
+    for table in ("api_keys", "user_api_keys", "agents"):
+        try:
+            if is_postgres():
+                conn = get_pg_conn()
+                try:
+                    conn.cursor().execute(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS key_lookup TEXT"
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+            else:
+                conn = sqlite3.connect(_get_db_path())
+                try:
+                    cur = conn.cursor()
+                    cur.execute(f"PRAGMA table_info({table})")
+                    cols = [r[1] for r in cur.fetchall()]
+                    if "key_lookup" not in cols:
+                        cur.execute(f"ALTER TABLE {table} ADD COLUMN key_lookup TEXT")
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as exc:
+            logger.warning(
+                "key_lookup_migration_failed",
+                table=table,
+                error=str(exc),
+            )
+
+
+# Migration au premier import du module (une fois par process).
+try:
+    _ensure_key_lookup_columns()
+except Exception:
+    pass
 
 
 def _hash_magic_token(token: str) -> str:
@@ -473,11 +574,18 @@ def _ensure_api_keys_table():
                     id TEXT PRIMARY KEY,
                     org_id TEXT NOT NULL,
                     key_hash TEXT NOT NULL UNIQUE,
+                    key_lookup TEXT,
                     name TEXT NOT NULL,
                     active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_api_keys_key_lookup
+                ON api_keys(key_lookup)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -490,11 +598,18 @@ def _ensure_api_keys_table():
                     id TEXT PRIMARY KEY,
                     org_id TEXT NOT NULL,
                     key_hash TEXT NOT NULL UNIQUE,
+                    key_lookup TEXT,
                     name TEXT NOT NULL,
                     active INTEGER DEFAULT 1,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_api_keys_key_lookup
+                ON api_keys(key_lookup)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -1041,45 +1156,114 @@ def _clear_human_session(response):
 
 
 def _lookup_org_by_key(key: str):
-    """Résout une clé API en organisation.
+    """Résout une clé API en organisation (Argon2 + lookup HMAC).
 
-    Cherche dans `api_keys` (clés admin / historiques) PUIS dans `user_api_keys` (clés générées
-    depuis le dashboard). Avant ce correctif, seule la première table était consultée : un agent
-    utilisant une clé du dashboard recevait 401 sur /span et /api/approvals, donc rien
-    n'apparaissait jamais dans le dashboard (0 approbation, 0 agent)."""
+    Cherche dans `api_keys` (clés admin / historiques) PUIS dans
+    `user_api_keys` (clés générées depuis le dashboard).
+
+    Stratégie (Argon2 = sel aléatoire, donc PAS cherchable par égalité) :
+      1. lookup par key_lookup (HMAC avec pepper serveur)
+      2. sinon lookup par SHA256 nu (lignes legacy pré-migration)
+      3. si trouvé : verify_key(stored_hash, key) — vraie vérification
+         cryptographique (Argon2 natif, ou SHA256 legacy accepté)
+      4. si le hash stocké est un SHA256 legacy -> MIGRATION EN LIGNE :
+         UPDATE key_hash = Argon2, key_lookup = HMAC (zéro downtime)
+    """
     if not key:
         return None
 
-    key_hash = hash_key(key)
+    tok = _lookup_token(key)
+    legacy = _legacy_sha256(key)
     p = sql_placeholder()
     active = "TRUE" if is_postgres() else "1"
 
     for table, has_name in (("api_keys", False), ("user_api_keys", True)):
-        try:
-            conn = get_pg_conn() if is_postgres() else sqlite3.connect(_get_db_path())
+        row = None
+
+        # 1 & 2 : lookup par token HMAC, puis par SHA256 legacy
+        for lookup_col, lookup_val in (
+            ("key_lookup", tok),
+            ("key_hash", legacy),
+        ):
             try:
-                cur = conn.cursor()
-                cols = "org_id, name" if has_name else "org_id"
-                cur.execute(
-                    f"SELECT {cols} FROM {table} WHERE key_hash = {p} AND active = {active} LIMIT 1",
-                    (key_hash,),
+                conn = (
+                    get_pg_conn() if is_postgres() else sqlite3.connect(_get_db_path())
                 )
-                row = cur.fetchone()
-            finally:
-                conn.close()
-        except Exception as exc:
-            logger.debug("api_key_lookup_failed", table=table, error=str(exc))
+                try:
+                    cur = conn.cursor()
+                    cols = "id, org_id, key_hash"
+                    if has_name:
+                        cols += ", name"
+                    cur.execute(
+                        f"SELECT {cols} FROM {table} "
+                        f"WHERE {lookup_col} = {p} "
+                        f"AND active = {active} LIMIT 1",
+                        (lookup_val,),
+                    )
+                    row = cur.fetchone()
+                finally:
+                    conn.close()
+            except Exception as exc:
+                logger.debug(
+                    "api_key_lookup_failed",
+                    table=table,
+                    error=str(exc),
+                )
+                continue
+
+            if row:
+                break
+
+        if not row:
             continue
 
-        if row:
-            if has_name:
+        key_id, org_id, stored_hash = row[0], row[1], row[2]
+        name = row[3] if has_name and len(row) > 3 else None
+
+        # 3 : VÉRIFICATION cryptographique (Argon2 ou SHA256 legacy)
+        if not _id_verify_key(stored_hash, key):
+            logger.warning(
+                "api_key_verify_failed",
+                table=table,
+                org_id=org_id,
+            )
+            return None
+
+        # 4 : migration en ligne si le hash stocké est un SHA256 legacy
+        if _id_needs_rehash(stored_hash):
+            try:
+                conn = (
+                    get_pg_conn() if is_postgres() else sqlite3.connect(_get_db_path())
+                )
                 try:
-                    g.api_key_name = str(
-                        row[1]
-                    )  # sert à nommer les agents des anciens SDK
-                except RuntimeError:
-                    pass
-            return row[0]
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"UPDATE {table} "
+                        f"SET key_hash = {p}, key_lookup = {p} "
+                        f"WHERE id = {p}",
+                        (_argon2_hash_key(key), tok, key_id),
+                    )
+                    conn.commit()
+                    logger.info(
+                        "api_key_hash_migrated_to_argon2",
+                        table=table,
+                        org_id=org_id,
+                    )
+                finally:
+                    conn.close()
+            except Exception as exc:
+                logger.warning(
+                    "api_key_migration_failed",
+                    table=table,
+                    error=str(exc),
+                )
+
+        if has_name and name:
+            try:
+                g.api_key_name = str(name)  # sert à nommer les agents des anciens SDK
+            except RuntimeError:
+                pass
+        return org_id
 
     return None
 
@@ -1161,12 +1345,14 @@ def resolve_org_id(key: str):
         return None
 
 
-def _session_token(org_id: str, key_hash: str) -> str:
+def _session_token(org_id: str, key_lookup: str) -> str:
+    # NOTE v0.6.2 : le payload contient désormais le token de lookup
+    # (HMAC déterministe), PAS le hash Argon2 (non déterministe).
     return current_app.auth_serializer.dumps(
         {
             "type": "api_key",
             "org_id": org_id,
-            "key_hash": key_hash,
+            "key_lookup": key_lookup,
         }
     )
 
@@ -1189,17 +1375,26 @@ def _session_org_id(token: str):
         return None
 
     org_id = payload.get("org_id")
-    key_hash = payload.get("key_hash")
 
-    if not org_id or not key_hash:
+    # Sessions nouvelles (key_lookup) ET legacy (key_hash) acceptées.
+    key_lookup = payload.get("key_lookup") or payload.get("key_hash")
+
+    if not org_id or not key_lookup:
         return None
 
     if org_id == "default":
         api_key = current_app.config.get("API_KEY")
 
+        # Accepte les sessions nouvelles (HMAC) et legacy (SHA256 nu).
         if api_key and safe_compare(
-            key_hash,
-            hash_key(api_key),
+            key_lookup,
+            _lookup_token(api_key),
+        ):
+            return "default"
+
+        if api_key and safe_compare(
+            key_lookup,
+            _legacy_sha256(api_key),
         ):
             return "default"
 
@@ -1217,13 +1412,14 @@ def _session_org_id(token: str):
                 SELECT 1
                 FROM api_keys
                 WHERE org_id = {p}
-                  AND key_hash = {p}
+                  AND (key_lookup = {p} OR key_hash = {p})
                   AND active = TRUE
                 LIMIT 1
                 """,
                 (
                     org_id,
-                    key_hash,
+                    key_lookup,
+                    key_lookup,
                 ),
             )
 
@@ -1240,13 +1436,14 @@ def _session_org_id(token: str):
             SELECT 1
             FROM api_keys
             WHERE org_id = ?
-              AND key_hash = ?
+              AND (key_lookup = ? OR key_hash = ?)
               AND active = 1
             LIMIT 1
             """,
             (
                 org_id,
-                key_hash,
+                key_lookup,
+                key_lookup,
             ),
         )
 
@@ -2179,10 +2376,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 ╚██████╗███████╗██║  ██║██████╔╝███████╗██║  ██║███████╗
  ╚═════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝</pre>
 <pre class="ascii-dog">
-     /\\___/\\     /\\___/\\     /\\___/\\
+     /\___/\     /\___/\     /\___/\
     ( o   o )   ( o   o )   ( o   o )
      (  =^= )    (  =^= )    (  =^= )
- ___/ \\___/ ____ \\___/ ____ \\___/ \\___</pre>
+ ___/ \___/ ____ \___/ ____ \___/ \___</pre>
                 <p class="brand-tagline">
                     The <em>Three-Headed Guardian</em> of AI agents.<br>
                     Runtime security, observability and audit for your stack.
@@ -2768,10 +2965,10 @@ LOGIN_HTML = r"""<!DOCTYPE html>
 ╚██████╗███████╗██║  ██║██████╔╝███████╗██║  ██║███████╗
  ╚═════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝</pre>
 <pre class="ascii-dog">
-     /\\___/\\     /\\___/\\     /\\___/\\
+     /\___/\     /\___/\     /\___/\
     ( o   o )   ( o   o )   ( o   o )
      (  =^= )    (  =^= )    (  =^= )
- ___/ \\___/ ____ \\___/ ____ \\___/ \\___</pre>
+ ___/ \___/ ____ \___/ ____ \___/ \___</pre>
                 <p class="brand-tagline">
                     The <em>Three-Headed Guardian</em> of AI agents.<br>
                     Runtime security, observability and audit for your stack.
@@ -3537,11 +3734,14 @@ def auth_login():
         MAGIC_LINK_COOKIE,
     )
 
+    # ✅ FIX v0.6.2 : le cookie de session porte le token de lookup
+    # HMAC (déterministe), PAS hash_key(key) qui devient aléatoire
+    # avec Argon2. _session_org_id() valide via key_lookup.
     response.set_cookie(
         cookie_name,
         _session_token(
             org_id,
-            hash_key(key),
+            _lookup_token(key),
         ),
         httponly=True,
         secure=bool(
@@ -3709,11 +3909,18 @@ def _ensure_api_keys_table_safe():
                         id TEXT PRIMARY KEY,
                         org_id TEXT NOT NULL,
                         key_hash TEXT NOT NULL UNIQUE,
+                        key_lookup TEXT,
                         name TEXT NOT NULL,
                         active BOOLEAN DEFAULT TRUE,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                cur.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_user_api_keys_key_lookup
+                    ON user_api_keys(key_lookup)
+                    """
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -3726,11 +3933,18 @@ def _ensure_api_keys_table_safe():
                         id TEXT PRIMARY KEY,
                         org_id TEXT NOT NULL,
                         key_hash TEXT NOT NULL UNIQUE,
+                        key_lookup TEXT,
                         name TEXT NOT NULL,
                         active INTEGER DEFAULT 1,
                         created_at TEXT DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                cur.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_user_api_keys_key_lookup
+                    ON user_api_keys(key_lookup)
+                    """
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -3754,8 +3968,11 @@ def create_api_key():
         name = data.get("name", "Default API Key").strip() or "Default API Key"
 
         # 1. Générer et hasher
+        # ✅ v0.6.2 : key_hash = Argon2 (stockage sûr) et
+        # key_lookup = HMAC (recherche SQL par égalité).
         raw_key = "ag_live_" + secrets.token_urlsafe(32)
         key_hash = hash_key(raw_key)
+        key_lookup = _lookup_token(raw_key)
         key_id = str(uuid.uuid4())
 
         # 2. S'assurer que la table existe (appel unique et sûr)
@@ -3769,10 +3986,10 @@ def create_api_key():
                 cur = conn.cursor()
                 cur.execute(
                     f"""
-                    INSERT INTO user_api_keys (id, org_id, key_hash, name, active, created_at)
-                    VALUES ({p}, {p}, {p}, {p}, TRUE, CURRENT_TIMESTAMP)
+                    INSERT INTO user_api_keys (id, org_id, key_hash, key_lookup, name, active, created_at)
+                    VALUES ({p}, {p}, {p}, {p}, {p}, TRUE, CURRENT_TIMESTAMP)
                 """,
-                    (key_id, org_id, key_hash, name),
+                    (key_id, org_id, key_hash, key_lookup, name),
                 )
                 conn.commit()
             finally:
@@ -3783,10 +4000,10 @@ def create_api_key():
                 cur = conn.cursor()
                 cur.execute(
                     """
-                    INSERT INTO user_api_keys (id, org_id, key_hash, name, active, created_at)
-                    VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                    INSERT INTO user_api_keys (id, org_id, key_hash, key_lookup, name, active, created_at)
+                    VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
                 """,
-                    (key_id, org_id, key_hash, name),
+                    (key_id, org_id, key_hash, key_lookup, name),
                 )
                 conn.commit()
             finally:

@@ -102,8 +102,10 @@ def create_app() -> Flask:
     )
 
     # ==========================================================
-    # CORS
+    # CORS — FAIL-HARD, même en dev
     # ==========================================================
+    # Règle d'or : AUCUN chemin de code ne combine une origine
+    # wildcard ("*") avec supports_credentials=True.
 
     cors_origins = [
         origin.strip()
@@ -114,32 +116,61 @@ def create_app() -> Flask:
         if origin.strip()
     ]
 
+    # Opt-in explicite, dev uniquement, SANS credentials.
+    allow_all_dev = (
+        os.environ.get("AGENTGUARD_CORS_ALLOW_ALL", "false").lower() == "true"
+    )
+
     if is_production:
         if not cors_origins:
             raise RuntimeError(
                 "AGENTGUARD_CORS_ORIGINS must be configured "
                 "in production. Example: "
-                "AGENTGUARD_CORS_ORIGINS="
-                "https://dashboard.example.com"
+                'AGENTGUARD_CORS_ORIGINS="https://dashboard.example.com"'
             )
-
+        if "*" in cors_origins:
+            # Impossible de démarrer avec un wildcard en prod.
+            raise RuntimeError(
+                "AGENTGUARD_CORS_ORIGINS contains '*' — wildcard origins "
+                "are forbidden in production"
+            )
         CORS(
             app,
             origins=cors_origins,
             supports_credentials=True,
         )
-
         logger.info(
             "cors_strict_mode",
             origins=cors_origins,
         )
 
     else:
-        CORS(
-            app,
-            origins=cors_origins or "*",
-            supports_credentials=True,
-        )
+        if not cors_origins and not allow_all_dev:
+            # Dev aussi doit être explicite : fail-hard par défaut.
+            raise RuntimeError(
+                "AGENTGUARD_CORS_ORIGINS is empty. Set explicit origins, "
+                "e.g. http://localhost:3000. To allow all origins "
+                "WITHOUT credentials in dev only, set "
+                "AGENTGUARD_CORS_ALLOW_ALL=true (never with cookies/sessions)."
+            )
+        if allow_all_dev:
+            # Grand-écart dev : tout autoriser MAIS sans credentials.
+            CORS(
+                app,
+                origins="*",
+                supports_credentials=False,
+            )
+            logger.warning("cors_allow_all_dev_only_no_credentials")
+        else:
+            CORS(
+                app,
+                origins=cors_origins,
+                supports_credentials=True,
+            )
+            logger.info(
+                "cors_dev_mode",
+                origins=cors_origins,
+            )
 
     # ==========================================================
     # RATE LIMITING
@@ -429,7 +460,7 @@ def create_app() -> Flask:
             if "://" in limiter_storage
             else limiter_storage
         ),
-        cors_origins=cors_origins or ["*"],
+        cors_origins=cors_origins,
         static_folder=static_folder,
     )
 

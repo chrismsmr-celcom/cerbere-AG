@@ -14,6 +14,7 @@ import requests
 import structlog
 import tiktoken
 
+from .ids import uuid7
 from .masking import SpanMasker
 from .models import (
     AgentDisconnectedException,
@@ -134,9 +135,8 @@ class AgentGuard:
         self.block_on_high = block_on_high
         self.debug = debug
         self.total_spent = 0.0
-        self.trace_id = hashlib.sha256(
-            f"{time.time_ns()}:{id(self)}".encode()
-        ).hexdigest()[:16]
+        # UUIDv7 : collision-safe, triable chronologiquement
+        self.trace_id = uuid7()
         self.spans: list[GuardSpan] = []
         self.collector_timeout = max(
             0.5, float(os.getenv("AGENTGUARD_COLLECTOR_TIMEOUT", "5.0"))
@@ -516,7 +516,7 @@ class AgentGuard:
         @wraps(func)
         def wrapper(*args, **kwargs):
             self._ensure_connected()
-            span_id = hashlib.sha256(f"{time.time_ns()}".encode()).hexdigest()[:16]
+            span_id = uuid7()
             start = time.time()
             input_text = self._extract_input(args, kwargs)
             checks = [
@@ -692,9 +692,7 @@ class AgentGuard:
     ):
         self._ensure_connected()
 
-        span_id = hashlib.sha256(f"{time.time_ns()}:{tool_name}".encode()).hexdigest()[
-            :16
-        ]
+        span_id = uuid7()
         start = time.time()
         budget_remaining = max(0.0, self.max_budget - self.total_spent)
 
@@ -813,16 +811,17 @@ class AgentGuard:
 
         # 4. Refuser les violations de politique qui ne sont pas
         #    explicitement configurées pour une approbation humaine.
-        if not check.passed and not requires_approval:
-            if (
-                check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
-                and self.block_on_high
-            ):
-                record_block(
-                    "policy_block",
-                    f"[POLICY] {check.details}",
-                )
-                raise SecurityException(f"AgentGuard BLOCK: {check.details}")
+        if (
+            not check.passed
+            and not requires_approval
+            and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+            and self.block_on_high
+        ):
+            record_block(
+                "policy_block",
+                f"[POLICY] {check.details}",
+            )
+            raise SecurityException(f"AgentGuard BLOCK: {check.details}")
 
         # 5. Approbation humaine (HITL).
         if requires_approval:
@@ -886,9 +885,7 @@ class AgentGuard:
                             "tool_name": tool_name,
                             "params": params,
                             "reason": getattr(check, "details", "")
-                            or "; ".join(
-                                getattr(runtime_decision, "reasons", [])[:5]
-                            ),
+                            or "; ".join(getattr(runtime_decision, "reasons", [])[:5]),
                         },
                         headers=self._headers(),
                         timeout=self.collector_timeout,

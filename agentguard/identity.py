@@ -13,6 +13,11 @@ Rôles RBAC :
 Format clé API agent :
   ag_{tenant_short}_{org_short}_{agent_short}_{random32}
   Ex: ag_acme_fin_prod_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+
+Hachage des clés :
+  Argon2id (sel intégré, coûteux en CPU/RAM) depuis la v0.6.2.
+  Les anciens hashs SHA256 non salés sont acceptés en lecture
+  (verify_key) et migrés transparentment via needs_rehash().
 """
 
 import hashlib
@@ -22,6 +27,22 @@ import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
+
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+# Paramètres Argon2id : coûteux à casser par brute force, rapide à vérifier.
+_PH = PasswordHasher(
+    time_cost=3,  # itérations
+    memory_cost=65536,  # 64 Mo de RAM requises par hash
+    parallelism=2,
+    hash_len=32,
+    salt_len=16,
+)
+
+# Préfixes de version de hash (migration progressive SHA256 → Argon2id)
+_HASH_ALGO_ARGON2 = "argon2id"
+_HASH_ALGO_LEGACY_SHA256 = "sha256"
 
 
 class Role(str, Enum):
@@ -190,9 +211,55 @@ def parse_agent_api_key(key: str) -> dict[str, str] | None:
     }
 
 
+# ═══════════════════════════════════════════════════════════════
+# KEY HASHING — Argon2id (v0.6.2+), SHA256 legacy accepté en lecture
+# ═══════════════════════════════════════════════════════════════
+
+
 def hash_key(key: str) -> str:
-    """Hash SHA256 pour stockage DB (ne jamais stocker la clé en clair)."""
-    return hashlib.sha256(key.encode()).hexdigest()
+    """
+    Hash une clé API pour stockage DB (ne jamais stocker la clé en clair).
+
+    Argon2id avec sel unique intégré : deux clés identiques produisent
+    des hashs différents, et le brute force est ~1000x plus coûteux
+    qu'avec SHA256.
+
+    Format stocké : "{algo}${hash_argon2}"
+    Ex : "argon2id$argon2id$v=19$m=65536,t=3,p=2$..."
+    """
+    return f"{_HASH_ALGO_ARGON2}${_PH.hash(key.encode()).decode()}"
+
+
+def verify_key(stored: str, key: str) -> bool:
+    """
+    Vérifie une clé contre son hash stocké.
+
+    - Préfixe "argon2id$" → vérification Argon2 native.
+    - Hash SHA256 nu (legacy, pré-v0.6.2) → accepté puis migré par
+      l'appelant via needs_rehash().
+    - Retourne toujours en temps comparable (anti timing attack).
+    """
+    if not stored or not key:
+        # Longueur constante pour éviter les timing attacks
+        _PH.hash(b"x" * 32)
+        return False
+
+    if stored.startswith(f"{_HASH_ALGO_ARGON2}$"):
+        try:
+            return _PH.verify(stored.split("$", 1)[1], key.encode())
+        except VerifyMismatchError:
+            return False
+        except Exception:
+            return False
+
+    # Ancien format SHA256 nu (legacy) — vérification puis re-hash
+    # par l'appelant (voir needs_rehash).
+    return hashlib.sha256(key.encode()).hexdigest() == stored
+
+
+def needs_rehash(stored: str) -> bool:
+    """True si le hash stocké est un SHA256 legacy à migrer vers Argon2id."""
+    return not stored.startswith(f"{_HASH_ALGO_ARGON2}$")
 
 
 # ═══════════════════════════════════════════════════════════════

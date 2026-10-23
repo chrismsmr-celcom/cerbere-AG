@@ -19,7 +19,6 @@ from flask import Blueprint, g, jsonify, request
 from agentguard.identity import (
     Role,
     generate_agent_api_key,
-    hash_key,
     short_id,
 )
 from collector.auth import (
@@ -28,7 +27,7 @@ from collector.auth import (
     resolve_full_identity,
 )
 from collector.authz import Action, authorize
-from collector.db import get_pg_conn, get_sqlite_conn, is_postgres
+from collector.db import _hash_key, get_pg_conn, get_sqlite_conn, is_postgres
 
 logger = structlog.get_logger("agentguard.identity")
 
@@ -542,7 +541,7 @@ def create_agent():
 
         agent_id = f"agent_{short_id(length=12)}"
         api_key = generate_agent_api_key(target_tenant_id, org_id, agent_id)
-        key_hash = hash_key(api_key)
+        key_hash = _hash_key(api_key)
         key_prefix = "_".join(api_key.split("_")[:4])
 
         if is_postgres():
