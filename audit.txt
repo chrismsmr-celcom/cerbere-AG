@@ -1,0 +1,69 @@
+﻿C:\Users\USER\Downloads\cerbere-AG\agentguard\audit.py:6: - Chaque entrée contient le hash SHA256 de l'entrée précédente
+C:\Users\USER\Downloads\cerbere-AG\agentguard\audit.py:112: """Calcule le hash SHA256 de l'entrée."""
+C:\Users\USER\Downloads\cerbere-AG\agentguard\audit.py:113: return hashlib.sha256(self.canonical_json().encode()).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\agentguard\identity.py:194: """Hash SHA256 pour stockage DB (ne jamais stocker la clé en clair)."""
+C:\Users\USER\Downloads\cerbere-AG\agentguard\identity.py:195: return hashlib.sha256(key.encode()).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\agentguard\judges.py:21: - Cache Redis des verdicts par sha256 du texte scrube : sur un corpus
+C:\Users\USER\Downloads\cerbere-AG\agentguard\judges.py:117: "ag:judge:" + hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:3: Modes (AGENTGUARD_MASKING) :
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:6: incident — idem dans les spans, MAIS le vault local conserve une copie
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:23: class SpanMasker:
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:25: self.mode = (mode or os.getenv("AGENTGUARD_MASKING", "redact")).lower()
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:30: warnings.warn("AGENTGUARD_MASKING=off : spans non masqués. Dev uniquement.")
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:34: digest = hashlib.sha256(plaintext.encode()).hexdigest()[:12]
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:38: """Remplace chaque secret/PII par un token. En mode incident,
+C:\Users\USER\Downloads\cerbere-AG\agentguard\masking.py:46: if self.mode == "incident" and self.vault is not None:
+C:\Users\USER\Downloads\cerbere-AG\agentguard\ml.py:390: return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:17: from .masking import SpanMasker
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:18: from .vault import IncidentVault
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:137: self.trace_id = hashlib.sha256(
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:206: #   incident        : ouverture explicite via start_incident_capture(),
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:208: self._vault: IncidentVault | None = None
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:209: self._masker = SpanMasker(
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:210: mode=os.getenv("AGENTGUARD_MASKING", "redact"),
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:211: vault=None,  # branché au démarrage d'incident
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:235: digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:330: #   incident → idem + copie chiffrée (AES-256-GCM, clé du collector)
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:356: # Flush best-effort du vault d'incident : ne jamais ralentir l'agent
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:364: def start_incident_capture(self, ttl_seconds: int = 6 * 3600) -> str:
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:365: """Ouvre un incident auprès du collector et active la capture
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:366: scellée jusqu'au TTL. Retourne l'incident_id.
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:373: f"{self.collector_url}/v1/incident/start",
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:380: self._vault = IncidentVault(
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:382: incident_id=data["incident_id"],
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:383: key=bytes.fromhex(data["key"]),  # clé AES-256 fournie par le collector
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:386: self._masker.mode = "incident"
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:389: "incident_capture_started",
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:390: incident_id=data["incident_id"],
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:393: return data["incident_id"]
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:395: def stop_incident_capture(self) -> None:
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:396: """Ferme l'incident : flush final, retour au masquage redact."""
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:402: logger.info("incident_capture_stopped")
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:514: span_id = hashlib.sha256(f"{time.time_ns()}".encode()).hexdigest()[:16]
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:690: span_id = hashlib.sha256(f"{time.time_ns()}:{tool_name}".encode()).hexdigest()[
+C:\Users\USER\Downloads\cerbere-AG\agentguard\sdk.py:1035: "incident_capture_active": self._vault is not None
+C:\Users\USER\Downloads\cerbere-AG\agentguard\tool_guard.py:151: return hashlib.sha256(payload).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:1: """IncidentVault — mapping chiffré token → valeur claire, TTL court.
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:4: collector à l'ouverture de l'incident (/v1/incident/start). Le SDK chiffre
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:8: 1. admin du dashboard → POST /v1/incident/start {ttl_seconds}
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:9: → collector génère incident_id + key (AES 256-bit), répond au SDK
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:11: 3. SDK flush le ciphertext vers POST /v1/incident/sealed
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:12: 4. Forensic → POST /v1/incident/reveal {incident_id, token, reason}
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:14: 5. TTL expiré → collector purge incidents_mapping : irrécupérable
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:24: class IncidentVault:
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:25: def __init__(self, collector_url: str, incident_id: str, key: bytes,
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:28: raise ValueError("clé d'incident : 32 octets attendus (AES-256)")
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:31: self.incident_id = incident_id
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:43: Appelée par SpanMasker en mode incident. Ne lève PAS si le TTL est
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:59: """Envoie le ciphertext au collector (POST /v1/incident/sealed).
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:66: "incident_id": self.incident_id,
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:73: f"{self.collector_url}/v1/incident/sealed", json=body, timeout=10
+C:\Users\USER\Downloads\cerbere-AG\agentguard\vault.py:81: """Fin d'incident : flush final. Après close(), le mode repasse
+C:\Users\USER\Downloads\cerbere-AG\collector\auth\utils.py:22: return hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\collector\auth\utils.py:26: return hashlib.sha256(token.encode("utf-8")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\collector\approvals.py:88: return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\collector\auth.py:152: return hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\collector\auth.py:156: return hashlib.sha256(token.encode("utf-8")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\collector\db.py:1164: return hashlib.sha256(key.encode("utf-8")).hexdigest()
+C:\Users\USER\Downloads\cerbere-AG\collector\legal.py:243: <li>Détecter, enquêter et prévenir les abus, fraudes ou incidents de sécurité</li>
+C:\Users\USER\Downloads\cerbere-AG\collector\platform_identity.py:152: return hashlib.sha256(key.encode()).hexdigest()

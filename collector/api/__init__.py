@@ -23,6 +23,7 @@ import collector.api.approvals
 import collector.api.dashboard
 import collector.api.decisions
 import collector.api.health
+import collector.api.incidents
 import collector.api.insights
 import collector.api.metrics
 import collector.api.settings
