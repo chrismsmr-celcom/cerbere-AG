@@ -59,6 +59,12 @@ class AuditEventType(str, Enum):
     AGENT_DISCONNECTED = "agent_disconnected"
     AGENT_RECONNECTED = "agent_reconnected"
 
+    # Capture d'incident (preuves scellées)
+    INCIDENT_OPENED = "incident_opened"
+    INCIDENT_CLOSED = "incident_closed"
+    INCIDENT_REVEALED = "incident_revealed"
+    INCIDENT_REVEAL_DENIED = "incident_reveal_denied"
+
     # Système
     POLICY_LOADED = "policy_loaded"
     POLICY_CHANGED = "policy_changed"

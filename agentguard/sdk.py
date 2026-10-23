@@ -15,7 +15,6 @@ import structlog
 import tiktoken
 
 from .masking import SpanMasker
-from .vault import IncidentVault
 from .models import (
     AgentDisconnectedException,
     ApprovalRejectedException,
@@ -31,6 +30,7 @@ from .models import (
 from .policy import PolicyEngine
 from .runtime import RuntimeRiskEngine, TrajectoryAnalyzer
 from .taint import FlowTracker, TaintLevel
+from .vault import IncidentVault
 
 logger = structlog.get_logger("agentguard.sdk")
 
@@ -203,8 +203,9 @@ class AgentGuard:
 
         # Masquage des spans avant envoi au collector.
         #   redact (défaut) : rien n'est récupérable, jamais.
-        #   incident        : ouverture explicite via start_incident_capture(),
-        #                    mapping chiffré avec TTL (clé détenue par le collector).
+        #   incident        : autorisé par un admin humain depuis le dashboard, puis
+        #                    activé via start_incident_capture() ; mapping scellé avec
+        #                    la CLÉ PUBLIQUE de l'incident, TTL, clé privée au collector.
         self._vault: IncidentVault | None = None
         self._masker = SpanMasker(
             mode=os.getenv("AGENTGUARD_MASKING", "redact"),
@@ -327,7 +328,7 @@ class AgentGuard:
             ).model_dump()
             # Masquage PII/secrets AVANT tout envoi :
             #   redact  → hash unidirectionnel, aucune récupération
-            #   incident → idem + copie chiffrée (AES-256-GCM, clé du collector)
+            #   incident → idem + copie scellée (clé publique de l'incident)
             #             conservée dans le vault local puis flushée
             payload = self._masker.mask_span(payload)
             resp = requests.post(
@@ -353,47 +354,51 @@ class AgentGuard:
         except Exception as e:
             logger.warning("collector_send_failed", error=str(e))
 
-        # Flush best-effort du vault d'incident : ne jamais ralentir l'agent
-        # (les mappings restent en mémoire locale en cas d'échec, jusqu'au TTL).
+        # Flush du vault d'incident : borné (intervalle minimum, timeout court,
+        # reprise limitée) et journalisé par le vault lui-même, sans valeur.
         if self._vault is not None and self._vault.pending() > 0:
-            try:
-                self._vault.flush()
-            except Exception:
-                pass
+            self._vault.flush()
 
-    def start_incident_capture(self, ttl_seconds: int = 6 * 3600) -> str:
-        """Ouvre un incident auprès du collector et active la capture
-        scellée jusqu'au TTL. Retourne l'incident_id.
+    def start_incident_capture(self) -> str:
+        """Active la capture scellée pour l'incident que ADMIN HUMAIN a ouvert
+        pour cet agent depuis le dashboard. Retourne l'incident_id.
 
-        Le SDK ne reçoit que la clé de CHIFFREMENT (AES-256) : il scelle,
-        il ne peut pas déchiffrer. Le reveal passe par le collector,
-        derrière contrôle d'accès + audit_log.
+        Un agent ne peut pas ouvrir lui-même un incident : s'il n'y en a pas
+        d'actif pour lui, le collector répond 404 et rien ne change. Le SDK ne
+        reçoit que la clé PUBLIQUE de l'incident : il scelle, il ne peut pas
+        déchiffrer. Le reveal passe par le collector, derrière rôle admin,
+        motif obligatoire et audit chaîné.
         """
-        resp = requests.post(
-            f"{self.collector_url}/v1/incident/start",
-            json={"agent_id": self.agent_id, "ttl_seconds": ttl_seconds},
+        resp = requests.get(
+            f"{self.collector_url}/v1/incident/active",
             headers=self._headers(),
             timeout=self.collector_timeout,
         )
+        if resp.status_code == 404:
+            raise RuntimeError(
+                "Aucun incident ouvert pour cet agent : un admin doit l'ouvrir "
+                "depuis le dashboard."
+            )
         resp.raise_for_status()
         data = resp.json()
         self._vault = IncidentVault(
             collector_url=self.collector_url,
             incident_id=data["incident_id"],
-            key=bytes.fromhex(data["key"]),  # clé AES-256 fournie par le collector
-            ttl_seconds=data.get("ttl_seconds", ttl_seconds),
+            public_key=bytes.fromhex(data["public_key"]),
+            expires_at=float(data["expires_at"]),
+            headers=self._headers(),
         )
         self._masker.mode = "incident"
         self._masker.vault = self._vault
         logger.info(
             "incident_capture_started",
             incident_id=data["incident_id"],
-            ttl_seconds=ttl_seconds,
+            expires_at=data["expires_at"],
         )
         return data["incident_id"]
 
     def stop_incident_capture(self) -> None:
-        """Ferme l'incident : flush final, retour au masquage redact."""
+        """Ferme la capture : flush final, retour au masquage redact."""
         if self._vault is not None:
             self._vault.close()
         self._vault = None
