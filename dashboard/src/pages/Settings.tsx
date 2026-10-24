@@ -5,6 +5,7 @@ import Budgets from './settings/Budgets'
 import Policies from './settings/Policies'
 import Alerts from './settings/Alerts'
 import Modes from './settings/Modes'
+import Incidents from './settings/Incidents'
 
 const TABS = [
   { key: 'keys', label: 'API keys', view: <Keys /> },
@@ -12,6 +13,7 @@ const TABS = [
   { key: 'budgets', label: 'Budgets', view: <Budgets /> },
   { key: 'policies', label: 'Policies', view: <Policies /> },
   { key: 'modes', label: 'Shadow mode', view: <Modes /> },
+  { key: 'incidents', label: 'Incidents', view: <Incidents /> },
   { key: 'alerts', label: 'Alerts', view: <Alerts /> },
 ]
 

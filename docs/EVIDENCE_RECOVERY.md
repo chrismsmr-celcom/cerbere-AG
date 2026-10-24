@@ -22,13 +22,24 @@ seul un admin humain, avec un motif, peut rouvrir une valeur. Chaque accès est
 | Isolation | Par organisation et par agent |
 | Échec du coffre | Rien n'est jamais écrit en clair ; la perte est journalisée sans valeur |
 
-## Flux
+## Flux (depuis le dashboard, sans toucher au code des agents)
 
-1. Admin : `POST /api/incidents {agent_id, ttl_seconds, reason}`
-2. Agent : `guard.start_incident_capture()` récupère la clé publique
-3. Les valeurs masquées sont scellées puis envoyées à `/v1/incident/sealed`
-4. Admin : `POST /api/incidents/<id>/reveal {token, reason}`
-5. TTL expiré ou `close` avec `purge` : preuves irrécupérables
+1. **Settings → Incidents → Open capture** : un admin choisit l'agent, la durée
+   (1 h, 6 h, 24 h) et saisit un motif (obligatoire, inscrit dans l'audit).
+2. Dans les secondes qui suivent, le SDK de l'agent le découvre tout seul :
+   `/api/agent/status` renvoie `incident_open`, et le SDK récupère la clé
+   publique puis commence à sceller. Aucun appel de code requis
+   (`AGENTGUARD_INCIDENT_AUTO=false` côté agent pour s'en désinscrire ; l'appel
+   manuel `guard.start_incident_capture()` reste possible).
+3. Les valeurs masquées sont scellées puis envoyées à `/v1/incident/sealed`.
+4. **Trace → span → « Sealed evidence → Reveal »** : motif obligatoire, la valeur
+   s'affiche 20 secondes puis se masque de nouveau. Chaque accès est audité.
+5. **Stop** arrête la capture (les preuves restent jusqu'à l'expiration) ;
+   **Destroy now** détruit chiffrés et clé privée immédiatement. À l'expiration
+   du TTL, la destruction est automatique.
+
+L'onglet n'apparaît utilisable que si la fonctionnalité est activée, la clé
+maître valide et l'utilisateur admin ; sinon il explique ce qui manque.
 
 ## Limites assumées
 
