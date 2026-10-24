@@ -671,7 +671,7 @@ def api_agent_runtime_mode():
     if not require_auth():
         return _err("Unauthorized", 401)
 
-    agent_id = _request_agent_id()
+    agent_id = request.args.get("agent_id") or _request_agent_id()
     if not _valid_agent_id(agent_id):
         return _err("Invalid agent id")
 

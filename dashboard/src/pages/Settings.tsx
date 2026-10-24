@@ -4,12 +4,14 @@ import Connect from './settings/Connect'
 import Budgets from './settings/Budgets'
 import Policies from './settings/Policies'
 import Alerts from './settings/Alerts'
+import Modes from './settings/Modes'
 
 const TABS = [
   { key: 'keys', label: 'API keys', view: <Keys /> },
   { key: 'connect', label: 'Integrations', view: <Connect /> },
   { key: 'budgets', label: 'Budgets', view: <Budgets /> },
   { key: 'policies', label: 'Policies', view: <Policies /> },
+  { key: 'modes', label: 'Shadow mode', view: <Modes /> },
   { key: 'alerts', label: 'Alerts', view: <Alerts /> },
 ]
 
