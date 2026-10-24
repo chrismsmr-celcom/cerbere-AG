@@ -435,10 +435,12 @@ class AgentGuard:
                 )
 
                 if response.status_code == 200:
-                    self._conn_state = response.json().get(
+                    body = response.json()
+                    self._conn_state = body.get(
                         "status",
                         "connected",
                     )
+                    self._sync_incident_capture(bool(body.get("incident_open")))
 
                 elif (
                     response.status_code == 403
@@ -515,6 +517,22 @@ class AgentGuard:
 
         if self._vault is not None and self._vault.pending() > 0:
             self._vault.flush()
+
+    def _sync_incident_capture(self, incident_open: bool) -> None:
+        """Aligne le SDK sur le serveur : un admin ouvre ou ferme l'incident
+        depuis le dashboard, l'agent n'a rien à faire. Désactivable côté agent
+        avec AGENTGUARD_INCIDENT_AUTO=false. N'interrompt jamais l'agent."""
+        if os.getenv("AGENTGUARD_INCIDENT_AUTO", "true").lower() != "true":
+            return
+        try:
+            if incident_open and (self._vault is None or self._vault.expired):
+                self.start_incident_capture()
+            elif not incident_open and self._vault is not None:
+                self.stop_incident_capture()
+        except Exception as exc:
+            logger.warning(
+                "incident_capture_sync_failed", error_type=type(exc).__name__
+            )
 
     def start_incident_capture(self) -> str:
         """Active la capture scellée d'un incident ouvert par un administrateur."""

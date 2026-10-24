@@ -323,18 +323,8 @@ def api_incident_close(incident_id):
     return jsonify({"incident_id": incident_id, "status": new_status}), 200
 
 
-@api_bp.route(
-    "/api/incidents/<incident_id>/reveal",
-    methods=["POST"],
-    endpoint="api_incident_reveal",
-)
-def api_incident_reveal(incident_id):
-    err = _setup() or _human_admin_or_error()
-    if err:
-        return err
-    body = _json_body()
-    token = str(body.get("token") or "")
-    reason = str(body.get("reason") or "").strip()
+def _reveal_value(incident_id, token, reason):
+    """Rouvre une valeur : motif, limite de débit, expiration, audit."""
     actor = _actor()
 
     def denied(why, status):
@@ -398,6 +388,111 @@ def api_incident_reveal(incident_id):
     resp = jsonify({"incident_id": incident_id, "token": token, "value": value})
     resp.headers["Cache-Control"] = "no-store"
     return resp, 200
+
+
+@api_bp.route(
+    "/api/incidents/<incident_id>/reveal",
+    methods=["POST"],
+    endpoint="api_incident_reveal",
+)
+def api_incident_reveal(incident_id):
+    err = _setup() or _human_admin_or_error()
+    if err:
+        return err
+    body = _json_body()
+    return _reveal_value(
+        incident_id,
+        str(body.get("token") or ""),
+        str(body.get("reason") or "").strip(),
+    )
+
+
+def _incident_for_token(org_id, token):
+    """Incident vivant de l'organisation qui contient ce token, sinon None."""
+    row, _ = _db_run(
+        """SELECT i.id FROM incident_sealed s JOIN incidents i ON i.id = s.incident_id
+           WHERE i.org_id = ? AND s.token = ? AND i.status <> 'purged' AND i.expires_at > ?
+           ORDER BY i.created_at DESC LIMIT 1""",
+        (org_id, token, time.time()),
+        fetch="one",
+    )
+    return row[0] if row else None
+
+
+@api_bp.route(
+    "/api/incidents/reveal", methods=["POST"], endpoint="api_incident_reveal_token"
+)
+def api_incident_reveal_token():
+    """Rouvre un token sans connaître l'incident (utilisé par le dashboard)."""
+    err = _setup() or _human_admin_or_error()
+    if err:
+        return err
+    body = _json_body()
+    token = str(body.get("token") or "")
+    reason = str(body.get("reason") or "").strip()
+    if not _TOKEN_RE.match(token):
+        return jsonify({"error": "invalid token"}), 400
+    incident_id = _incident_for_token(g.org_id, token)
+    if not incident_id:
+        return jsonify({"error": "token not found or evidence expired"}), 404
+    return _reveal_value(incident_id, token, reason)
+
+
+@api_bp.route(
+    "/api/incidents/available", methods=["POST"], endpoint="api_incident_available"
+)
+def api_incident_available():
+    """Quels tokens d'une liste sont rouvrables ? Ne renvoie aucune valeur."""
+    err = _setup() or _human_admin_or_error()
+    if err:
+        return err
+    tokens = _json_body().get("tokens")
+    if not isinstance(tokens, list):
+        return jsonify({"error": "tokens must be a list"}), 400
+    wanted = [
+        t
+        for t in dict.fromkeys(tokens[:200])
+        if isinstance(t, str) and _TOKEN_RE.match(t)
+    ]
+    available = [t for t in wanted if _incident_for_token(g.org_id, t)]
+    return jsonify({"available": available}), 200
+
+
+@api_bp.route("/api/incidents/config", methods=["GET"], endpoint="api_incident_config")
+def api_incident_config():
+    """État de la fonctionnalité pour le dashboard (aucun secret)."""
+    if not require_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+    enabled = _truthy(os.getenv("AGENTGUARD_INCIDENT_ENABLED"))
+    ready = enabled and master_key_ready()
+    return jsonify(
+        {
+            "enabled": enabled,
+            "ready": ready,
+            "can_manage": bool(ready and _is_admin()),
+            "max_ttl_seconds": MAX_TTL_SECONDS,
+            "min_reason_length": MIN_REASON_LENGTH,
+        }
+    ), 200
+
+
+def open_incident_for(org_id, agent_id):
+    """incident_id ouvert pour cet agent, sinon None. Ne lève jamais : utilisé
+    par /api/agent/status, qui ne doit jamais échouer à cause de cette option."""
+    try:
+        if _gate():
+            return None
+        _prepare_tables()
+        _purge_expired()
+        row, _ = _db_run(
+            "SELECT id FROM incidents WHERE org_id = ? AND agent_id = ? AND status = 'open' AND expires_at > ? LIMIT 1",
+            (org_id, agent_id, time.time()),
+            fetch="one",
+        )
+        return row[0] if row else None
+    except Exception:
+        logger.warning("incident_status_lookup_failed")
+        return None
 
 
 # ── agent : clé publique + dépôt de blobs chiffrés ──────────────────────────

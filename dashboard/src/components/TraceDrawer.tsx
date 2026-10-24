@@ -4,6 +4,7 @@ import { Copy, X } from 'lucide-react'
 import { useTrace } from '../lib/queries'
 import type { Decision, Span } from '../lib/api'
 import { ms, pretty, spanStart, usd } from '../lib/format'
+import { EvidenceReveal } from './EvidenceReveal'
 import { Button, DECISION_META, DecisionBadge, ErrorNote, Skeleton, useToast } from './ui'
 
 function decisionOf(s: Span): Decision {
@@ -249,6 +250,7 @@ function SpanDetail({ span }: { span: Span }) {
       )}
       <Block title="Input" value={span.input_data} />
       <Block title="Output" value={span.output_data} />
+      <EvidenceReveal text={pretty(span)} />
       <div className="flex justify-end">
         <Button
           onClick={() => navigator.clipboard?.writeText(pretty(span))}

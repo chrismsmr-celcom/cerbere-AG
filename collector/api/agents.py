@@ -229,10 +229,15 @@ def api_agent_status():
     if not agent_id:
         return jsonify({"agent_id": None, "status": "connected"}), 200
     status = _agent_status(g.org_id, agent_id)
+    from collector.api.incidents import open_incident_for
+
     return jsonify(
         {
             "agent_id": agent_id,
             "status": "disconnected" if status == "disconnected" else "connected",
+            # Un admin a ouvert une capture d'incident pour cet agent depuis le
+            # dashboard : le SDK l'active tout seul (aucune clé ni code à toucher).
+            "incident_open": open_incident_for(g.org_id, agent_id) is not None,
         }
     ), 200
 # ── Shadow Mode : mode d'exécution par agent, contrôlé depuis le SaaS ──
