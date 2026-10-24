@@ -494,3 +494,205 @@ def test_reveal_rate_limit(client, auth_headers, human, monkeypatch):
         for _ in range(3)
     ]
     assert codes == [404, 404, 429]
+
+
+# ── dashboard : configuration, révélation par token, activation automatique ──
+
+
+def _status(client, auth_headers, agent="agent-1"):
+    return client.get(
+        "/api/agent/status", headers={**auth_headers, "X-Agent-Id": agent}
+    ).get_json()
+
+
+def test_config_hides_everything_when_disabled(client, auth_headers, monkeypatch):
+    monkeypatch.delenv("AGENTGUARD_INCIDENT_ENABLED", raising=False)
+    cfg = client.get("/api/incidents/config", headers=auth_headers).get_json()
+    assert cfg["enabled"] is False and cfg["ready"] is False
+    assert cfg["can_manage"] is False
+    assert "key" not in repr(cfg).lower()
+
+
+def test_config_not_ready_without_master_key(client, auth_headers, monkeypatch):
+    monkeypatch.setenv("AGENTGUARD_INCIDENT_ENABLED", "true")
+    monkeypatch.delenv("AGENTGUARD_INCIDENT_MASTER_KEY", raising=False)
+    cfg = client.get("/api/incidents/config", headers=auth_headers).get_json()
+    assert cfg["enabled"] is True and cfg["ready"] is False
+    assert cfg["can_manage"] is False
+
+
+def test_config_requires_authentication(client, incident_env):
+    assert client.get("/api/incidents/config").status_code == 401
+
+
+def test_status_signals_open_incident_to_the_agent_only(client, auth_headers, human):
+    org = _org_of_api_key(client, auth_headers, human) or "default"
+    human["org"] = org
+    assert _status(client, auth_headers)["incident_open"] is False
+    _open(client, agent="agent-1")
+    assert _status(client, auth_headers, "agent-1")["incident_open"] is True
+    assert _status(client, auth_headers, "agent-2")["incident_open"] is False
+    incident_id = client.get("/api/incidents").get_json()["incidents"][0]["id"]
+    client.post(f"/api/incidents/{incident_id}/close", json={})
+    assert _status(client, auth_headers, "agent-1")["incident_open"] is False
+
+
+def test_status_never_breaks_when_feature_is_disabled(
+    client, auth_headers, monkeypatch
+):
+    monkeypatch.delenv("AGENTGUARD_INCIDENT_ENABLED", raising=False)
+    body = _status(client, auth_headers)
+    assert body["status"] == "connected" and body["incident_open"] is False
+
+
+def test_reveal_by_token_only_and_availability_list(client, auth_headers, human):
+    org = _org_of_api_key(client, auth_headers, human) or "default"
+    human["org"] = org
+    _open(client)
+    _d, vault = _agent_vault(client, auth_headers)
+    masker = SpanMasker(mode="incident", vault=vault, key="k" * 20)
+    masker.mask_text(EMAIL)
+    assert _flush(client, vault).status_code == 200
+    token = masker.mask_text(EMAIL)
+    unknown = "⟦CERB:ffffffffffffffff⟧"
+
+    avail = client.post(
+        "/api/incidents/available", json={"tokens": [token, unknown, "junk"]}
+    )
+    assert avail.get_json() == {"available": [token]}
+
+    ok = client.post(
+        "/api/incidents/reveal",
+        json={"token": token, "reason": "legal request ref 4521"},
+    )
+    assert ok.status_code == 200 and ok.get_json()["value"] == EMAIL
+    assert (
+        client.post(
+            "/api/incidents/reveal", json={"token": token, "reason": "no"}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/incidents/reveal",
+            json={"token": unknown, "reason": "legal request ref 4521"},
+        ).status_code
+        == 404
+    )
+
+    human["org"] = "another-org"
+    assert client.post(
+        "/api/incidents/available", json={"tokens": [token]}
+    ).get_json() == {"available": []}
+    assert (
+        client.post(
+            "/api/incidents/reveal",
+            json={"token": token, "reason": "legal request ref 4521"},
+        ).status_code
+        == 404
+    )
+
+
+def test_availability_and_token_reveal_refuse_api_keys(
+    client, auth_headers, incident_env
+):
+    assert (
+        client.post(
+            "/api/incidents/available", json={"tokens": []}, headers=auth_headers
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/incidents/reveal",
+            json={
+                "token": "⟦CERB:0000000000000000⟧",
+                "reason": "legal request ref 4521",
+            },
+            headers=auth_headers,
+        ).status_code
+        == 401
+    )
+
+
+# ── SDK : activation et arrêt automatiques ─────────────────────────────────
+
+
+class _FakeResp:
+    def __init__(self, status=200, body=None):
+        self.status_code = status
+        self._body = body or {}
+        self.text = ""
+
+    def json(self):
+        return self._body
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.status_code)
+
+
+def _sdk(monkeypatch):
+    from agentguard.sdk import AgentGuard
+
+    monkeypatch.setenv("AGENTGUARD_STATUS_CHECK", "true")
+    guard = AgentGuard(
+        api_key="ag-test", collector_url="http://collector.test", agent_id="agent-1"
+    )
+    return guard
+
+
+def test_sdk_activates_and_stops_capture_from_status_flag(monkeypatch):
+    import agentguard.sdk as sdk_mod
+
+    pub, _ = _keypair("inc_auto")
+    calls = {"status": {"status": "connected", "incident_open": True}}
+
+    def fake_get(url, headers=None, timeout=None):
+        if url.endswith("/api/agent/status"):
+            return _FakeResp(200, calls["status"])
+        if url.endswith("/v1/incident/active"):
+            return _FakeResp(
+                200,
+                {
+                    "incident_id": "inc_auto",
+                    "public_key": pub,
+                    "expires_at": time.time() + 600,
+                },
+            )
+        return _FakeResp(404)
+
+    monkeypatch.setattr(sdk_mod.requests, "get", fake_get)
+    monkeypatch.setattr(sdk_mod.requests, "post", lambda *a, **k: _FakeResp(200, {}))
+    guard = _sdk(monkeypatch)
+    guard._status_ttl = 0.0
+
+    guard._ensure_connected()
+    assert guard._vault is not None and guard._masker.mode == "incident"
+
+    calls["status"] = {"status": "connected", "incident_open": False}
+    guard._ensure_connected()
+    assert guard._vault is None and guard._masker.mode == "redact"
+
+
+def test_sdk_auto_activation_can_be_disabled_and_never_raises(monkeypatch):
+    import agentguard.sdk as sdk_mod
+
+    monkeypatch.setattr(
+        sdk_mod.requests,
+        "get",
+        lambda url, headers=None, timeout=None: (
+            _FakeResp(200, {"status": "connected", "incident_open": True})
+            if url.endswith("/api/agent/status")
+            else _FakeResp(500)
+        ),
+    )
+    guard = _sdk(monkeypatch)
+    guard._status_ttl = 0.0
+    guard._ensure_connected()  # l'activation échoue (500) : aucune exception
+    assert guard._vault is None and guard._masker.mode == "redact"
+
+    monkeypatch.setenv("AGENTGUARD_INCIDENT_AUTO", "false")
+    guard._conn_checked_at = 0.0
+    guard._ensure_connected()
+    assert guard._vault is None
