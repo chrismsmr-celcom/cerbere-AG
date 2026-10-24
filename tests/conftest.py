@@ -191,3 +191,10 @@ def client_with_identity(tmp_path):
             db_path.unlink()
         except Exception:
             pass
+
+
+@pytest.fixture(autouse=True)
+def _cors_env(monkeypatch):
+    """Le CORS est fail-hard même en dev : chaque test doit avoir une
+    origine explicite (jamais de wildcard)."""
+    monkeypatch.setenv("AGENTGUARD_CORS_ORIGINS", "http://localhost:3000")

@@ -17,7 +17,7 @@ Humain (cookie de session, rôle admin) :
     POST /api/incidents/<id>/reveal          rouvre une valeur (token, reason)
 Agent (clé API) :
     GET  /v1/incident/active                 clé PUBLIQUE de l'incident ouvert pour lui
-    POST /v1/incident/sealed                 dépose des blobs chiffrés
+    POST /v1/incident/sealed                dépose des blobs chiffrés
 """
 
 import os
@@ -74,6 +74,20 @@ def _gate():
     return None
 
 
+_INCIDENT_COLUMNS = [
+    ("org_id", "TEXT"),
+    ("agent_id", "TEXT"),
+    ("status", "TEXT"),
+    ("reason", "TEXT"),
+    ("opened_by", "TEXT"),
+    ("created_at", "DOUBLE PRECISION"),
+    ("expires_at", "DOUBLE PRECISION"),
+    ("closed_at", "DOUBLE PRECISION"),
+    ("public_key", "TEXT"),
+    ("wrapped_private_key", "TEXT"),
+]
+
+
 def _prepare_tables():
     _db_run(
         """CREATE TABLE IF NOT EXISTS incidents (
@@ -101,7 +115,31 @@ def _prepare_tables():
         )""",
         commit=True,
     )
+    _ensure_incident_columns()
 
+
+def _ensure_incident_columns():
+    """MIGRATION idempotente : « ADD COLUMN IF NOT EXISTS » est du Postgres
+    pur et lève OperationalError en SQLite. On vérifie donc l'existence des
+    colonnes à la main en SQLite."""
+    if is_postgres():
+        for col, dtype in _INCIDENT_COLUMNS:
+            _db_run(
+                f"ALTER TABLE incidents ADD COLUMN IF NOT EXISTS {col} {dtype}",
+                commit=True,
+            )
+        return
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(incidents)")
+        existing = {row[1] for row in cur.fetchall()}
+        for col, dtype in _INCIDENT_COLUMNS:
+            if col not in existing:
+                cur.execute(f"ALTER TABLE incidents ADD COLUMN {col} {dtype}")
+        conn.commit()
+    finally:
+        conn.close()
 
 def _purge_expired():
     """Détruit chiffrés ET clé privée des incidents expirés (crypto-shredding)."""

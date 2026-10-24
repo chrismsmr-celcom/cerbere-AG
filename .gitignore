@@ -54,3 +54,4 @@ rapport_*.json
 agentguard-model-onnx/
 
 bandit-local.*
+node_modules/

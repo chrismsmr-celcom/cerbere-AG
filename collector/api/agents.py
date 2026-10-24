@@ -240,6 +240,8 @@ def api_agent_status():
             "incident_open": open_incident_for(g.org_id, agent_id) is not None,
         }
     ), 200
+
+
 # ── Shadow Mode : mode d'exécution par agent, contrôlé depuis le SaaS ──
 
 

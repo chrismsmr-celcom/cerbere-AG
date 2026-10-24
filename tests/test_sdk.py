@@ -223,6 +223,7 @@ class TestTokenCountingOffline:
             sdk_module._count_text_tokens("gpt-4o", "hello world, this is a test") > 0
         )
         assert sdk_module._count_text_tokens("gpt-4o", "") == 0
+
     def test_shadow_mode_records_would_block_but_executes_tool(
         self, guard, monkeypatch
     ):

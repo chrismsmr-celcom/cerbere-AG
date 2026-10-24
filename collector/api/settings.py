@@ -658,6 +658,8 @@ def api_test_alert_destination():
         return jsonify({"ok": False, "error": "Could not reach the destination"}), 502
     ok = 200 <= resp.status_code < 300
     return jsonify({"ok": ok, "status": resp.status_code}), (200 if ok else 502)
+
+
 # ═══════════════════════════════════════════════════════════════
 # MODE D'EXÉCUTION PAR AGENT : ENFORCE / SHADOW
 # ═══════════════════════════════════════════════════════════════
@@ -695,11 +697,13 @@ def api_agent_runtime_mode():
         return _err("Unable to load agent runtime mode", 500)
 
     # Le mode par défaut est toujours Enforce.
-    return jsonify({
-        "agent_id": agent_id,
-        "mode": row[0] if row else "enforce",
-        "updated_at": _iso_utc(row[1]) if row and row[1] else None,
-    })
+    return jsonify(
+        {
+            "agent_id": agent_id,
+            "mode": row[0] if row else "enforce",
+            "updated_at": _iso_utc(row[1]) if row and row[1] else None,
+        }
+    )
 
 
 @api_bp.route(
@@ -771,8 +775,10 @@ def api_set_agent_runtime_mode(agent_id):
         by=actor,
     )
 
-    return jsonify({
-        "agent_id": agent_id,
-        "mode": mode,
-        "updated": True,
-    }), 200
+    return jsonify(
+        {
+            "agent_id": agent_id,
+            "mode": mode,
+            "updated": True,
+        }
+    ), 200

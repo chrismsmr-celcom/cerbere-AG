@@ -225,15 +225,11 @@ class AgentGuard:
         )
 
         self._trajectory = (
-            TrajectoryAnalyzer(max_events=100)
-            if self._runtime_enabled
-            else None
+            TrajectoryAnalyzer(max_events=100) if self._runtime_enabled else None
         )
 
         self._runtime_risk = (
-            RuntimeRiskEngine(
-                fail_closed=self._runtime_fail_closed
-            )
+            RuntimeRiskEngine(fail_closed=self._runtime_fail_closed)
             if self._runtime_enabled
             else None
         )
@@ -311,9 +307,7 @@ class AgentGuard:
                 pass
 
             try:
-                dt = datetime.fromisoformat(
-                    raw.replace("Z", "+00:00")
-                )
+                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
@@ -471,10 +465,7 @@ class AgentGuard:
                 latency_ms=span.latency_ms,
                 input_data=span.input_data,
                 output_data=span.output_data,
-                security_checks=[
-                    check.to_model()
-                    for check in span.security_checks
-                ],
+                security_checks=[check.to_model() for check in span.security_checks],
                 blocked=span.blocked,
                 block_reason=span.block_reason,
                 cost_usd=span.cost_usd,
@@ -660,8 +651,7 @@ class AgentGuard:
             return "\n".join(
                 message.get("content", "")
                 for message in messages
-                if isinstance(message, dict)
-                and isinstance(message.get("content"), str)
+                if isinstance(message, dict) and isinstance(message.get("content"), str)
             )
 
         if args and isinstance(args[0], str):
@@ -681,11 +671,7 @@ class AgentGuard:
 
             for choice in choices:
                 message = getattr(choice, "message", None)
-                content = (
-                    getattr(message, "content", None)
-                    if message
-                    else None
-                )
+                content = getattr(message, "content", None) if message else None
 
                 if isinstance(content, str):
                     parts.append(content)
@@ -733,8 +719,7 @@ class AgentGuard:
 
         cost = max(
             0.0,
-            input_tokens * input_price
-            + output_tokens * output_price,
+            input_tokens * input_price + output_tokens * output_price,
         )
 
         return cost, input_tokens, output_tokens
@@ -757,8 +742,7 @@ class AgentGuard:
                 check
                 for check in checks
                 if not check.passed
-                and check.risk_level
-                in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+                and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
             ]
 
             if high_risk and self.block_on_high:
@@ -781,9 +765,7 @@ class AgentGuard:
                 self.spans.append(span)
                 self._send_to_collector(span)
 
-                raise SecurityException(
-                    f"AgentGuard BLOCKED: {span.block_reason}"
-                )
+                raise SecurityException(f"AgentGuard BLOCKED: {span.block_reason}")
 
             try:
                 result = func(*args, **kwargs)
@@ -816,9 +798,7 @@ class AgentGuard:
                 self.total_spent,
             )
 
-            output_pii = self.policy_engine.check_pii(
-                self._extract_output(result)
-            )
+            output_pii = self.policy_engine.check_pii(self._extract_output(result))
 
             checks.extend([output_pii, budget_check])
 
@@ -826,8 +806,7 @@ class AgentGuard:
                 check
                 for check in checks
                 if not check.passed
-                and check.risk_level
-                in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+                and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
             ]
 
             blocked = bool(blocking_output) and self.block_on_high
@@ -842,14 +821,11 @@ class AgentGuard:
                     "prompt": input_text[:500],
                     "model": kwargs.get("model", "unknown"),
                 },
-                {
-                    "response": self._extract_output(result)[:500]
-                },
+                {"response": self._extract_output(result)[:500]},
                 checks,
                 blocked,
                 (
-                    f"Output risk: "
-                    f"{[check.check_name for check in blocking_output]}"
+                    f"Output risk: {[check.check_name for check in blocking_output]}"
                     if blocked
                     else None
                 ),
@@ -862,9 +838,7 @@ class AgentGuard:
             self._send_to_collector(span)
 
             if blocked:
-                raise SecurityException(
-                    f"Output blocked: {span.block_reason}"
-                )
+                raise SecurityException(f"Output blocked: {span.block_reason}")
 
             self.total_spent += cost
             return result
@@ -932,11 +906,8 @@ class AgentGuard:
 
             return wrapper
 
-        if (
-            params is None
-            and func is None
-            and isinstance(tool_name, str)
-        ):
+        if params is None and func is None and isinstance(tool_name, str):
+
             def decorator(wrapped: Callable):
                 @wraps(wrapped)
                 def wrapper(*args, **kwargs):
@@ -1008,13 +979,11 @@ class AgentGuard:
 
         # 2. Évaluation du risque runtime.
         if self._runtime_enabled:
-            traj_score, traj_reasons, traj_meta = (
-                self._trajectory.analyze(
-                    self.agent_id,
-                    tool_name,
-                    params,
-                    taint_level=taint_level,
-                )
+            traj_score, traj_reasons, traj_meta = self._trajectory.analyze(
+                self.agent_id,
+                tool_name,
+                params,
+                taint_level=taint_level,
             )
 
             runtime_decision = self._runtime_risk.evaluate(
@@ -1089,9 +1058,7 @@ class AgentGuard:
                     "AgentGuard DENY: server security decision unavailable"
                 )
 
-            signed_action = str(
-                signed_decision.get("action", "DENY")
-            ).upper()
+            signed_action = str(signed_decision.get("action", "DENY")).upper()
 
             if signed_action == "DENY":
                 reason = signed_decision.get(
@@ -1104,9 +1071,7 @@ class AgentGuard:
                     f"[SECURITY] Signed DENY: {reason}",
                 )
 
-                raise SecurityException(
-                    f"AgentGuard DENY: {reason}"
-                )
+                raise SecurityException(f"AgentGuard DENY: {reason}")
 
             if signed_action not in (
                 "ALLOW",
@@ -1117,20 +1082,13 @@ class AgentGuard:
                     "[SECURITY] Invalid signed server decision",
                 )
 
-                raise SecurityException(
-                    "AgentGuard DENY: invalid server decision"
-                )
+                raise SecurityException("AgentGuard DENY: invalid server decision")
 
         # 4. Déterminer les décisions locales avant leur application.
-        runtime_action = str(
-            getattr(runtime_decision, "action", "ALLOW")
-        ).upper()
+        runtime_action = str(getattr(runtime_decision, "action", "ALLOW")).upper()
 
         requires_approval = (
-            (
-                not check.passed
-                and bool(check.metadata.get("requires_approval"))
-            )
+            (not check.passed and bool(check.metadata.get("requires_approval")))
             or runtime_action == "REQUIRE_APPROVAL"
             or signed_action == "REQUIRE_APPROVAL"
         )
@@ -1139,17 +1097,11 @@ class AgentGuard:
         # Une exigence d'approbation signée reste appliquée.
         shadow_observation = None
 
-        if (
-            self.shadow_mode
-            and signed_action != "REQUIRE_APPROVAL"
-        ):
+        if self.shadow_mode and signed_action != "REQUIRE_APPROVAL":
             would_action = "ALLOW"
             reasons: list[str] = []
 
-            if (
-                not runtime_decision.allowed
-                and runtime_action != "REQUIRE_APPROVAL"
-            ):
+            if not runtime_decision.allowed and runtime_action != "REQUIRE_APPROVAL":
                 would_action = "BLOCK"
                 reasons.extend(runtime_decision.reasons[:5])
 
@@ -1163,8 +1115,7 @@ class AgentGuard:
 
             elif (
                 not check.passed
-                and check.risk_level
-                in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+                and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
                 and self.block_on_high
             ):
                 would_action = "BLOCK"
@@ -1176,14 +1127,8 @@ class AgentGuard:
                 "enabled": True,
                 "would_have_action": would_action,
                 "would_have_blocked": would_action == "BLOCK",
-                "would_have_required_approval": (
-                    would_action == "REQUIRE_APPROVAL"
-                ),
-                "reasons": [
-                    reason
-                    for reason in reasons
-                    if reason
-                ][:5],
+                "would_have_required_approval": (would_action == "REQUIRE_APPROVAL"),
+                "reasons": [reason for reason in reasons if reason][:5],
             }
 
             if would_action != "ALLOW":
@@ -1211,17 +1156,14 @@ class AgentGuard:
                 f"[RUNTIME DENY] {reason}",
             )
 
-            raise SecurityException(
-                f"AgentGuard DENY: {reason}"
-            )
+            raise SecurityException(f"AgentGuard DENY: {reason}")
 
         # 7. Refus de politique : appliquer uniquement hors Shadow Mode.
         if (
             shadow_observation is None
             and not check.passed
             and not requires_approval
-            and check.risk_level
-            in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+            and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
             and self.block_on_high
         ):
             record_block(
@@ -1229,9 +1171,7 @@ class AgentGuard:
                 f"[POLICY] {check.details}",
             )
 
-            raise SecurityException(
-                f"AgentGuard BLOCK: {check.details}"
-            )
+            raise SecurityException(f"AgentGuard BLOCK: {check.details}")
 
         # 8. Approbation humaine.
         # Une exigence d'approbation reste obligatoire,
@@ -1256,10 +1196,7 @@ class AgentGuard:
 
             cached_ts = self._approved_cache.get(approval_id)
 
-            if (
-                cached_ts is not None
-                and (now - cached_ts) > cache_ttl
-            ):
+            if cached_ts is not None and (now - cached_ts) > cache_ttl:
                 self._approved_cache.pop(approval_id, None)
                 cached_ts = None
 
@@ -1284,20 +1221,13 @@ class AgentGuard:
                             raise ApprovalRejectedException(
                                 "Action rejetée par l'administrateur.",
                                 approval_id=approval_id,
-                                resolved_by=approval_data.get(
-                                    "resolved_by"
-                                ),
+                                resolved_by=approval_data.get("resolved_by"),
                             )
 
                         if status == "approved":
-                            ts = self._approval_timestamp(
-                                approval_data
-                            )
+                            ts = self._approval_timestamp(approval_data)
 
-                            if (
-                                ts is not None
-                                and (now - ts) <= cache_ttl
-                            ):
+                            if ts is not None and (now - ts) <= cache_ttl:
                                 approved = True
 
                 except ApprovalRejectedException:
@@ -1366,8 +1296,7 @@ class AgentGuard:
 
                 if not self.wait_for_approval:
                     raise ApprovalRequiredException(
-                        f"Approbation requise pour '{tool_name}'. "
-                        f"(ID: {approval_id})",
+                        f"Approbation requise pour '{tool_name}'. (ID: {approval_id})",
                         approval_id=approval_id,
                         details=check.metadata,
                         timed_out=False,
@@ -1406,29 +1335,20 @@ class AgentGuard:
                         status = approval_data.get("status")
 
                         if status == "approved":
-                            ts = self._approval_timestamp(
-                                approval_data
-                            )
+                            ts = self._approval_timestamp(approval_data)
 
-                            if (
-                                ts is not None
-                                and ts < wait_started - cache_ttl
-                            ):
+                            if ts is not None and ts < wait_started - cache_ttl:
                                 continue
 
                             approved = True
-                            self._approved_cache[
-                                approval_id
-                            ] = time.time()
+                            self._approved_cache[approval_id] = time.time()
                             break
 
                         if status == "rejected":
                             raise ApprovalRejectedException(
                                 "Action rejetée par l'administrateur.",
                                 approval_id=approval_id,
-                                resolved_by=approval_data.get(
-                                    "resolved_by"
-                                ),
+                                resolved_by=approval_data.get("resolved_by"),
                             )
 
                     except ApprovalRejectedException:
@@ -1494,9 +1414,7 @@ class AgentGuard:
         # 10. Suivre le résultat pour les appels suivants.
         if self._taint_enabled:
             source_level = (
-                TaintLevel.UNTRUSTED
-                if _is_untrusted_source(tool_name)
-                else None
+                TaintLevel.UNTRUSTED if _is_untrusted_source(tool_name) else None
             )
 
             self._flow.track(
@@ -1552,11 +1470,7 @@ class AgentGuard:
         return {
             "trace_id": self.trace_id,
             "total_spans": len(self.spans),
-            "blocked_operations": sum(
-                1
-                for span in self.spans
-                if span.blocked
-            ),
+            "blocked_operations": sum(1 for span in self.spans if span.blocked),
             "total_cost_usd": round(
                 self.total_spent,
                 6,
@@ -1566,8 +1480,7 @@ class AgentGuard:
             "shadow_observations": shadow_observations,
             "masking": self._masker.mode,
             "incident_capture_active": (
-                self._vault is not None
-                and not self._vault.expired
+                self._vault is not None and not self._vault.expired
             ),
         }
 
@@ -1578,6 +1491,4 @@ def main():
         format="%(levelname)s: %(message)s",
     )
 
-    logger.info(
-        "Starting CerbereAG MCP Server (v1.x) on stdio..."
-    )
+    logger.info("Starting CerbereAG MCP Server (v1.x) on stdio...")
