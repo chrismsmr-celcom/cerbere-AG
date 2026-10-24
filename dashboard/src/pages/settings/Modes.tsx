@@ -72,7 +72,7 @@ function ModeRow({ agent }: { agent: Agent }) {
           {modeQ.isLoading ? '…' : isShadow ? 'Shadow ON' : 'Enforce'}
         </span>
         <Button
-          variant={isShadow ? 'primary' : 'default'}
+          variant={isShadow ? 'primary' : 'ghost'}
           disabled={setMode.isPending || modeQ.isLoading}
           onClick={toggle}
         >
