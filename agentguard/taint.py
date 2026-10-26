@@ -47,31 +47,42 @@ class TaintLevel(Enum):
 class SinkType(Enum):
     """Types de destinations (sinks) pour les données."""
 
-    INTERNAL = "internal"  # Usage interne (LLM, calcul)
-    FILESYSTEM = "filesystem"  # Écriture fichier
-    DATABASE = "database"  # Écriture DB
-    NETWORK_INTERNAL = "network_internal"  # API interne
-    NETWORK_EXTERNAL = "network_external"  # API externe, email
-    DANGEROUS_TOOL = "dangerous"  # execute_command, drop_table, etc.
+    INTERNAL = "internal"
+    FILESYSTEM = "filesystem"
+    DATABASE = "database"
+    NETWORK_INTERNAL = "network_internal"
+    NETWORK_EXTERNAL = "network_external"
+    DANGEROUS_TOOL = "dangerous"
 
 
 # Patterns de détection automatique de classification
 _SECRET_PATTERNS = [
-    re.compile(r"\b(sk-|pk-|Bearer\s)[A-Za-z0-9_-]{20,}\b"),
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS access key
-    re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),  # GitHub PAT
-    re.compile(r"\b-----BEGIN (?:RSA |EC )?PRIVATE KEY-----"),
+    # sk- / sk-proj- : accepte les tirets et l'Unicode (clés réelles),
+    # longueur totale >= 20 pour éviter les faux positifs.
     re.compile(
-        r"\b(api[_-]?key|password|secret|token)\s*[:=]\s*['\"]?[\w-]{16,}['\"]?",
+        r"\bsk-(?:proj-)?[\w-]{20,}"
+        r"|pk_(?:test|live)_[A-Za-z0-9]{20,}"
+        r"|Bearer\s+[A-Za-z0-9._-]{20,}"
+    ),
+    # AKIA : {16,} au lieu de {16} (une clé de 17 chars échouait au \b).
+    re.compile(r"\bAKIA[0-9A-Z]{16,}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),
+    re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----"),
+    # secret nommé : "SECRET_API_KEY_12345" comme "api_key: <valeur>".
+    # Pas de \b initial : "SUPER_SECRET_" doit matcher aussi.
+    re.compile(
+        r"(api[_-]?key|password|secret|token)"
+        r"(?:\s*[:=]\s*['\"]?|[_-])"
+        r"[\w.-]{8,}",
         re.IGNORECASE,
     ),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),  # JWT
+    re.compile(r"\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b"),
 ]
 
 _PII_PATTERNS = [
-    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
-    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN
-    re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),  # Credit card
+    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+.[A-Za-z]{2,}\b"),
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
 ]
 
 
@@ -80,7 +91,7 @@ class TaintLabel:
     """Label de taint pour une donnée."""
 
     level: TaintLevel
-    source: str = "unknown"  # d'où vient la donnée
+    source: str = "unknown"
     tags: set[str] = field(default_factory=set)
     propagated_from: list[str] = field(default_factory=list)
 
@@ -108,60 +119,30 @@ class TaintTracker:
 
     Usage:
         tracker = TaintTracker()
-
-        # Marque les données entrantes
         tracker.label("user_input", user_text, TaintLevel.UNTRUSTED, "web_form")
         tracker.label("api_key", api_key, TaintLevel.SECRET, "env_var")
-
-        # Combine les labels quand des données sont mélangées
         combined = tracker.combine(["user_input", "api_key"])
-
-        # Vérifie si un flux est autorisé
         violation = tracker.check_sink(combined, SinkType.NETWORK_EXTERNAL)
         if violation:
             raise SecurityException(f"Taint violation: {violation}")
     """
 
-    # Règles de flux interdits par défaut
     DEFAULT_DENY_RULES = [
-        # (source_level_min, sink_type, reason)
-        (
-            TaintLevel.SECRET,
-            SinkType.NETWORK_EXTERNAL,
-            "SECRET data cannot be sent to external networks",
-        ),
-        (
-            TaintLevel.SECRET,
-            SinkType.DANGEROUS_TOOL,
-            "SECRET data cannot be used in dangerous tools",
-        ),
+        (TaintLevel.SECRET, SinkType.NETWORK_EXTERNAL, "SECRET data cannot be sent to external networks"),
+        (TaintLevel.SECRET, SinkType.DANGEROUS_TOOL, "SECRET data cannot be used in dangerous tools"),
         (TaintLevel.MALICIOUS, SinkType.INTERNAL, "MALICIOUS data blocked"),
         (TaintLevel.MALICIOUS, SinkType.FILESYSTEM, "MALICIOUS data blocked"),
         (TaintLevel.MALICIOUS, SinkType.DATABASE, "MALICIOUS data blocked"),
-        (
-            TaintLevel.UNTRUSTED,
-            SinkType.DANGEROUS_TOOL,
-            "UNTRUSTED data cannot be used in dangerous tools",
-        ),
+        (TaintLevel.UNTRUSTED, SinkType.DANGEROUS_TOOL, "UNTRUSTED data cannot be used in dangerous tools"),
     ]
 
     DEFAULT_REVIEW_RULES = [
-        (
-            TaintLevel.CONFIDENTIAL,
-            SinkType.NETWORK_EXTERNAL,
-            "CONFIDENTIAL data to external network requires approval",
-        ),
-        (
-            TaintLevel.CONFIDENTIAL,
-            SinkType.FILESYSTEM,
-            "CONFIDENTIAL data write requires approval",
-        ),
+        (TaintLevel.CONFIDENTIAL, SinkType.NETWORK_EXTERNAL, "CONFIDENTIAL data to external network requires approval"),
+        (TaintLevel.CONFIDENTIAL, SinkType.FILESYSTEM, "CONFIDENTIAL data write requires approval"),
     ]
 
     def __init__(self):
-        # id → TaintLabel
         self._labels: dict[str, TaintLabel] = {}
-        # id → valeur (pour re-analyse si besoin)
         self._values: dict[str, Any] = {}
 
     def label(
@@ -172,10 +153,7 @@ class TaintTracker:
         source: str = "unknown",
         tags: set[str] | None = None,
     ) -> TaintLabel:
-        """
-        Attribue un label de taint à une donnée.
-        Si level n'est pas fourni, auto-détecte.
-        """
+        """Attribue un label de taint à une donnée."""
         if level is None:
             level = self._auto_classify(value)
 
@@ -190,16 +168,19 @@ class TaintTracker:
 
     def _auto_classify(self, value: Any) -> TaintLevel:
         """Auto-classifie une valeur en analysant son contenu."""
+        # Les scalaires non-textuels ne portent pas de donnée sensible
+        # analysable : None, bool, nombres → PUBLIC.
+        if value is None or isinstance(value, (bool, int, float, complex)):
+            return TaintLevel.PUBLIC
+
         text = self._to_text(value)
         if not text:
             return TaintLevel.PUBLIC
 
-        # Vérifie SECRET en premier (priorité)
         for pattern in _SECRET_PATTERNS:
             if pattern.search(text):
                 return TaintLevel.SECRET
 
-        # Puis PII / CONFIDENTIAL
         for pattern in _PII_PATTERNS:
             if pattern.search(text):
                 return TaintLevel.CONFIDENTIAL
@@ -213,8 +194,11 @@ class TaintTracker:
             return value
         if isinstance(value, (dict, list)):
             try:
-                return json.dumps(value, default=str)
-            except Exception:
+                # ensure_ascii=False : sinon les secrets Unicode sont
+                # échappés en \uXXXX dans le JSON et les needles ne
+                # correspondent plus jamais.
+                return json.dumps(value, default=str, ensure_ascii=False)
+            except (TypeError, ValueError):
                 return str(value)
         return str(value)
 
@@ -225,11 +209,8 @@ class TaintTracker:
         self,
         data_ids: list[str],
         new_id: str | None = None,
-    ) -> TaintLabel:
-        """
-        Combine plusieurs labels (ex: quand un LLM reçoit plusieurs inputs).
-        Le résultat prend le niveau MAX (le plus dangereux).
-        """
+    ) -> "TaintLabel":
+        """Combine plusieurs labels (le résultat prend le niveau MAX)."""
         if not data_ids:
             label = TaintLabel(TaintLevel.PUBLIC, "empty")
             if new_id:
@@ -251,7 +232,7 @@ class TaintTracker:
 
         combined = TaintLabel(
             level=max_level,
-            source="+".join(sources[:3]),  # max 3 sources dans le nom
+            source="+".join(sources[:3]),
             tags=all_tags,
             propagated_from=propagated,
         )
@@ -263,27 +244,23 @@ class TaintTracker:
 
     def check_sink(
         self,
-        label: TaintLabel,
-        sink: SinkType,
+        label: TaintLabel | None,
+        sink: Any,
     ) -> str | None:
-        """
-        Vérifie si un flux label → sink est autorisé.
+        """Vérifie si un flux label → sink est autorisé."""
+        if label is None:
+            raise ValueError("Cannot check sink with None label")
+        if not isinstance(sink, SinkType):
+            raise ValueError(f"Invalid sink type: {sink}")
 
-        Retourne:
-            None si autorisé
-            str avec raison si DENY
-            "REVIEW:" + raison si approbation requise
-        """
         # MALICIOUS → toujours bloqué
         if label.level == TaintLevel.MALICIOUS:
             return f"MALICIOUS data (from {label.source}) blocked at {sink.value}"
 
-        # Check DENY rules
         for min_level, rule_sink, reason in self.DEFAULT_DENY_RULES:
             if label.level >= min_level and sink == rule_sink:
                 return f"DENY: {reason} (source: {label.source})"
 
-        # Check REVIEW rules
         for min_level, rule_sink, reason in self.DEFAULT_REVIEW_RULES:
             if label.level >= min_level and sink == rule_sink:
                 return f"REVIEW: {reason} (source: {label.source})"
@@ -291,7 +268,7 @@ class TaintTracker:
         return None
 
     def mark_malicious(self, data_id: str, reason: str = "injection_detected"):
-        """Marque une donnée comme MALICIOUS (après détection d'injection)."""
+        """Marque une donnée comme MALICIOUS."""
         if data_id in self._labels:
             self._labels[data_id].level = TaintLevel.MALICIOUS
             self._labels[data_id].tags.add(reason)
@@ -315,37 +292,15 @@ class TaintTracker:
         }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Suivi par VALEUR (flux réel donnée -> outil)
-# ─────────────────────────────────────────────────────────────────────────────
-# Le TaintTracker ci-dessus étiquette des ids. Pour câbler le SDK il faut
-# répondre à : "est-ce qu'une donnée sensible déjà vue se retrouve dans les
-# paramètres de CET appel d'outil ?". FlowTracker garde les valeurs sensibles
-# (en mémoire, jamais envoyées au collector) et cherche leurs occurrences,
-# brutes ou ré-encodées (base64, hex, URL-encoding).
-#
-# Limites assumées : un secret découpé en morceaux, chiffré ou reformulé par un
-# LLM n'est pas retrouvé par correspondance exacte (les patterns sur les
-# paramètres sortants servent de second filet).
-
 _MIN_TRACKED_LEN = 8
 _MAX_TRACKED = 500
-_MAX_SCAN_CHARS = 200_000  # borne le coût d'analyse d'un gros résultat d'outil
+_MAX_SCAN_CHARS = 200_000
 
-# PII "forte" : suivie automatiquement. L'adresse e-mail (_PII_PATTERNS[0]) en
-# est exclue : un agent qui écrit à une adresse qu'il vient de lire est le cas
-# nominal, pas une fuite. Pour la suivre quand même : track(..., level=CONFIDENTIAL).
 _PII_STRONG_PATTERNS = _PII_PATTERNS[1:]
 
 
 def _b64_aligned(raw: bytes, urlsafe: bool) -> list[str]:
-    """Base64 d'un secret tel qu'il apparaît DANS un texte plus long.
-
-    Le base64 code par blocs de 3 octets : selon la position du secret dans le
-    texte encodé (décalage 0, 1 ou 2), la sortie diffère. On génère donc les 3
-    alignements et on retire les caractères de bord qui dépendent des octets
-    voisins (début si décalage, fin si le dernier bloc est incomplet).
-    """
+    """Base64 d'un secret tel qu'il apparaît DANS un texte plus long."""
     enc = base64.urlsafe_b64encode if urlsafe else base64.b64encode
     out = []
     for k in (0, 1, 2):
@@ -374,19 +329,15 @@ def _encodings(raw: str) -> list[str]:
 
 
 class FlowTracker:
-    """Mémorise les données sensibles vues dans une session et détecte leur
-    réapparition dans des paramètres d'outil."""
+    """Mémorise les données sensibles vues dans une session."""
 
     def __init__(self, session_mode: bool = False):
-        # session_mode=True : une fois un SECRET vu, tout envoi externe est
-        # bloqué même si la valeur n'est pas retrouvée (très strict).
         self.session_mode = session_mode
         self._tracker = TaintTracker()
-        self._needles: dict[str, TaintLevel] = {}  # chaîne -> niveau
+        self._needles: dict[str, TaintLevel] = {}
         self._session_level = TaintLevel.PUBLIC
         self._counter = 0
 
-    # -- extraction -----------------------------------------------------
     def _extract(self, text: str):
         text = text[:_MAX_SCAN_CHARS]
         for pat in _SECRET_PATTERNS:
@@ -408,15 +359,16 @@ class FlowTracker:
             if prev is None or level > prev:
                 self._needles[variant] = level
 
-    # -- API ------------------------------------------------------------
     def track(
         self, value: Any, source: str = "user", level: TaintLevel | None = None
     ) -> TaintLabel:
-        """Enregistre une donnée entrante/sortante et retient ce qu'elle
-        contient de sensible. `level` force le niveau (ex: UNTRUSTED)."""
+        """Enregistre une donnée entrante/sortante."""
         text = TaintTracker._to_text(value)
         detected = self._tracker._auto_classify(value) if text else TaintLevel.PUBLIC
-        final = detected if level is None or detected.value > level.value else level
+
+        # Si l'appelant force un niveau, on prend le max entre détecté et déclaré.
+        final = max(detected, level) if level is not None else detected
+
         self._counter += 1
         label = self._tracker.label(f"d{self._counter}", value, final, source)
         if text:
@@ -427,13 +379,29 @@ class FlowTracker:
                 in (TaintLevel.SECRET, TaintLevel.CONFIDENTIAL, TaintLevel.UNTRUSTED)
                 and len(text) >= _MIN_TRACKED_LEN
             ):
-                # Valeur déclarée sensible par l'appelant : on la suit en entier.
-                # UNTRUSTED inclus : sans needle, le label ne se propage jamais
-                # dans level_in() et le runtime ne voit rien.
                 self._remember(text.strip(), level)
             if final > self._session_level and final != TaintLevel.UNTRUSTED:
                 self._session_level = final
         return label
+
+    def mark_as_tainted(
+        self,
+        value: Any,
+        level: str | TaintLevel = "SECRET",
+        source: str = "manual",
+    ) -> TaintLabel:
+        """Marque explicitement une valeur comme contaminée.
+
+        API attendue par les intégrations : accepte le nom du niveau
+        sous forme de chaîne ("SECRET") ou directement un TaintLevel.
+        """
+        if isinstance(level, str):
+            try:
+                level = TaintLevel[level.upper()]
+            except KeyError:
+                raise ValueError(f"Unknown taint level: {level!r}")
+
+        return self.track(value, source=source, level=level)
 
     def mark_malicious(self, source: str = "injection_detected") -> None:
         self._session_level = TaintLevel.MALICIOUS
@@ -443,8 +411,11 @@ class FlowTracker:
         self._counter += 1
 
     def level_in(self, params: Any) -> TaintLabel:
-        """Niveau de taint le plus élevé présent dans `params` : valeurs déjà
-        suivies, ou secrets/PII détectés directement dans les paramètres."""
+        """Niveau de taint le plus élevé présent dans `params`.
+
+        Renvoie TOUJOURS un TaintLabel (PUBLIC au minimum) — jamais None.
+        Les appelants doivent tester `.level`, pas la vérité de l'objet.
+        """
         text = TaintTracker._to_text(params)
         level = TaintLevel.PUBLIC
         source = "none"
@@ -470,7 +441,7 @@ class FlowTracker:
             level, source = TaintLevel.SECRET, "session_mode"
         return TaintLabel(level=level, source=source)
 
-    def check_sink(self, label: TaintLabel, sink: SinkType) -> str | None:
+    def check_sink(self, label: TaintLabel | None, sink: SinkType) -> str | None:
         return self._tracker.check_sink(label, sink)
 
     def report(self) -> dict[str, Any]:
@@ -478,3 +449,4 @@ class FlowTracker:
         r["session_level"] = self._session_level.name
         r["tracked_needles"] = len(self._needles)
         return r
+        

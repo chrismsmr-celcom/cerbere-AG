@@ -17,10 +17,10 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------
-  # JOB 1 : Lint et format (indépendant de la version de Python)
+  # JOB 1 : Lint, format et analyse statique de sécurité
   # ---------------------------------------------------------
   lint:
-    name: Lint (Ruff)
+    name: Lint & Static Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -37,7 +37,6 @@ jobs:
       - name: Install Ruff
         run: |
           python -m pip install --upgrade pip
-          # Version figée : les règles de formatage changent d'une version à l'autre.
           pip install "ruff==0.17.1"
 
       - name: Ruff linter
@@ -45,6 +44,56 @@ jobs:
 
       - name: Ruff format check
         run: ruff format --check .
+
+      # NOUVELLE ÉTAPE : Vérification statique que les appels dangereux sont instrumentés
+      - name: Check Taint Instrumentation (AST)
+        run: |
+          echo "🔍 Checking for uninstrumented dangerous calls..."
+          python -c "
+          import ast
+          import sys
+          import os
+
+          DANGEROUS_SINKS = {'requests.post', 'requests.get', 'requests.put', 'requests.patch', 'subprocess.run', 'os.system'}
+          files_checked = 0
+          violations = []
+
+          for root, dirs, files in os.walk('.'):
+              # Ignorer les dossiers virtuels et de test pour cette vérification stricte
+              if any(d in root for d in ['.git', '.venv', 'venv', '__pycache__', 'tests', 'benchmarks']):
+                  continue
+              
+              for file in files:
+                  if file.endswith('.py'):
+                      filepath = os.path.join(root, file)
+                      files_checked += 1
+                      with open(filepath, 'r', encoding='utf-8') as f:
+                          try:
+                              tree = ast.parse(f.read())
+                          except SyntaxError:
+                              continue
+                      
+                      has_agentguard = any(
+                          isinstance(node, ast.Import) and any(n.name.startswith('agentguard') for n in node.names)
+                          or isinstance(node, ast.ImportFrom) and node.module and node.module.startswith('agentguard')
+                          for node in ast.walk(tree)
+                      )
+                      
+                      for node in ast.walk(tree):
+                          if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                              if isinstance(node.func.value, ast.Name):
+                                  call_name = f'{node.func.value.id}.{node.func.attr}'
+                                  if call_name in DANGEROUS_SINKS and not has_agentguard:
+                                      violations.append(f'{filepath}:{node.lineno} - {call_name} without agentguard import')
+
+          if violations:
+              print('❌ VIOLATIONS DÉTECTÉES : Des appels dangereux ne sont pas protégés par agentguard !')
+              for v in violations:
+                  print(f'  - {v}')
+              sys.exit(1)
+          else:
+              print(f'✅ OK: {files_checked} fichiers Python analysés. Aucune violation détectée.')
+          "
 
   # ---------------------------------------------------------
   # JOB 2 : Sécurité (SAST + dépendances + secrets), exécutée UNE fois
@@ -77,15 +126,11 @@ jobs:
       - name: Bandit report (medium and above, informational)
         run: |
           echo "🛡️ Bandit report (severity >= MEDIUM, confidence >= MEDIUM)..."
-          # -ll : sévérité MEDIUM et plus ; -ii : confiance MEDIUM et plus.
-          # Rapport complet, ne bloque pas. tests/ est exclu (chemins /tmp factices).
           bandit -r . -ll -ii -x ./tests,./.venv -f txt -o bandit-report.txt || true
           cat bandit-report.txt
 
       - name: Bandit gate (HIGH severity only)
         run: |
-          # -lll : sévérité HIGH uniquement ; -ii : confiance MEDIUM et plus.
-          # Cette étape fait échouer le build.
           bandit -r . -lll -ii -x ./tests,./.venv
 
       - name: Upload Bandit report
@@ -136,7 +181,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-          pip install pytest pytest-cov
+          pip install pytest pytest-cov wrapt # Ajout de wrapt pour les tests d'auto-instrumentation
 
       - name: Run Pytest with coverage
         run: |
@@ -153,5 +198,5 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
-          fail_ci_if_error: false # un échec d'upload ne doit pas casser le CI
+          fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}

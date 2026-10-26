@@ -1,7 +1,6 @@
 import hashlib
 import inspect
 import json
-import logging
 import os
 import time
 import warnings
@@ -205,7 +204,7 @@ class AgentGuard:
                 "AGENTGUARD_STATUS_CHECK",
                 "true",
             ).lower()
-            == "true"
+                == "true"
         )
 
         self._runtime_enabled = (
@@ -213,7 +212,7 @@ class AgentGuard:
                 "AGENTGUARD_RUNTIME_RISK_ENABLED",
                 "true",
             ).lower()
-            == "true"
+                == "true"
         )
 
         self._runtime_fail_closed = (
@@ -221,7 +220,7 @@ class AgentGuard:
                 "AGENTGUARD_RUNTIME_FAIL_CLOSED",
                 "true",
             ).lower()
-            == "true"
+                == "true"
         )
 
         self._trajectory = (
@@ -240,7 +239,7 @@ class AgentGuard:
                 "AGENTGUARD_TAINT_ENABLED",
                 "true",
             ).lower()
-            == "true"
+                == "true"
         )
 
         self._flow = FlowTracker(
@@ -249,9 +248,13 @@ class AgentGuard:
                     "AGENTGUARD_TAINT_SESSION_MODE",
                     "false",
                 ).lower()
-                == "true"
+                    == "true"
             )
         )
+
+        # Alias public : certains outils/tests générés attendent
+        # guard.taint_tracker. C'est le FlowTracker du SDK.
+        self.taint_tracker = self._flow
 
         # Masquage des spans avant envoi au collecteur.
         self._vault: IncidentVault | None = None
@@ -268,6 +271,40 @@ class AgentGuard:
             masking=self._masker.mode,
             shadow_mode=self.shadow_mode,
         )
+
+    # ==========================================================
+    # AUTO-INSTRUMENTATION (requests)
+    # ==========================================================
+
+    def auto_instrument(self) -> None:
+        """Active l'auto-instrumentation de requests (anti-exfiltration).
+
+        Délègue au module ``agentguard.auto_instrument`` : une seule source
+        de patch pour tout le process, même avec plusieurs instances
+        AgentGuard. Les requêtes vers le collector Cerbere sont exemptées
+        (sinon deadlock sur le polling d'approbation).
+        """
+        if not self._taint_enabled:
+            logger.warning(
+                "auto_instrument_skipped",
+                reason="taint tracking disabled",
+            )
+            return
+
+        from .auto_instrument import (
+            enable_auto_instrumentation,
+            set_taint_tracker,
+        )
+
+        set_taint_tracker(
+            self._flow,
+            excluded_urls=(self.collector_url,),
+        )
+        enable_auto_instrumentation()
+
+    # ==========================================================
+    # DÉCISIONS D'APPROBATION
+    # ==========================================================
 
     @staticmethod
     def _stable_approval_id(
@@ -349,6 +386,10 @@ class AgentGuard:
             headers["X-API-Key"] = self.api_key
 
         return headers
+
+    # ==========================================================
+    # MODE D'EXÉCUTION (contrôlé SaaS)
+    # ==========================================================
 
     def _refresh_runtime_mode(self) -> None:
         """Charge le mode d'exécution configuré dans le SaaS."""
@@ -455,6 +496,10 @@ class AgentGuard:
                 "from the Cerbere dashboard. Reconnect it there to resume."
             )
 
+    # ==========================================================
+    # TÉLÉMETRIE
+    # ==========================================================
+
     def _send_to_collector(self, span: GuardSpan):
         try:
             payload = SpanPayload(
@@ -508,6 +553,10 @@ class AgentGuard:
 
         if self._vault is not None and self._vault.pending() > 0:
             self._vault.flush()
+
+    # ==========================================================
+    # CAPTURE D'INCIDENT
+    # ==========================================================
 
     def _sync_incident_capture(self, incident_open: bool) -> None:
         """Aligne le SDK sur le serveur : un admin ouvre ou ferme l'incident
@@ -572,6 +621,10 @@ class AgentGuard:
 
         logger.info("incident_capture_stopped")
 
+    # ==========================================================
+    # DÉCISION SIGNÉE SERVEUR
+    # ==========================================================
+
     def _request_signed_decision(
         self,
         tool_name: str,
@@ -619,6 +672,10 @@ class AgentGuard:
                     metadata=decision.metadata,
                 ),
             )
+
+    # ==========================================================
+    # TAINT TRACKING
+    # ==========================================================
 
     def track_input(
         self,
@@ -723,6 +780,10 @@ class AgentGuard:
         )
 
         return cost, input_tokens, output_tokens
+
+    # ==========================================================
+    # GARDE LLM
+    # ==========================================================
 
     def guard_llm_call(self, func: Callable) -> Callable:
         @wraps(func)
@@ -844,6 +905,10 @@ class AgentGuard:
             return result
 
         return wrapper
+
+    # ==========================================================
+    # GARDE OUTILS
+    # ==========================================================
 
     @staticmethod
     def _bind_tool_params(
@@ -1459,6 +1524,10 @@ class AgentGuard:
 
         return result
 
+    # ==========================================================
+    # RAPPORT
+    # ==========================================================
+
     def get_report(self) -> dict[str, Any]:
         shadow_observations = sum(
             1
@@ -1483,12 +1552,4 @@ class AgentGuard:
                 self._vault is not None and not self._vault.expired
             ),
         }
-
-
-def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s",
-    )
-
-    logger.info("Starting CerbereAG MCP Server (v1.x) on stdio...")
+        
