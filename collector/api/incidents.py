@@ -748,7 +748,7 @@ def _access_events(incident_id, since, until):
                     {
                         "t": _num(e.get("timestamp")),
                         "kind": kind,
-                        "by": actor[6:] if actor.startswith("human:") else actor,
+                        "by": actor.removeprefix("human:"),
                         "token": details.get("token"),
                         "reason": details.get("reason"),
                         "why": details.get("why"),

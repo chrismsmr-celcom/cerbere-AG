@@ -14,6 +14,7 @@ import {
 } from '../../lib/incidents'
 import { Button, Empty, ErrorNote, Panel, Skeleton, useArm, useToast } from '../../components/ui'
 import { Modal } from '../../components/Modal'
+import { IncidentLogModal } from '../../components/IncidentLogModal'
 import type { Agent } from '../../lib/api'
 
 const PHASE: Record<IncidentPhase, { label: string; color: string }> = {
@@ -102,7 +103,13 @@ function OpenCaptureModal({
   )
 }
 
-function IncidentRow({ incident }: { incident: Incident }) {
+function IncidentRow({
+  incident,
+  onOpenLog,
+}: {
+  incident: Incident
+  onOpenLog: (id: string) => void
+}) {
   const toast = useToast()
   const qc = useQueryClient()
   const { armed, arm, reset } = useArm()
@@ -146,6 +153,7 @@ function IncidentRow({ incident }: { incident: Incident }) {
       </td>
       <td className="px-4 py-2.5 text-right">
         <div className="flex justify-end gap-2">
+          <Button onClick={() => onOpenLog(incident.id)}>Log</Button>
           {phase === 'capturing' && (
             <Button disabled={close.isPending} onClick={() => close.mutate(false)}>
               Stop
@@ -169,6 +177,7 @@ export default function Incidents() {
   const incidentsQ = useIncidents(manage)
   const agentsQ = useAgents()
   const [target, setTarget] = useState<Agent | null>(null)
+  const [logId, setLogId] = useState<string | null>(null)
 
   const intro = (
     <p className="max-w-2xl text-dim">
@@ -214,6 +223,7 @@ export default function Incidents() {
 
   const agents = agentsQ.data?.agents || []
   const incidents = incidentsQ.data?.incidents || []
+  const logIncident = incidents.find((i) => i.id === logId)
   const live = new Set(incidents.filter((i) => phaseOf(i) === 'capturing').map((i) => i.agent_id))
 
   return (
@@ -267,7 +277,7 @@ export default function Incidents() {
               </thead>
               <tbody>
                 {incidents.map((i) => (
-                  <IncidentRow key={i.id} incident={i} />
+                  <IncidentRow key={i.id} incident={i} onOpenLog={setLogId} />
                 ))}
               </tbody>
             </table>
@@ -276,6 +286,7 @@ export default function Incidents() {
       </Panel>
 
       {target && <OpenCaptureModal agent={target} cfg={cfg} onClose={() => setTarget(null)} />}
+      {logIncident && <IncidentLogModal incident={logIncident} onClose={() => setLogId(null)} />}
     </div>
   )
 }

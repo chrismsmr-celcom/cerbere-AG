@@ -138,7 +138,7 @@ class Guard:
                 # Config collector/clé : lue par le SDK via ses variables d'env
                 self.sdk = AgentGuard(agent_id=AGENT_ID)
                 log("CERBERE", f"SDK connecté (agent_id={AGENT_ID})", "grn")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log("CERBERE", f"SDK indisponible ({e}), bascule en --dry", "yel")
                 self.dry = True
 
