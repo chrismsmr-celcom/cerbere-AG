@@ -7,17 +7,25 @@
 # Cœur sécurité — review obligatoire
 /collector/auth.py      @chrismsmr-celcom
 /collector/authz.py     @chrismsmr-celcom
-/collector/api.py       @chrismsmr-celcom
+/collector/api/         @chrismsmr-celcom
 /collector/dashboard.py @chrismsmr-celcom
+/collector/db.py        @chrismsmr-celcom
+/collector/mcp_gateway.py @chrismsmr-celcom
 /agentguard/            @chrismsmr-celcom
 /policy/                @chrismsmr-celcom
+/policies/              @chrismsmr-celcom
 /mcp/                   @chrismsmr-celcom
+/wsgi.py                @chrismsmr-celcom
 
 # CI / infra
 /.github/               @chrismsmr-celcom
 /requirements*.txt      @chrismsmr-celcom
+/pyproject.toml         @chrismsmr-celcom
 /Dockerfile*            @chrismsmr-celcom
 /docker-compose.yml     @chrismsmr-celcom
+/.dockerignore           @chrismsmr-celcom
+/env.example            @chrismsmr-celcom
+/render.yaml            @chrismsmr-celcom
 
 # Docs & légal
 /legal/                 @chrismsmr-celcom
