@@ -91,7 +91,9 @@ def _check_for_taint(args: tuple, kwargs: dict) -> None:
 def _make_wrapper(method: str, original: Any):
     def _wrapper(*args: Any, **kwargs: Any):
         _check_for_taint(args, kwargs)
-        logger.debug("auto_instrument_validated", method=method)
+        # logging stdlib : pas de kwargs libres (TypeError dès que le niveau
+        # DEBUG est actif), on formate le message.
+        logger.debug("auto_instrument_validated method=%s", method)
         return original(*args, **kwargs)
 
     return _wrapper

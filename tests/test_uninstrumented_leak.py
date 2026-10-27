@@ -119,3 +119,4 @@ class TestUninstrumentedLeakPrevention:
             assert response.status_code == 200
             assert response.json() == {"status": "ok"}
             assert len(network_calls) == 1
+            

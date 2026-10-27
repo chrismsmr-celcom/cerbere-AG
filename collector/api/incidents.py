@@ -20,6 +20,7 @@ Agent (clé API) :
     POST /v1/incident/sealed                dépose des blobs chiffrés
 """
 
+import json
 import os
 import re
 import secrets
@@ -621,3 +622,215 @@ def api_incident_sealed():
     finally:
         conn.close()
     return jsonify({"stored": len(rows)}), 200
+
+
+# ── Journal d'un incident (modale du dashboard) ─────────────────────────────
+#
+#   GET /api/incidents/<id>/log?limit=300   (session humaine admin)
+#
+# Pas de colonne incident_id : un seul incident peut être ouvert par agent
+# (409 sinon), donc « spans de cet agent entre l'ouverture et la fermeture »
+# identifie exactement le journal de l'incident. Les valeurs renvoyées sont
+# celles DÉJÀ masquées dans `spans` (jamais les valeurs scellées). La section
+# `access` vient de l'audit chaîné (qui a rouvert quel token, avec quel motif).
+
+LOG_PREVIEW_CHARS = 4000
+_RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+
+def _as_json(value, default):
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value) if value else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _clip(value):
+    text = json.dumps(value, default=str, ensure_ascii=False)
+    return text if len(text) <= LOG_PREVIEW_CHARS else text[:LOG_PREVIEW_CHARS] + "…"
+
+
+def _worst_risk(checks):
+    worst = "low"
+    if isinstance(checks, list):
+        for c in checks:
+            if isinstance(c, dict) and not c.get("passed", True):
+                r = c.get("risk_level", "low")
+                if _RISK_ORDER.get(r, 0) > _RISK_ORDER.get(worst, 0):
+                    worst = r
+    return worst
+
+
+def _log_span(r):
+    """r = (span_id, span_type, timestamp, latency_ms, input_data, output_data,
+    security_checks, blocked, block_reason, cost_usd, detection_layer, model)"""
+    input_data = _as_json(r[4], {})
+    output_data = _as_json(r[5], {})
+    checks = _as_json(r[6], [])
+    tool = None
+    if isinstance(input_data, dict):
+        tool = input_data.get("tool_name") or input_data.get("tool")
+    shadow = output_data.get("cerbere_shadow") if isinstance(output_data, dict) else None
+    return {
+        "span_id": r[0],
+        "type": r[1],
+        "t": float(r[2] or 0),
+        "latency_ms": float(r[3] or 0),
+        "tool": tool,
+        "model": r[11],
+        "blocked": bool(r[7]),
+        "reason": r[8],
+        "cost_usd": float(r[9] or 0),
+        "layer": r[10],
+        "risk": _worst_risk(checks),
+        "shadow": shadow.get("would_have_action") if isinstance(shadow, dict) else None,
+        "input": _clip(input_data),
+        "output": _clip(output_data),
+    }
+
+
+def _lifecycle(created_at, opened_by, reason, status, closed_at, expires_at):
+    entries = [
+        {"t": created_at, "kind": "opened", "by": opened_by, "text": reason},
+    ]
+    if status == "closed" and closed_at:
+        entries.append({"t": closed_at, "kind": "closed"})
+    elif status == "purged":
+        if closed_at:
+            entries.append({"t": closed_at, "kind": "destroyed"})
+        else:
+            entries.append({"t": expires_at, "kind": "expired"})
+    return entries
+
+
+def _num(v):
+    try:
+        return float(v.timestamp()) if hasattr(v, "timestamp") else float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _access_events(incident_id, since, until):
+    """Révélations (et refus) de valeurs scellées de CET incident, lues dans
+    l'audit chaîné. Ne renvoie jamais de valeur : seulement qui, quand, quel
+    token, quel motif. Best-effort : [] si l'audit n'est pas disponible."""
+    try:
+        from collector.audit_routes import get_audit_log
+
+        audit = get_audit_log()
+        if not audit:
+            return []
+        out = []
+        for event_type, kind in (
+            ("incident_revealed", "revealed"),
+            ("incident_reveal_denied", "denied"),
+        ):
+            entries = audit.query(
+                org_id=g.org_id,
+                event_type=event_type,
+                since=since,
+                until=until,
+                limit=500,
+            )
+            for e in entries:
+                details = _as_json(e.get("details"), {})
+                if not isinstance(details, dict):
+                    details = {}
+                if (
+                    e.get("resource") != f"incident:{incident_id}"
+                    and details.get("incident_id") != incident_id
+                ):
+                    continue
+                actor = str(e.get("actor") or "")
+                out.append(
+                    {
+                        "t": _num(e.get("timestamp")),
+                        "kind": kind,
+                        "by": actor[6:] if actor.startswith("human:") else actor,
+                        "token": details.get("token"),
+                        "reason": details.get("reason"),
+                        "why": details.get("why"),
+                    }
+                )
+        return out
+    except Exception:
+        logger.warning("incident_access_log_failed")
+        return []
+
+
+@api_bp.route(
+    "/api/incidents/<incident_id>/log", methods=["GET"], endpoint="api_incident_log"
+)
+def api_incident_log(incident_id):
+    err = _setup() or _human_admin_or_error()
+    if err:
+        return err
+    try:
+        limit = max(1, min(int(request.args.get("limit", 300)), 500))
+    except (TypeError, ValueError):
+        limit = 300
+
+    inc, _ = _db_run(
+        """SELECT agent_id, status, reason, opened_by, created_at, expires_at, closed_at
+           FROM incidents WHERE id = ? AND org_id = ?""",
+        (incident_id, g.org_id),
+        fetch="one",
+    )
+    if not inc:
+        return jsonify({"error": "incident not found"}), 404
+    agent_id, status, reason, opened_by, created_at, expires_at, closed_at = inc
+    created_at, expires_at = float(created_at), float(expires_at)
+    closed_at = float(closed_at) if closed_at else None
+
+    # Fenêtre : ouverture -> fermeture ; si encore ouvert, pas de borne haute.
+    now = time.time()
+    still_open = status == "open" and expires_at > now
+    upper = None if still_open else (closed_at or expires_at)
+
+    where = "org_id = ? AND agent_id = ? AND timestamp >= ?"
+    params = [g.org_id, agent_id, created_at]
+    if upper is not None:
+        where += " AND timestamp <= ?"
+        params.append(upper)
+
+    total_row, _ = _db_run(
+        f"SELECT COUNT(*) FROM spans WHERE {where}", tuple(params), fetch="one"
+    )
+    rows, _ = _db_run(
+        f"""SELECT span_id, span_type, timestamp, latency_ms, input_data, output_data,
+                   security_checks, blocked, block_reason, cost_usd, detection_layer, model
+            FROM spans WHERE {where} ORDER BY timestamp DESC LIMIT {limit}""",
+        tuple(params),
+        fetch="all",
+    )
+    sealed_row, _ = _db_run(
+        "SELECT COUNT(*) FROM incident_sealed WHERE incident_id = ?",
+        (incident_id,),
+        fetch="one",
+    )
+
+    resp = jsonify(
+        {
+            "incident": {
+                "id": incident_id,
+                "agent_id": agent_id,
+                "status": status,
+                "reason": reason,
+                "opened_by": opened_by,
+                "created_at": created_at,
+                "expires_at": expires_at,
+                "closed_at": closed_at,
+                "sealed_values": int(sealed_row[0]),
+            },
+            "lifecycle": _lifecycle(
+                created_at, opened_by, reason, status, closed_at, expires_at
+            ),
+            "spans": [_log_span(r) for r in rows],
+            "access": _access_events(incident_id, created_at, upper),
+            "total": int(total_row[0]),
+        }
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp, 200
