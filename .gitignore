@@ -54,4 +54,6 @@ rapport_*.json
 agentguard-model-onnx/
 
 bandit-local.*
-node_modules/
+node_modules/patch_incidents_tsx.py
+dashboard/node_modules/, patch_incidents_tsx.py
+dashboard/node_modules/
