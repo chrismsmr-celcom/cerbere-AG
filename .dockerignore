@@ -1,0 +1,87 @@
+# ============================================================================
+# .dockerignore — Cerbere AG / AgentGuard
+# Garde l'image Docker minimale : seul le code nécessaire au collector
+# (wsgi.py + collector/ + agentguard/ + policy/ + static/ + requirements)
+# entre dans le contexte de build.
+# ============================================================================
+
+# ── VCS & CI ────────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+.github
+.gitleaks.toml
+.pre-commit-config.yaml
+
+# ── Environnement & secrets locaux ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+
+# ── Artefacts de build & caches ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+
+# ── Rapports d'analyse (aucune valeur à l'exécution) ────────────────────────
+bandit.json
+*.log
+logs/
+
+# ── Docs & assets lourds (git LFS serait mieux, mais hors image) ────────────
+docs/
+*.png
+*.gif
+*.mp4
+*.svg
+!static/*.svg
+!collector/static/
+!collector/templates/
+
+# ── Benchmarks, tests, démos, exemples ──────────────────────────────────────
+benchmarks/
+tests/
+demo/
+examples/
+generate_dataset.py
+
+# ── Déchets & fichiers morts ───────────────────────────────────────────────
+*.bak
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Frontend isolé (pas utilisé par l'image collector) ───────────────────────
+app/
+node_modules/
+package.json
+package-lock.json
+
+# ── Divers non nécessaire à l'exécution �────────────────────────────────────
+legal/
+google*.html
+Procfile
+render.yaml
+smithery.yaml
+runtime.txt
+docker-compose.yml
+Dockerfile
+Dockerfile.mcp
+.dockerignore
