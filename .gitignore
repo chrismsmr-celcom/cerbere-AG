@@ -57,3 +57,5 @@ bandit-local.*
 node_modules/patch_incidents_tsx.py
 dashboard/node_modules/, patch_incidents_tsx.py
 dashboard/node_modules/
+
+*.bak
