@@ -18,10 +18,13 @@ Pour tester aussi le taint tracking inter-serveurs et le fail-closed
 """
 
 import json
+import os
 import shutil
 import sys
 
 import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
 pytestmark = pytest.mark.skipif(
     shutil.which("npx") is None, reason="npx (node) requis pour le serveur amont"
@@ -56,6 +59,8 @@ def test_gateway_smoke(tmp_path):
     config_path = tmp_path / "gateway.json"
     config_path.write_text(json.dumps(CONFIG))
 
+      mcp_dir = os.path.join(os.path.dirname(__file__), "..", "mcp")
+    os.environ["PYTHONPATH"] = os.path.abspath(mcp_dir) + os.pathsep + os.environ.get("PYTHONPATH", "")
     params = StdioServerParameters(
         command=sys.executable,
         args=["-m", "gateway_server", "--config", str(config_path)],
@@ -63,8 +68,7 @@ def test_gateway_smoke(tmp_path):
 
     async def scenario() -> dict:
         results: dict = {}
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as session:
+                async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
                 await session.initialize()
 
                 # 1. tools/list : outils amonts préfixés et filtrés
