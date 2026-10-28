@@ -13,10 +13,8 @@ Run from the repo root:
 import json
 
 import pytest
-
 from gateway_config import ConfigError, load_config
 from gateway_inspection import ResponseInspector, TaintRegistry
-
 
 # ---------------------------------------------------------------- config
 
@@ -73,9 +71,22 @@ def test_key_identity():
     cfg = _load(
         {
             "transport": "http",
-            "http": {"api_keys": {"ag-key": {"agent_id": "a", "budget": 1.5, "allowed_servers": ["web"]}}},
+            "http": {
+                "api_keys": {
+                    "ag-key": {
+                        "agent_id": "a",
+                        "budget": 1.5,
+                        "allowed_servers": ["web"],
+                    }
+                }
+            },
             "servers": [
-                {"label": "web", "command": ["x"], "allowed_tools": ["*"], "external": True}
+                {
+                    "label": "web",
+                    "command": ["x"],
+                    "allowed_tools": ["*"],
+                    "external": True,
+                }
             ],
         }
     )
@@ -90,6 +101,7 @@ def test_key_identity():
 
 
 # ----------------------------------------------------------- inspection
+
 
 def test_redaction_masks_pii_and_registers_taints():
     insp = ResponseInspector(redact_pii=True, redact_secrets=True)
@@ -107,12 +119,22 @@ def test_taint_registry_blocks_base64_hex_and_url():
     secret = "ag-supersecretkey1234567890"
     reg.register(secret)
 
-    import base64, binascii, urllib.parse
+    import base64
+    import binascii
+    import urllib.parse
 
     assert reg.find_in_arguments({"body": secret}) is not None
-    assert reg.find_in_arguments({"body": base64.b64encode(secret.encode()).decode()}) is not None
-    assert reg.find_in_arguments({"body": binascii.hexlify(secret.encode()).decode()}) is not None
-    assert reg.find_in_arguments({"url": urllib.parse.quote(secret, safe="")}) is not None
+    assert (
+        reg.find_in_arguments({"body": base64.b64encode(secret.encode()).decode()})
+        is not None
+    )
+    assert (
+        reg.find_in_arguments({"body": binascii.hexlify(secret.encode()).decode()})
+        is not None
+    )
+    assert (
+        reg.find_in_arguments({"url": urllib.parse.quote(secret, safe="")}) is not None
+    )
     assert reg.find_in_arguments({"body": "totally harmless"}) is None
 
 

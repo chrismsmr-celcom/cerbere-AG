@@ -8,7 +8,7 @@ Topologie :
                               /        | enforcement (AgentGuard)
                               |        v
                               /     Serveur amont 1 (fs)
-    (aucun code à changer :   \     Serveur amont N (github, db, ...)
+    (aucun code à changer :   \\     Serveur amont N (github, db, ...)
 
 Noms d'outils exposés : "<label>__<tool>" (ex: "fs__read_file"),
 ce qui évite les collisions entre serveurs et rend la traçabilité lisible
@@ -31,10 +31,10 @@ try:
 except ImportError:  # SDK plus ancien : l'approbation remonte comme SecurityException
     ApprovalRequiredException = SecurityException
 
-from agentguard.sdk import AgentGuard
-
 from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
+
+from agentguard.sdk import AgentGuard
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
 current_identity: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
@@ -95,10 +95,13 @@ class Upstream:
         self.session = None  # ClientSession, affecté dans connect()
 
     async def connect(self):
-        from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        params = StdioServerParameters(command=self.spec.command[0], args=self.spec.command[1:])
+        from mcp import ClientSession, StdioServerParameters
+
+        params = StdioServerParameters(
+            command=self.spec.command[0], args=self.spec.command[1:]
+        )
         self._client_ctx = stdio_client(params)
         read, write = await self._client_ctx.__aenter__()
         self.session = ClientSession(read, write)
@@ -133,7 +136,9 @@ class CerbereGateway:
                 up = Upstream(spec)
                 await up.connect()
             except Exception as exc:
-                raise ConfigError(f"Failed to start upstream '{spec.label}': {exc}") from exc
+                raise ConfigError(
+                    f"Failed to start upstream '{spec.label}': {exc}"
+                ) from exc
             self.upstreams[spec.label] = up
             allow = "*" if spec.allow_all else ",".join(spec.allowed_tools)
             mode = " (external: taint-enforced)" if spec.external else ""
@@ -179,7 +184,9 @@ class CerbereGateway:
             guard.guard_tool_call(
                 f"mcp:{label}:{tool}",
                 params=arguments,
-                func=lambda *a, **k: None,  # no-op : le vrai appel suit, seulement si ALLOW
+                func=lambda *a, **k: (
+                    None
+                ),  # no-op : le vrai appel suit, seulement si ALLOW
             )
 
         @server.list_tools()
@@ -227,7 +234,9 @@ class CerbereGateway:
 
             # 2. Allowlist par serveur (fail-closed)
             if not spec.allows(tool):
-                sys.stderr.write(f"[cerbere-ag-gateway] DENIED {name}: tool not in allowlist\n")
+                sys.stderr.write(
+                    f"[cerbere-ag-gateway] DENIED {name}: tool not in allowlist\n"
+                )
                 raise RuntimeError(
                     f"Blocked by CerbereAG: tool '{tool}' is not allowed on '{label}'"
                 )
@@ -307,7 +316,9 @@ class CerbereGateway:
             try:
                 identity = config.key_identity(api_key)
             except ConfigError:
-                return JSONResponse({"error": "invalid or missing API key"}, status_code=401)
+                return JSONResponse(
+                    {"error": "invalid or missing API key"}, status_code=401
+                )
             current_api_key.set(api_key)
             current_identity.set(identity)
             return await call_next(request)
@@ -321,7 +332,9 @@ class CerbereGateway:
             f"[cerbere-ag-gateway] HTTP on http://{config.host}:{config.port}{config.path} "
             f"({len(config.api_keys)} API key(s))\n"
         )
-        config_uvicorn = uvicorn.Config(app, host=config.host, port=config.port, log_level="info")
+        config_uvicorn = uvicorn.Config(
+            app, host=config.host, port=config.port, log_level="info"
+        )
         await uvicorn.Server(config_uvicorn).serve()
 
 
@@ -343,7 +356,9 @@ def main() -> None:
         prog="cerbere-ag-gateway",
         description="Cerbere AG universal MCP gateway (stdio or Streamable HTTP)",
     )
-    parser.add_argument("--config", default=None, help="Path to gateway config (JSON/YAML)")
+    parser.add_argument(
+        "--config", default=None, help="Path to gateway config (JSON/YAML)"
+    )
     args = parser.parse_args()
 
     try:

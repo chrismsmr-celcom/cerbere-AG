@@ -49,8 +49,9 @@ def test_gateway_smoke(tmp_path):
     ce que fait l'agent en production (aucune coopération requise)."""
     import asyncio
 
-    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+
+    from mcp import ClientSession, StdioServerParameters
 
     config_path = tmp_path / "gateway.json"
     config_path.write_text(json.dumps(CONFIG))
@@ -76,7 +77,9 @@ def test_gateway_smoke(tmp_path):
                 )
 
                 # 2. appel autorisé -> doit aboutir
-                listing = await session.call_tool("fs__list_directory", {"path": "/tmp"})
+                listing = await session.call_tool(
+                    "fs__list_directory", {"path": "/tmp"}
+                )
                 results["allowed_call_ok"] = not listing.isError
 
                 # 3. outil hors allowlist -> BLOQUÉ

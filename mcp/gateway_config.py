@@ -90,7 +90,11 @@ class GatewayConfig:
     def key_identity(self, api_key: str | None) -> dict[str, Any]:
         """Résout l'identité d'une clé API. En stdio (pas de clé), identité par défaut."""
         if not api_key:
-            return {"agent_id": self.agent_id, "budget": self.budget, "allowed_servers": None}
+            return {
+                "agent_id": self.agent_id,
+                "budget": self.budget,
+                "allowed_servers": None,
+            }
         ident = self.api_keys.get(api_key)
         if ident is None:
             raise ConfigError("Unknown API key")
@@ -108,7 +112,9 @@ def _load_raw(path: str) -> dict[str, Any]:
         try:
             import yaml  # type: ignore
         except ImportError as exc:  # pragma: no cover
-            raise ConfigError("PyYAML required for YAML configs: pip install pyyaml") from exc
+            raise ConfigError(
+                "PyYAML required for YAML configs: pip install pyyaml"
+            ) from exc
         data = yaml.safe_load(text)
     else:
         data = json.loads(text)
@@ -145,7 +151,7 @@ def load_config(path: str | None = None) -> GatewayConfig:
         if not allowed or not isinstance(allowed, list) or not any(allowed):
             raise ConfigError(
                 f"Server '{label}': 'allowed_tools' is required (fail-closed). "
-                "Use [\"*\"] to explicitly allow all tools."
+                'Use ["*"] to explicitly allow all tools.'
             )
         if "*" in allowed and len(allowed) > 1:
             raise ConfigError(f"Server '{label}': '*' must be alone in allowed_tools")
@@ -154,7 +160,9 @@ def load_config(path: str | None = None) -> GatewayConfig:
                 label=label,
                 command=[str(c) for c in command],
                 allowed_tools=[str(t) for t in allowed],
-                budget=float(entry["budget"]) if entry.get("budget") is not None else None,
+                budget=float(entry["budget"])
+                if entry.get("budget") is not None
+                else None,
                 external=bool(entry.get("external", False)),
             )
         )
@@ -179,7 +187,12 @@ def load_config(path: str | None = None) -> GatewayConfig:
 
     return GatewayConfig(
         agent_id=str(raw.get("agent_id", "cerbere_gateway")),
-        collector_url=str(raw.get("collector_url", os.environ.get("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080"))),
+        collector_url=str(
+            raw.get(
+                "collector_url",
+                os.environ.get("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080"),
+            )
+        ),
         budget=float(raw.get("budget", 5.0)),
         transport=transport,
         host=str(http_cfg.get("host", "127.0.0.1")),

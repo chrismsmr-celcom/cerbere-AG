@@ -130,7 +130,7 @@ class ResponseInspector:
             if isinstance(text, str) and text:
                 redacted, _ = self.inspect_text(text)
                 try:
-                    setattr(item, "text", redacted)
+                    item.text = redacted
                 except Exception:  # pragma: no cover - content figé
                     pass
         return content
