@@ -37,8 +37,8 @@ from gateway_inspection import ResponseInspector
 from agentguard.sdk import AgentGuard
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
-current_identity: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
-    "cerbere_identity", default={}
+current_identity: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "cerbere_identity", default=None
 )
 
 # Auth HTTP : clé courant (pour les logs/erreurs), None en stdio.
