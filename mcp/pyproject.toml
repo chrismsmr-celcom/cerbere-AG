@@ -4,34 +4,46 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cerbere-ag-mcp"
-version = "0.1.0"
-description = "MCP server exposing CerbereAG runtime security checks (prompt injection, PII redaction, tool authorization) to any MCP-compatible AI agent (Claude, Cursor, Cline, custom agents)."
+version = "0.2.0"
+description = "CerbereAG MCP: advisory security server (prompt injection, PII redaction, tool authorization) plus the universal MCP gateway — one guarded door for any agent to any MCP server."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-    { name = "Christopher Dikesa" }
+  { name = "Christopher Dikesa" }
 ]
-keywords = ["ai", "agents", "security", "mcp", "model-context-protocol", "guardrails"]
+keywords = ["ai", "agents", "security", "mcp", "model-context-protocol", "guardrails", "gateway"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
-    "Topic :: Security",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
 ]
 dependencies = [
-    "cerbere-ag>=0.2.0",
-    "mcp>=1.0.0,<2.0.0",
-    "tiktoken>=0.7.0,<1.0.0",
-    "requests>=2.31.0,<3.0.0",
+  "cerbere-ag>=0.2.0",
+  "mcp>=1.0.0,<2.0.0",
+  "tiktoken>=0.7.0,<1.0.0",
+  "requests>=2.31.0,<3.0.0",
 ]
 
+[project.optional-dependencies]
+gateway-http = [
+  "mcp>=1.9.0,<2.0.0",  # Streamable HTTP transport
+  "uvicorn>=0.30.0",
+  "starlette>=0.37.0",
+]
+yaml = ["pyyaml>=6.0"]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
+# Serveur consultatif existant (inchangé)
 cerbere-ag-mcp = "mcp_server:main"
+# Gateway universelle (multi-upstream, stdio + HTTP)
+cerbere-ag-gateway = "gateway_server:main"
 
 [project.urls]
 Homepage = "https://app.cerbereag.site"
 Repository = "https://github.com/chrismsmr-celcom/agentguard"
 
 [tool.setuptools]
-py-modules = ["mcp_server"]
+py-modules = ["mcp_server", "gateway_server", "gateway_config", "gateway_inspection"]
