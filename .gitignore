@@ -60,3 +60,4 @@ dashboard/node_modules/
 
 *.bak
 .ruff_cache/
+.ruff_cache/
