@@ -52,18 +52,30 @@ def test_gateway_smoke(tmp_path):
     ce que fait l'agent en production (aucune coopération requise)."""
     import asyncio
 
+    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    from mcp import ClientSession, StdioServerParameters
+    mcp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp"))
+
+    # Échec lisible si le module n'est pas là, plutôt qu'un crash MCP cryptique.
+    assert os.path.exists(
+        os.path.join(mcp_dir, "gateway_server.py")
+    ), f"gateway_server.py introuvable dans {mcp_dir}"
 
     config_path = tmp_path / "gateway.json"
     config_path.write_text(json.dumps(CONFIG))
 
-    mcp_dir = os.path.join(os.path.dirname(__file__), "..", "mcp")
-    os.environ["PYTHONPATH"] = os.path.abspath(mcp_dir) + os.pathsep + os.environ.get("PYTHONPATH", "")
+    # Le client MCP stdio n'hérite que d'une liste blanche de variables
+    # d'environnement (PATH, HOME, ...) : PYTHONPATH positionné dans os.environ
+    # serait ignoré par le sous-processus. On passe donc l'env explicitement.
+    child_env = {
+        **os.environ,
+        "PYTHONPATH": mcp_dir + os.pathsep + os.environ.get("PYTHONPATH", ""),
+    }
     params = StdioServerParameters(
         command=sys.executable,
         args=["-m", "gateway_server", "--config", str(config_path)],
+        env=child_env,
     )
 
     async def scenario() -> dict:
