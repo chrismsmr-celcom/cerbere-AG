@@ -1,0 +1,13 @@
+name: Clean Ruff Cache
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove Ruff cache
+        run: rm -rf .ruff_cache
