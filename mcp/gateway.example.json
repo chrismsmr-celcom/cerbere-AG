@@ -1,0 +1,41 @@
+{
+  "agent_id": "cerbere_gateway",
+  "collector_url": "http://localhost:8080",
+  "budget": 5.0,
+  "transport": "http",
+  "http": {
+    "host": "127.0.0.1",
+    "port": 8081,
+    "path": "/mcp",
+    "api_keys": {
+      "ag-alice-key": {
+        "agent_id": "alice-agent",
+        "budget": 3.0
+      },
+      "ag-bob-key": {
+        "agent_id": "bob-agent",
+        "budget": 1.0,
+        "allowed_servers": ["web"]
+      }
+    }
+  },
+  "response_inspection": {
+    "redact_pii": true,
+    "redact_secrets": true
+  },
+  "servers": [
+    {
+      "label": "fs",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "allowed_tools": ["read_file", "list_directory", "write_file"],
+      "budget": 2.0,
+      "external": false
+    },
+    {
+      "label": "web",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-fetch"],
+      "allowed_tools": ["*"],
+      "external": true
+    }
+  ]
+}
