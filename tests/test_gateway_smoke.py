@@ -52,8 +52,9 @@ def test_gateway_smoke(tmp_path):
     ce que fait l'agent en production (aucune coopération requise)."""
     import asyncio
 
-    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+
+    from mcp import ClientSession, StdioServerParameters
 
     mcp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
