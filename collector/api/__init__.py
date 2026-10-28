@@ -27,6 +27,7 @@ import collector.api.incidents
 import collector.api.insights
 import collector.api.metrics
 import collector.api.settings
+import collector.api.shadow_log
 import collector.api.spans
 
 # --- Modules de routes : chacun enregistre ses routes sur api_bp à l'import. ---

@@ -4,7 +4,7 @@ import { get } from '../lib/api'
 import { phaseOf, remaining, type Incident, type IncidentPhase } from '../lib/incidents'
 import { Empty, ErrorNote, Skeleton } from './ui'
 import { EvidenceReveal } from './EvidenceReveal'
-import { WideModal } from './WideModal'
+import { Modal } from './Modal'
 import { FilterChip, PrettyBlock, clock } from './LogParts'
 
 type LogSpan = {
@@ -133,7 +133,7 @@ export function IncidentLogModal({ incident, onClose }: { incident: Incident; on
   const phase = phaseOf(incident)
 
   return (
-    <WideModal title={`Incident log · ${incident.agent_id}`} onClose={onClose}>
+    <Modal open wide title={`Incident log · ${incident.agent_id}`} onClose={onClose}>
       <div className="min-w-0 space-y-3 text-[13px]">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-dim">
           <span className="text-paper">{PHASE_LABEL[phase]}</span>
@@ -164,7 +164,7 @@ export function IncidentLogModal({ incident, onClose }: { incident: Incident; on
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
             <div className="max-h-[60vh] min-w-0 overflow-auto rounded-md border border-line">
               <table className="w-full min-w-[520px] text-left">
-                <thead className="sticky top-0 bg-slab text-[12.5px] text-faint">
+                <thead className="sticky top-0 bg-coal text-[12.5px] text-faint">
                   <tr className="border-b border-line">
                     {['Time', 'Action', 'Verdict', 'Risk'].map((h) => (
                       <th key={h} className="px-3 py-2 font-normal">
@@ -254,6 +254,6 @@ export function IncidentLogModal({ incident, onClose }: { incident: Incident; on
           </div>
         )}
       </div>
-    </WideModal>
+    </Modal>
   )
 }
