@@ -59,7 +59,7 @@ def test_gateway_smoke(tmp_path):
     config_path = tmp_path / "gateway.json"
     config_path.write_text(json.dumps(CONFIG))
 
-      mcp_dir = os.path.join(os.path.dirname(__file__), "..", "mcp")
+    mcp_dir = os.path.join(os.path.dirname(__file__), "..", "mcp")
     os.environ["PYTHONPATH"] = os.path.abspath(mcp_dir) + os.pathsep + os.environ.get("PYTHONPATH", "")
     params = StdioServerParameters(
         command=sys.executable,
@@ -68,33 +68,33 @@ def test_gateway_smoke(tmp_path):
 
     async def scenario() -> dict:
         results: dict = {}
-                async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
-                await session.initialize()
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
 
-                # 1. tools/list : outils amonts préfixés et filtrés
-                tools = await session.list_tools()
-                names = [t.name for t in tools.tools]
-                results["listed"] = names
-                assert "fs__read_file" in names, f"fs__read_file absent de {names}"
-                assert "fs__write_file" not in names, (
-                    "write_file est hors allowlist : il ne doit PAS apparaître"
-                )
+            # 1. tools/list : outils amonts préfixés et filtrés
+            tools = await session.list_tools()
+            names = [t.name for t in tools.tools]
+            results["listed"] = names
+            assert "fs__read_file" in names, f"fs__read_file absent de {names}"
+            assert "fs__write_file" not in names, (
+                "write_file est hors allowlist : il ne doit PAS apparaître"
+            )
 
-                # 2. appel autorisé -> doit aboutir
-                listing = await session.call_tool(
-                    "fs__list_directory", {"path": "/tmp"}
-                )
-                results["allowed_call_ok"] = not listing.isError
+            # 2. appel autorisé -> doit aboutir
+            listing = await session.call_tool(
+                "fs__list_directory", {"path": "/tmp"}
+            )
+            results["allowed_call_ok"] = not listing.isError
 
-                # 3. outil hors allowlist -> BLOQUÉ
-                denied = await session.call_tool(
-                    "fs__write_file", {"path": "/tmp/x", "contents": "x"}
-                )
-                results["denied_call_blocked"] = denied.isError
+            # 3. outil hors allowlist -> BLOQUÉ
+            denied = await session.call_tool(
+                "fs__write_file", {"path": "/tmp/x", "contents": "x"}
+            )
+            results["denied_call_blocked"] = denied.isError
 
-                # 4. label inconnu -> BLOQUÉ
-                unknown = await session.call_tool("ghost__read_file", {"path": "/tmp"})
-                results["unknown_label_blocked"] = unknown.isError
+            # 4. label inconnu -> BLOQUÉ
+            unknown = await session.call_tool("ghost__read_file", {"path": "/tmp"})
+            results["unknown_label_blocked"] = unknown.isError
         return results
 
     results = asyncio.run(scenario())

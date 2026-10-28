@@ -18,8 +18,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
-from gateway_config import ConfigError, load_config  # noqa: E402
-from gateway_inspection import ResponseInspector, TaintRegistry  # noqa: E402
+from gateway_config import ConfigError, load_config
+from gateway_inspection import ResponseInspector, TaintRegistry
 
 # ---------------------------------------------------------------- config
 
