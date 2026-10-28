@@ -1,19 +1,19 @@
-# Secrets et config locale — ne doivent JAMAIS être commités
+# Secrets et config locale â€” ne doivent JAMAIS Ãªtre commitÃ©s
 .env
 *.env
 !.env.example
 
-# Bases de données locales — contiennent potentiellement des données clients
+# Bases de donnÃ©es locales â€” contiennent potentiellement des donnÃ©es clients
 *.db
 *.sqlite
 *.sqlite3
 
-# Sauvegardes — contiennent des dumps complets (spans + clés API hashées
+# Sauvegardes â€” contiennent des dumps complets (spans + clÃ©s API hashÃ©es
 # des clients), voir scripts/backup_db.py
 backups/
 
-# Modèles ML entraînés — trop volumineux pour git, et generate_dataset.py /
-# train_detector.py les régénèrent
+# ModÃ¨les ML entraÃ®nÃ©s â€” trop volumineux pour git, et generate_dataset.py /
+# train_detector.py les rÃ©gÃ©nÃ¨rent
 *.pt
 *.bin
 prompt_dataset.csv
@@ -28,16 +28,16 @@ __pycache__/
 venv/
 .venv/
 
-# Éditeurs / OS
+# Ã‰diteurs / OS
 .vscode/
 .idea/
 .DS_Store
 
-# Patchs de mise à jour — artefacts de dev, ne doivent pas être versionnés
+# Patchs de mise Ã  jour â€” artefacts de dev, ne doivent pas Ãªtre versionnÃ©s
 *.patch
 *.diff
 
-# Git hooks (installés par scripts/setup-hooks.sh)
+# Git hooks (installÃ©s par scripts/setup-hooks.sh)
 .git/hooks/pre-push
 
 agentguard-model/
@@ -46,7 +46,7 @@ agentguard-model/
 .coverage
 coverage.xml
 
-# Benchmarks g�n�r�s (en cours de d�veloppement)
+# Benchmarks générés (en cours de développement)
 benchmarks/corpus_*/
 benchmarks/results/
 
@@ -59,3 +59,4 @@ dashboard/node_modules/, patch_incidents_tsx.py
 dashboard/node_modules/
 
 *.bak
+.ruff_cache/
