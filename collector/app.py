@@ -24,6 +24,7 @@ structlog.configure(
         structlog.contextvars.merge_contextvars,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.add_log_level,
+        structlog.processors.format_exc_info,
         structlog.processors.JSONRenderer(),
     ]
 )
@@ -227,6 +228,10 @@ def create_app() -> Flask:
 
     app.config["RATELIMIT_STORAGE_URI"] = limiter_storage
 
+    # Une panne du stockage du limiteur (Redis) ne doit jamais faire tomber le site :
+    # repli sur la mémoire locale (limites par worker) et erreurs avalées.
+    app.config.setdefault("RATELIMIT_SWALLOW_ERRORS", True)
+    app.config.setdefault("RATELIMIT_IN_MEMORY_FALLBACK_ENABLED", True)
     limiter.init_app(app)
 
     # Compatibility with existing code.
