@@ -128,17 +128,37 @@ class TaintTracker:
     """
 
     DEFAULT_DENY_RULES = [
-        (TaintLevel.SECRET, SinkType.NETWORK_EXTERNAL, "SECRET data cannot be sent to external networks"),
-        (TaintLevel.SECRET, SinkType.DANGEROUS_TOOL, "SECRET data cannot be used in dangerous tools"),
+        (
+            TaintLevel.SECRET,
+            SinkType.NETWORK_EXTERNAL,
+            "SECRET data cannot be sent to external networks",
+        ),
+        (
+            TaintLevel.SECRET,
+            SinkType.DANGEROUS_TOOL,
+            "SECRET data cannot be used in dangerous tools",
+        ),
         (TaintLevel.MALICIOUS, SinkType.INTERNAL, "MALICIOUS data blocked"),
         (TaintLevel.MALICIOUS, SinkType.FILESYSTEM, "MALICIOUS data blocked"),
         (TaintLevel.MALICIOUS, SinkType.DATABASE, "MALICIOUS data blocked"),
-        (TaintLevel.UNTRUSTED, SinkType.DANGEROUS_TOOL, "UNTRUSTED data cannot be used in dangerous tools"),
+        (
+            TaintLevel.UNTRUSTED,
+            SinkType.DANGEROUS_TOOL,
+            "UNTRUSTED data cannot be used in dangerous tools",
+        ),
     ]
 
     DEFAULT_REVIEW_RULES = [
-        (TaintLevel.CONFIDENTIAL, SinkType.NETWORK_EXTERNAL, "CONFIDENTIAL data to external network requires approval"),
-        (TaintLevel.CONFIDENTIAL, SinkType.FILESYSTEM, "CONFIDENTIAL data write requires approval"),
+        (
+            TaintLevel.CONFIDENTIAL,
+            SinkType.NETWORK_EXTERNAL,
+            "CONFIDENTIAL data to external network requires approval",
+        ),
+        (
+            TaintLevel.CONFIDENTIAL,
+            SinkType.FILESYSTEM,
+            "CONFIDENTIAL data write requires approval",
+        ),
     ]
 
     def __init__(self):
@@ -449,4 +469,3 @@ class FlowTracker:
         r["session_level"] = self._session_level.name
         r["tracked_needles"] = len(self._needles)
         return r
-        
