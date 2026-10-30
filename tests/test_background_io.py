@@ -54,9 +54,11 @@ def collector():
             time.sleep(fake.delay)
             if self.path == "/span":
                 fake.span_posts += 1
-                fake.spans.extend(payload if isinstance(payload, list) else [payload])
                 if fake.span_code >= 400:
+                    # rejet AVANT persistance : un span rejeté n'est JAMAIS
+                    # enregistré dans fake.spans (sémantique du collector réel)
                     return self._send(fake.span_code, {"error": "agent_disconnected"})
+                fake.spans.extend(payload if isinstance(payload, list) else [payload])
             self._send(201, {"status": "ok"})
 
         def do_GET(self):
@@ -194,7 +196,7 @@ def test_queue_full_drops_and_counts():
     assert started.wait(2)  # le thread d'envoi tient le 1er lot ; la file est vide
     assert sender.submit({"n": 2}) and sender.submit({"n": 3})
     assert sender.submit({"n": 4}) is False and sender.submit({"n": 5}) is False
-    assert sender.dropped == 2
+    assert sender.dropped == 2 and sender.submitted == 3  # pertes comptées, entrées comptées
     release.set()
     assert sender.flush(5) is True
 
@@ -209,10 +211,12 @@ def test_sender_survives_delivery_errors():
 
     sender = SpanSender(deliver, maxsize=10, flush_interval=0.0)
     sender.submit({"n": 1})
-    assert sender.flush(5) is True  # l'échec du lot est avalé, le thread survit
+    assert sender.flush(5) is True  # la file est TRAITÉE (lot échoué compté), pas « persistée »
     sender.submit({"n": 2})
     assert sender.flush(5) is True
     assert got == [2]
+    assert sender.submitted == 2 and sender.delivered == 1 and sender.failed == 1
+    assert sender.dropped == 0 and sender.pending == 0  # compteurs cohérents
 
 
 def test_flush_returns_false_when_delivery_is_stuck():
@@ -331,11 +335,12 @@ def test_outage_then_recovery_resumes_without_duplicates(collector, async_env):
     assert guard.flush(5) is True
     fake.spans.clear()
 
-    fake.span_code = 500  # panne : le collector rejette les POST /span
+    fake.span_code = 500  # panne : le collector rejette les POST /span AVANT persistance
     tool(q="rejeté")  # lot rejeté et journalisé : le thread d'envoi SURVIT
     assert guard.flush(5) is True
+    assert fake.spans == []  # RIEN n'est persisté pendant la panne (rejet avant écriture)
+    assert guard._sender.delivered >= 1  # compteur : le lot est traité, pas persisté
 
-    fake.spans.clear()  # en production ce lot est perdu (rejeté) ; on repart à zéro
     fake.span_code = 201  # retour du collector
 
     t0 = time.perf_counter()
@@ -423,6 +428,48 @@ def test_multiple_concurrent_agents_no_cross_talk(collector, async_env):
         assert set(mine) <= delivered_set  # chaque agent a tout son telemetry livré
         it = iter(delivered)
         assert all(any(e == d for e in it) for d in mine)  # ordre relatif préservé par agent
+
+
+def test_true_concurrency_hundreds_of_calls_from_thread_pool(collector, async_env):
+    from concurrent.futures import ThreadPoolExecutor
+
+    fake, url = collector
+    guard, tool = _guard_and_tool(url)
+    tool(q="warmup")
+    assert guard.flush(5) is True
+    fake.spans.clear()
+    start = len(guard.spans)
+    sender = guard._sender
+    baseline = (sender.submitted, sender.delivered, sender.dropped)  # cumulatif : mesurer un DELTA
+
+    def hammer(i):
+        return tool(q=str(i))
+
+    with ThreadPoolExecutor(max_workers=32) as pool:
+        results = list(pool.map(hammer, range(200)))  # 200 appels, 32 threads simultanés
+
+    assert all(r.startswith("ok ") for r in results)  # aucune exception, aucun appel perdu
+    assert guard.flush(30) is True
+
+    sender = guard._sender
+    # les compteurs sont cumulatifs : on vérifie le DELTA depuis la ligne de base
+    assert sender.submitted - baseline[0] == 200
+    assert sender.dropped - baseline[2] == 0  # rien écarté
+    assert sender.pending == 0  # tout traité
+    assert (
+        sender.submitted - baseline[0]
+        == (sender.delivered - baseline[1]) + (sender.dropped - baseline[2]) + sender.pending
+    )  # invariants comptables cohérents
+
+    delivered = [p["span_id"] for p in fake.spans]
+    expected = [s.span_id for s in guard.spans[start:]]
+    assert len(delivered) == 200  # tout livré
+    assert len(delivered) == len(set(delivered))  # aucun DOUBLON, aucune collision d'ID
+    expected_set = set(expected)
+    assert all(sid in expected_set for sid in delivered)  # aucun span fantôme
+    it = iter(expected)
+    assert all(any(e == d for e in it) for d in delivered)  # sous-séquence ordonnée de l'émission
+    assert len(expected_set) == 200  # identifiants uniques par agent et par appel
 
 
 # ── mode shadow / enforce ───────────────────────────────────────────────────

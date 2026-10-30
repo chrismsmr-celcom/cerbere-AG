@@ -1,6 +1,8 @@
 """Résolution des clés API (plateforme, système legacy, agent, tables api_keys/user_api_keys)."""
 
 import sqlite3
+import threading
+import time
 
 import structlog
 from flask import current_app, g, request
@@ -97,7 +99,7 @@ def _ensure_api_keys_table_safe():
         logger.error("api_keys_table_creation_failed", error=str(e))
 
 
-def _lookup_org_by_key(key: str):
+def _lookup_org_by_key_uncached(key: str):
     """Résout une clé API en organisation.
 
     Cherche dans `api_keys` (clés admin / historiques) PUIS dans `user_api_keys` (clés générées
@@ -165,6 +167,7 @@ def resolve_org_id(key: str):
             platform_identity = resolve_platform_identity(key)
 
             if platform_identity:
+
                 g.platform_identity = platform_identity
 
                 logger.info(
@@ -216,3 +219,41 @@ def resolve_org_id(key: str):
             error=str(exc),
         )
         return None
+
+
+# ── Cache de résolution des clés API ────────────────────────────────────────
+#
+# Le StatusPoller du SDK interroge /api/agent/status et /api/agent/mode toutes
+# les quelques secondes avec la MÊME clé : sans cache, chaque poll paye le
+# lookup SQL complet (jusqu'à 2 tables × getconn + rollback + SELECT). Avec le
+# cache, un poll chaud ne fait AUCUN accès base.
+#
+# Sécurité : TTL de 30 s — une clé révoquée peut donc passer au plus 30 s de
+# plus. invalidate_key_cache() doit être appelé par le dashboard à chaque
+# création/révocation pour rester instantané.
+
+_KEY_CACHE: dict[str, tuple[float, object]] = {}
+_KEY_CACHE_TTL = 30.0
+_KEY_CACHE_LOCK = threading.Lock()
+
+
+def _lookup_org_by_key(key: str):
+    """Enveloppe avec cache TTL de _lookup_org_by_key_uncached."""
+    if not key:
+        return None
+    now = time.time()
+    hit = _KEY_CACHE.get(key)
+    if hit and now - hit[0] < _KEY_CACHE_TTL:
+        return hit[1]
+    value = _lookup_org_by_key_uncached(key)
+    with _KEY_CACHE_LOCK:
+        if len(_KEY_CACHE) > 5000:
+            _KEY_CACHE.clear()
+        _KEY_CACHE[key] = (now, value)
+    return value
+
+
+def invalidate_key_cache() -> None:
+    """Vider le cache : à appeler après création/révocation de clé."""
+    with _KEY_CACHE_LOCK:
+        _KEY_CACHE.clear()

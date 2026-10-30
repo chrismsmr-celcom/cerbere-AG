@@ -525,9 +525,12 @@ class AgentGuard:
             with _BG_LOCK:
                 if self._poller is None:
                     poller = StatusPoller(self)
-                    poller.poll_once()  # 1re lecture synchrone : état exact dès le 1er appel
                     poller.start()
                     self._poller = poller
+        # Budget borné au tout premier appel ; ensuite quasi gratuit.
+        self._poller.wait_first(
+            float(os.getenv("AGENTGUARD_COLD_BUDGET_MS", "250")) / 1000
+        )
         return self._poller
 
     def _get_sender(self) -> SpanSender:

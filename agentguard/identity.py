@@ -226,8 +226,17 @@ def hash_key(key: str) -> str:
 
     Format stocké : "{algo}${hash_argon2}"
     Ex : "argon2id$argon2id$v=19$m=65536,t=3,p=2$..."
+
+    NOTE compatibilité : argon2-cffi >= 23 renvoie un `str` depuis
+    PasswordHasher.hash(), les versions plus anciennes des `bytes`.
+    On accepte les deux pour ne pas dépendre de la version installée
+    (bug réel constaté : AttributeError 'str' object has no attribute
+    'decode' avec argon2-cffi 25.1.0).
     """
-    return f"{_HASH_ALGO_ARGON2}${_PH.hash(key.encode()).decode()}"
+    _h = _PH.hash(key.encode())
+    if isinstance(_h, bytes):  # argon2-cffi ancien : bytes
+        _h = _h.decode()
+    return f"{_HASH_ALGO_ARGON2}${_h}"
 
 
 def verify_key(stored: str, key: str) -> bool:

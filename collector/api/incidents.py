@@ -515,23 +515,50 @@ def api_incident_config():
     ), 200
 
 
+# ── statut incident pour le poll du SDK : MIS EN CACHE ──────────────────────
+#
+# /api/agent/status appelle open_incident_for à CHAQUE poll SDK (toutes les
+# quelques secondes). Sans cache, chaque poll payait _prepare_tables() +
+# _purge_expired() (2 requêtes DELETE/UPDATE avec commit) + le SELECT. Le
+# SELECT filtre déjà sur expires_at, donc la purge n'a rien à faire à chaque
+# lecture : elle passe à une fois par minute. Réserve : ouverture/fermeture
+# d'incident vue par le SDK avec au plus 3 s de retard supplémentaire.
+
+_INC_CACHE: dict = {}
+_INC_TTL = 3.0
+_INC_STATE = {"tables_ready": False, "last_purge": 0.0}
+
+
 def open_incident_for(org_id, agent_id):
-    """incident_id ouvert pour cet agent, sinon None. Ne lève jamais : utilisé
-    par /api/agent/status, qui ne doit jamais échouer à cause de cette option."""
+    """incident_id ouvert pour cet agent, sinon None. Ne lève jamais."""
+    key = (org_id, agent_id)
+    now = time.time()
+    hit = _INC_CACHE.get(key)
+    if hit and now - hit[0] < _INC_TTL:
+        return hit[1]
     try:
         if _gate():
             return None
-        _prepare_tables()
-        _purge_expired()
+        if not _INC_STATE["tables_ready"]:
+            _prepare_tables()
+            _INC_STATE["tables_ready"] = True
+        if now - _INC_STATE["last_purge"] > 60:
+            _INC_STATE["last_purge"] = now
+            _purge_expired()
         row, _ = _db_run(
-            "SELECT id FROM incidents WHERE org_id = ? AND agent_id = ? AND status = 'open' AND expires_at > ? LIMIT 1",
-            (org_id, agent_id, time.time()),
+            "SELECT id FROM incidents WHERE org_id = ? AND agent_id = ? "
+            "AND status = 'open' AND expires_at > ? LIMIT 1",
+            (org_id, agent_id, now),
             fetch="one",
         )
-        return row[0] if row else None
+        value = row[0] if row else None
     except Exception:
         logger.warning("incident_status_lookup_failed")
         return None
+    if len(_INC_CACHE) > 2000:
+        _INC_CACHE.clear()
+    _INC_CACHE[key] = (now, value)
+    return value
 
 
 # ── agent : clé publique + dépôt de blobs chiffrés ──────────────────────────

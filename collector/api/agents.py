@@ -220,23 +220,40 @@ def api_test_approval():
     return jsonify({"id": approval_id, "status": "pending"}), 201
 
 
+# ── Statut agent (poll du SDK) : instrumenté Server-Timing (TEMPORAIRE) ──────
+#
+# Le header Server-Timing départage auth / statut / incident. À retirer une
+# fois le diagnostic de latence terminé.
+
 @api_bp.route("/api/agent/status", methods=["GET"], endpoint="api_agent_status")
 def api_agent_status():
     """Appelé par le SDK (clé API) pour savoir s'il a été déconnecté depuis le dashboard."""
+    import time as _time
+
+    t0 = _time.perf_counter()
     if not require_auth():
         return jsonify({"error": "Unauthorized"}), 401
+    t1 = _time.perf_counter()
     agent_id = _request_agent_id()
     if not agent_id:
         return jsonify({"agent_id": None, "status": "connected"}), 200
     status = _agent_status(g.org_id, agent_id)
+    t2 = _time.perf_counter()
     from collector.api.incidents import open_incident_for
 
-    return jsonify(
+    incident = open_incident_for(g.org_id, agent_id) is not None
+    t3 = _time.perf_counter()
+    resp = jsonify(
         {
             "agent_id": agent_id,
             "status": "disconnected" if status == "disconnected" else "connected",
             # Un admin a ouvert une capture d'incident pour cet agent depuis le
             # dashboard : le SDK l'active tout seul (aucune clé ni code à toucher).
-            "incident_open": open_incident_for(g.org_id, agent_id) is not None,
+            "incident_open": incident,
         }
-    ), 200
+    )
+    resp.headers["Server-Timing"] = (
+        f"auth;dur={(t1 - t0) * 1000:.0f}, agent;dur={(t2 - t1) * 1000:.0f}, "
+        f"incident;dur={(t3 - t2) * 1000:.0f}"
+    )
+    return resp, 200

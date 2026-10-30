@@ -1,0 +1,58 @@
+{
+  "sdk_version": "inconnu",
+  "collector_url": "https://app.cerbereag.site",
+  "n_per_scenario": 200,
+  "python": "3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]",
+  "stats": {
+    "L2_chaud": {
+      "n": 200,
+      "min_ms": 0.3264,
+      "p50_ms": 0.3376,
+      "p95_ms": 0.8575,
+      "p99_ms": 0.9597,
+      "max_ms": 1.4202,
+      "mean_ms": 0.4031,
+      "stddev_ms": 0.1704
+    },
+    "L2_froid": {
+      "n": 10,
+      "min_ms": 259.4366,
+      "p50_ms": 269.789,
+      "p95_ms": 356.5741,
+      "p99_ms": 356.5741,
+      "max_ms": 356.5741,
+      "mean_ms": 279.5174,
+      "stddev_ms": 26.4523
+    },
+    "L2_stale": {
+      "n": 5,
+      "min_ms": 0.5119,
+      "p50_ms": 0.8012,
+      "p95_ms": 1.998,
+      "p99_ms": 1.998,
+      "max_ms": 1.998,
+      "mean_ms": 1.2546,
+      "stddev_ms": 0.5443
+    },
+    "L3_concurrent": {
+      "n": 200,
+      "min_ms": 0.3467,
+      "p50_ms": 0.3857,
+      "p95_ms": 1.0481,
+      "p99_ms": 1.2174,
+      "max_ms": 1.3088,
+      "mean_ms": 0.4843,
+      "stddev_ms": 0.2163
+    }
+  },
+  "stale_blocked_calls": 0,
+  "chaud_blocked_calls": 0,
+  "concurrent_blocked_calls": 0,
+  "counters": {
+    "submitted": 415,
+    "delivered": 415,
+    "failed": 0,
+    "dropped": 0,
+    "pending": 0
+  }
+}
