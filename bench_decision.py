@@ -80,4 +80,4 @@ def _pct(sorted_ms, p):
 def _run(label, url, calls, ttl_ms, mode_ttl_s, status_ttl_s, warmup=5):
     """Exécute `calls` appels protégés et renvoie les stats de latence."""
     os.environ["AGENTGUARD_MODE_TTL"] = str(mode_ttl_s)
-    os.environ["AGENTGUARD_STATUS_TTL"] = str(status
+    os.environ["AGENTGUARD_STATUS_TTL"] = str(status_ttl_s)
