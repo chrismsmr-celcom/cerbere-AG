@@ -32,8 +32,10 @@ def _to_epoch(value):
     try:
         if isinstance(value, (int, float)):
             return float(value)
-        dt = value if isinstance(value, datetime) else datetime.fromisoformat(
-            str(value).replace("Z", "+00:00")
+        dt = (
+            value
+            if isinstance(value, datetime)
+            else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         )
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -69,7 +71,11 @@ def api_shadow_log():
         limit = max(1, min(int(request.args.get("limit", 300)), 500))
     except (TypeError, ValueError):
         hours, limit = 24, 300
-    want_since = str(request.args.get("since_enabled", "")).lower() in ("1", "true", "yes")
+    want_since = str(request.args.get("since_enabled", "")).lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     now = time.time()
     window_start = now - hours * 3600

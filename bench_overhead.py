@@ -18,6 +18,7 @@ Notes :
     ici. En vrai déploiement avec une telle latence, le mode retombe en enforce
     (fail-safe voulu) — vise un collector à < 2 s de latence.
 """
+
 import argparse
 import json
 import os
@@ -32,7 +33,7 @@ class Collector(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     delay = 0.3
     received = 0  # SPANS reçus (un POST peut en transporter plusieurs)
-    posts = 0     # requêtes POST /span reçues
+    posts = 0  # requêtes POST /span reçues
 
     def _send(self, code, body):
         data = json.dumps(body).encode()
@@ -72,7 +73,7 @@ class Collector(BaseHTTPRequestHandler):
 
 def pct(values, p):
     values = sorted(values)
-    return values[min(len(values) - 1, int(round(p / 100 * (len(values) - 1))))]
+    return values[min(len(values) - 1, round(p / 100 * (len(values) - 1)))]
 
 
 def run(async_io, calls, gap, url):
@@ -103,9 +104,15 @@ def run(async_io, calls, gap, url):
         time.sleep(0.2)
     rest = times[1:]
     return {
-        "first": times[0], "p50": statistics.median(rest), "p95": pct(rest, 95),
-        "max": max(rest), "sum": sum(times), "received": Collector.received,
-        "posts": Collector.posts, "drain": drain, "flush_ok": ok,
+        "first": times[0],
+        "p50": statistics.median(rest),
+        "p95": pct(rest, 95),
+        "max": max(rest),
+        "sum": sum(times),
+        "received": Collector.received,
+        "posts": Collector.posts,
+        "drain": drain,
+        "flush_ok": ok,
     }
 
 
@@ -120,16 +127,28 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{server.server_address[1]}"
 
-    rows = [("synchrone (avant)", run(False, a.calls, a.gap_ms / 1000, url)),
-            ("arrière-plan (après)", run(True, a.calls, a.gap_ms / 1000, url))]
-    print(f"\nLatence simulée du collector : {a.delay_ms:.0f} ms par requête · {a.calls} appels gardés · "
-          f"pause de {a.gap_ms:.0f} ms entre appels")
-    print(f"{'mode':<22}{'1er appel':>10}{'p50':>9}{'p95':>9}{'max':>9}{'vidage':>9}{'spans reçus':>13}{'POST':>6}")
+    rows = [
+        ("synchrone (avant)", run(False, a.calls, a.gap_ms / 1000, url)),
+        ("arrière-plan (après)", run(True, a.calls, a.gap_ms / 1000, url)),
+    ]
+    print(
+        f"\nLatence simulée du collector : {a.delay_ms:.0f} ms par requête · {a.calls} appels gardés · "
+        f"pause de {a.gap_ms:.0f} ms entre appels"
+    )
+    print(
+        f"{'mode':<22}{'1er appel':>10}{'p50':>9}{'p95':>9}{'max':>9}{'vidage':>9}{'spans reçus':>13}{'POST':>6}"
+    )
     for name, r in rows:
-        print(f"{name:<22}{r['first']:>8.0f}ms{r['p50']:>7.1f}ms{r['p95']:>7.1f}ms{r['max']:>7.0f}ms"
-              f"{r['drain']:>7.0f}ms{r['received']:>9}/{a.calls}{r['posts']:>6}")
-    print("\n« vidage » = temps pour envoyer en arrière-plan les spans encore en file à la fin (hors chemin de l'agent).")
-    print("« POST » = requêtes /span : avec les grappes, quelques requêtes suffisent pour tous les spans.")
+        print(
+            f"{name:<22}{r['first']:>8.0f}ms{r['p50']:>7.1f}ms{r['p95']:>7.1f}ms{r['max']:>7.0f}ms"
+            f"{r['drain']:>7.0f}ms{r['received']:>9}/{a.calls}{r['posts']:>6}"
+        )
+    print(
+        "\n« vidage » = temps pour envoyer en arrière-plan les spans encore en file à la fin (hors chemin de l'agent)."
+    )
+    print(
+        "« POST » = requêtes /span : avec les grappes, quelques requêtes suffisent pour tous les spans."
+    )
     sys.stdout.flush()
     os._exit(0)  # threads daemon du serveur et du SDK
 

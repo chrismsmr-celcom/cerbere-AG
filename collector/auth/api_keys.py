@@ -167,7 +167,6 @@ def resolve_org_id(key: str):
             platform_identity = resolve_platform_identity(key)
 
             if platform_identity:
-
                 g.platform_identity = platform_identity
 
                 logger.info(
@@ -238,18 +237,32 @@ _KEY_CACHE_LOCK = threading.Lock()
 
 
 def _lookup_org_by_key(key: str):
-    """Enveloppe avec cache TTL de _lookup_org_by_key_uncached."""
+    """Enveloppe avec cache TTL de _lookup_org_by_key_uncached.
+
+    Le cache stocke (org_id, key_name) : sur un hit, on REJOUE l'effet de bord
+    g.api_key_name (utilisé pour nommer les agents des anciens SDK) — sinon un
+    span d'un SDK < 0.4.1 ne serait plus rattaché à son agent et le kill
+    switch du dashboard ne le bloquerait plus (cf. test
+    test_old_sdk_without_agent_header_still_shows_up_and_can_be_disconnected).
+    """
     if not key:
         return None
     now = time.time()
     hit = _KEY_CACHE.get(key)
     if hit and now - hit[0] < _KEY_CACHE_TTL:
-        return hit[1]
+        org_id, name = hit[1]
+        if name is not None:
+            try:
+                g.api_key_name = name
+            except RuntimeError:  # hors contexte de requête
+                pass
+        return org_id
     value = _lookup_org_by_key_uncached(key)
+    name = getattr(g, "api_key_name", None)
     with _KEY_CACHE_LOCK:
         if len(_KEY_CACHE) > 5000:
             _KEY_CACHE.clear()
-        _KEY_CACHE[key] = (now, value)
+        _KEY_CACHE[key] = (now, (value, name))
     return value
 
 

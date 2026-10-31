@@ -225,6 +225,7 @@ def api_test_approval():
 # Le header Server-Timing départage auth / statut / incident. À retirer une
 # fois le diagnostic de latence terminé.
 
+
 @api_bp.route("/api/agent/status", methods=["GET"], endpoint="api_agent_status")
 def api_agent_status():
     """Appelé par le SDK (clé API) pour savoir s'il a été déconnecté depuis le dashboard."""

@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import pytest
 
-sys.path.insert(0, 'agentguard')
+sys.path.insert(0, "agentguard")
 from taint import (
     FlowTracker,
     SinkType,
@@ -140,7 +140,7 @@ class TestTaintTracker:
         tracker.label("d2", "b", TaintLevel.SECRET)
         tracker.label("d3", "c", TaintLevel.PUBLIC)
         tracker.mark_malicious("d4")
-        
+
         report = tracker.get_report()
         assert report["total_tracked"] == 4
         assert report["secrets_tracked"] == 2
@@ -159,7 +159,7 @@ class TestFlowTracker:
         """Détection d'un secret en clair."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
+
         # Simule un appel d'outil avec le secret
         label = flow_tracker.level_in({"api_key": secret})
         assert label.level == TaintLevel.SECRET
@@ -169,7 +169,7 @@ class TestFlowTracker:
         """Détection d'un secret encodé en base64."""
         secret = "SUPER_SECRET_API_KEY_12345"
         flow_tracker.track(secret, source="env")
-        
+
         # Encode en base64
         encoded = base64.b64encode(secret.encode()).decode()
         label = flow_tracker.level_in({"payload": encoded})
@@ -179,7 +179,7 @@ class TestFlowTracker:
         """Détection d'un secret encodé en base64 URL-safe."""
         secret = "SUPER_SECRET_API_KEY_12345"
         flow_tracker.track(secret, source="env")
-        
+
         encoded = base64.urlsafe_b64encode(secret.encode()).decode()
         label = flow_tracker.level_in({"payload": encoded})
         assert label.level == TaintLevel.SECRET
@@ -188,7 +188,7 @@ class TestFlowTracker:
         """Détection d'un secret encodé en hexadécimal."""
         secret = "SUPER_SECRET_API_KEY_12345"
         flow_tracker.track(secret, source="env")
-        
+
         encoded = secret.encode().hex()
         label = flow_tracker.level_in({"payload": encoded})
         assert label.level == TaintLevel.SECRET
@@ -197,7 +197,7 @@ class TestFlowTracker:
         """Détection d'un secret encodé en URL."""
         secret = "SUPER_SECRET_API_KEY_12345"
         flow_tracker.track(secret, source="env")
-        
+
         encoded = quote(secret, safe="")
         label = flow_tracker.level_in({"payload": encoded})
         assert label.level == TaintLevel.SECRET
@@ -206,7 +206,7 @@ class TestFlowTracker:
         """Les secrets trop courts ne sont pas suivis."""
         short_secret = "sk-123"  # < 8 caractères
         flow_tracker.track(short_secret, source="env")
-        
+
         # Ne devrait pas être détecté
         label = flow_tracker.level_in({"key": short_secret})
         assert label.level < TaintLevel.SECRET
@@ -215,7 +215,7 @@ class TestFlowTracker:
         """En mode session, tout envoi externe est bloqué après un SECRET."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker_session_mode.track(secret, source="env")
-        
+
         # Même sans retrouver le secret, le mode session bloque
         label = flow_tracker_session_mode.level_in({"unrelated": "data"})
         assert label.level >= TaintLevel.SECRET
@@ -224,7 +224,7 @@ class TestFlowTracker:
     def test_mark_malicious_blocks_everything(self, flow_tracker):
         """Après mark_malicious, tout est bloqué."""
         flow_tracker.mark_malicious("prompt_injection_detected")
-        
+
         label = flow_tracker.level_in({"any": "data"})
         assert label.level == TaintLevel.MALICIOUS
         assert label.source == "session_malicious"
@@ -233,7 +233,7 @@ class TestFlowTracker:
         """Détection automatique d'un numéro de carte bancaire."""
         cc = "4111-1111-1111-1111"
         flow_tracker.track(cc, source="db")
-        
+
         label = flow_tracker.level_in({"card": cc})
         assert label.level == TaintLevel.CONFIDENTIAL
 
@@ -249,14 +249,16 @@ class TestFlowTracker:
         for i in range(600):  # _MAX_TRACKED = 500
             secret = f"sk-proj-{'A' * 20}{i:04d}{'B' * 20}"
             flow_tracker.track(secret, source="env")
-        
+
         # Vérifie que le nombre de needles ne dépasse pas la limite
         assert len(flow_tracker._needles) <= 500
 
     def test_report_includes_session_info(self, flow_tracker):
         """Le rapport inclut les informations de session."""
-        flow_tracker.track("sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef", source="env")
-        
+        flow_tracker.track(
+            "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef", source="env"
+        )
+
         report = flow_tracker.report()
         assert "session_level" in report
         assert "tracked_needles" in report
@@ -326,7 +328,7 @@ class TestTaintLabel:
             level=TaintLevel.SECRET,
             source="env",
             tags={"aws", "key"},
-            propagated_from=["d1", "d2"]
+            propagated_from=["d1", "d2"],
         )
         d = label.to_dict()
         assert d["level"] == "SECRET"
@@ -340,7 +342,7 @@ class TestTaintLabel:
             "level": "CONFIDENTIAL",
             "source": "db",
             "tags": ["pii"],
-            "propagated_from": []
+            "propagated_from": [],
         }
         label = TaintLabel.from_dict(d)
         assert label.level == TaintLevel.CONFIDENTIAL
@@ -353,7 +355,7 @@ class TestTaintLabel:
             level=TaintLevel.MALICIOUS,
             source="injection",
             tags={"prompt_injection", "xss"},
-            propagated_from=["d1"]
+            propagated_from=["d1"],
         )
         d = original.to_dict()
         restored = TaintLabel.from_dict(d)
@@ -375,19 +377,16 @@ class TestIntegrationScenarios:
         """Tentative d'exfiltration via un payload JSON."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
+
         # L'agent tente d'envoyer le secret dans un JSON
         payload = {
             "action": "send_report",
-            "data": {
-                "api_key": secret,
-                "message": "Hello"
-            }
+            "data": {"api_key": secret, "message": "Hello"},
         }
-        
+
         label = flow_tracker.level_in(payload)
         assert label.level == TaintLevel.SECRET
-        
+
         # Vérifie que le sink est bloqué
         violation = flow_tracker.check_sink(label, SinkType.NETWORK_EXTERNAL)
         assert violation is not None
@@ -397,11 +396,11 @@ class TestIntegrationScenarios:
         """Tentative d'exfiltration avec encodage imbriqué."""
         secret = "SUPER_SECRET_KEY_12345"
         flow_tracker.track(secret, source="env")
-        
+
         # Double encodage : base64 puis URL
         b64 = base64.b64encode(secret.encode()).decode()
         url_encoded = quote(b64, safe="")
-        
+
         label = flow_tracker.level_in({"payload": url_encoded})
         # Le base64 devrait être détecté même après URL encoding
         assert label.level >= TaintLevel.SECRET
@@ -409,10 +408,10 @@ class TestIntegrationScenarios:
     def test_safe_data_passes_through(self, flow_tracker):
         """Des données sûres passent sans être bloquées."""
         safe_data = {"message": "Hello World", "count": 42}
-        
+
         label = flow_tracker.level_in(safe_data)
         assert label.level == TaintLevel.PUBLIC
-        
+
         violation = flow_tracker.check_sink(label, SinkType.NETWORK_EXTERNAL)
         assert violation is None
 
@@ -420,13 +419,9 @@ class TestIntegrationScenarios:
         """Des données mixtes prennent le niveau maximum."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
-        mixed_data = {
-            "public": "Hello",
-            "secret": secret,
-            "number": 123
-        }
-        
+
+        mixed_data = {"public": "Hello", "secret": secret, "number": 123}
+
         label = flow_tracker.level_in(mixed_data)
         assert label.level == TaintLevel.SECRET
 
@@ -443,14 +438,14 @@ class TestPerformanceAndLimits:
         """Scan d'un payload volumineux (proche de _MAX_SCAN_CHARS)."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
+
         # Crée un payload de ~150k caractères
         large_payload = "A" * 150_000 + secret + "B" * 50_000
-        
+
         start = time.time()
         label = flow_tracker.level_in({"data": large_payload})
         elapsed = time.time() - start
-        
+
         assert label.level == TaintLevel.SECRET
         # Devrait être rapide (< 1 seconde)
         assert elapsed < 1.0
@@ -461,14 +456,14 @@ class TestPerformanceAndLimits:
         for i in range(400):
             secret = f"sk-proj-{'A' * 20}{i:04d}{'B' * 20}"
             flow_tracker.track(secret, source="env")
-        
+
         # Vérifie qu'un scan reste rapide
         test_payload = {"key": "sk-proj-" + "A" * 20 + "0042" + "B" * 20}
-        
+
         start = time.time()
         label = flow_tracker.level_in(test_payload)
         elapsed = time.time() - start
-        
+
         assert label.level == TaintLevel.SECRET
         assert elapsed < 0.5
 
@@ -503,7 +498,7 @@ class TestThreadSafety:
 
         # Vérifie qu'il n'y a pas d'erreurs
         assert len(errors) == 0, f"Erreurs détectées : {errors}"
-        
+
         # Vérifie que tous les threads ont réussi
         assert len(results) == 10
         for thread_id, level in results:
@@ -537,17 +532,9 @@ class TestEdgeCases:
         """Détection de secrets dans des structures imbriquées."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
-        nested = {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "key": secret
-                    }
-                }
-            }
-        }
-        
+
+        nested = {"level1": {"level2": {"level3": {"key": secret}}}}
+
         label = flow_tracker.level_in(nested)
         assert label.level == TaintLevel.SECRET
 
@@ -555,9 +542,9 @@ class TestEdgeCases:
         """Détection de secrets dans une liste."""
         secret = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
+
         data_list = ["safe", secret, "also_safe"]
-        
+
         label = flow_tracker.level_in(data_list)
         assert label.level == TaintLevel.SECRET
 
@@ -565,6 +552,6 @@ class TestEdgeCases:
         """Tracking d'un secret avec des caractères Unicode."""
         secret = "sk-proj-CléSecrèteAvecAccents1234567890abcdef"
         flow_tracker.track(secret, source="env")
-        
+
         label = flow_tracker.level_in({"key": secret})
         assert label.level == TaintLevel.SECRET

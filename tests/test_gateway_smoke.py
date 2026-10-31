@@ -59,9 +59,9 @@ def test_gateway_smoke(tmp_path):
     mcp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
     # Échec lisible si le module n'est pas là, plutôt qu'un crash MCP cryptique.
-    assert os.path.exists(
-        os.path.join(mcp_dir, "gateway_server.py")
-    ), f"gateway_server.py introuvable dans {mcp_dir}"
+    assert os.path.exists(os.path.join(mcp_dir, "gateway_server.py")), (
+        f"gateway_server.py introuvable dans {mcp_dir}"
+    )
 
     config_path = tmp_path / "gateway.json"
     config_path.write_text(json.dumps(CONFIG))
@@ -81,7 +81,10 @@ def test_gateway_smoke(tmp_path):
 
     async def scenario() -> dict:
         results: dict = {}
-        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+        async with (
+            stdio_client(params) as (read, write),
+            ClientSession(read, write) as session,
+        ):
             await session.initialize()
 
             # 1. tools/list : outils amonts préfixés et filtrés
@@ -94,9 +97,7 @@ def test_gateway_smoke(tmp_path):
             )
 
             # 2. appel autorisé -> doit aboutir
-            listing = await session.call_tool(
-                "fs__list_directory", {"path": "/tmp"}
-            )
+            listing = await session.call_tool("fs__list_directory", {"path": "/tmp"})
             results["allowed_call_ok"] = not listing.isError
 
             # 3. outil hors allowlist -> BLOQUÉ

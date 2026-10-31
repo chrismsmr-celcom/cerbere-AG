@@ -142,6 +142,7 @@ def _ensure_incident_columns():
     finally:
         conn.close()
 
+
 def _purge_expired():
     """Détruit chiffrés ET clé privée des incidents expirés (crypto-shredding)."""
     now = time.time()
@@ -265,6 +266,9 @@ def api_incident_open():
         ),
         commit=True,
     )
+    # Cache : l'incident est ouvert — oublier l'entrée négative éventuelle
+    # pour que le SDK le voie au prochain poll (pas dans 3 s).
+    invalidate_incident_cache(g.org_id, agent_id)
     _audit_human_action(
         "INCIDENT_OPENED",
         f"incident:{incident_id}",
@@ -353,6 +357,9 @@ def api_incident_close(incident_id):
         if n == 0:
             return jsonify({"error": "incident not found or not open"}), 404
         new_status = "closed"
+    # Cache : l'incident n'est plus ouvert — oublier l'entrée positive mise en
+    # cache pour que le SDK arrête la capture au prochain poll (pas dans 3 s).
+    invalidate_incident_cache()
     _audit_human_action(
         "INCIDENT_CLOSED",
         f"incident:{incident_id}",
@@ -529,6 +536,19 @@ _INC_TTL = 3.0
 _INC_STATE = {"tables_ready": False, "last_purge": 0.0}
 
 
+def invalidate_incident_cache(org_id=None, agent_id=None):
+    """Oublier le statut incident mis en cache.
+
+    À appeler quand un HUMAIN ouvre ou ferme un incident : sans ceci, le SDK
+    verrait l'ouverture avec jusqu'à _INC_TTL secondes de retard (entrée
+    négative « None » encore en cache).
+    """
+    if org_id and agent_id:
+        _INC_CACHE.pop((org_id, agent_id), None)
+    else:
+        _INC_CACHE.clear()
+
+
 def open_incident_for(org_id, agent_id):
     """incident_id ouvert pour cet agent, sinon None. Ne lève jamais."""
     key = (org_id, agent_id)
@@ -699,7 +719,9 @@ def _log_span(r):
     tool = None
     if isinstance(input_data, dict):
         tool = input_data.get("tool_name") or input_data.get("tool")
-    shadow = output_data.get("cerbere_shadow") if isinstance(output_data, dict) else None
+    shadow = (
+        output_data.get("cerbere_shadow") if isinstance(output_data, dict) else None
+    )
     return {
         "span_id": r[0],
         "type": r[1],

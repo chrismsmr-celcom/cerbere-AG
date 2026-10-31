@@ -91,7 +91,7 @@ def _stats(samples_ns: list[int]) -> dict:
     ordered = sorted(ms)
 
     def pct(p: float) -> float:
-        return ordered[min(len(ordered) - 1, int(round(p / 100 * len(ordered))) - 1)]
+        return ordered[min(len(ordered) - 1, round(p / 100 * len(ordered)) - 1)]
 
     return {
         "n": len(ms),
@@ -136,7 +136,7 @@ def _discover(guard) -> None:
                 except (TypeError, ValueError):
                     sig = "(signature indisponible)"
                 print(f"  {name}{sig}")
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
     print("Méthodes de classe héritées non listées. Si une méthode de décision")
     print("apparaît, relancer avec AGENTGUARD_DECIDE_ATTR=<nom>.")
@@ -152,7 +152,7 @@ def _timed_call(tool, **kwargs) -> tuple[int, bool]:
     try:
         tool(**kwargs)
         return _now_ns() - t0, False
-    except Exception:  # noqa: BLE001  # l'outil protégé N'A PAS été exécuté
+    except Exception:  # l'outil protégé N'A PAS été exécuté
         return _now_ns() - t0, True
 
 
@@ -161,7 +161,7 @@ def scenario_chaud(tool) -> tuple[list[int], int]:
     for _ in range(WARMUP):  # préchauffage non mesuré (tolère un blocage)
         try:
             tool(q="warmup")
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     samples: list[int] = []
     blocked = 0
@@ -177,9 +177,9 @@ def scenario_decideur(decider) -> list[int]:
     payload = {"tool": "fetch_url", "q": "demo"}
     try:
         decider(**payload)
-        call = lambda **kw: decider(**kw)  # noqa: E731
+        call = lambda **kw: decider(**kw)
     except TypeError:
-        call = lambda **kw: decider(kw)  # noqa: E731
+        call = lambda **kw: decider(kw)
     for _ in range(WARMUP):
         call(**payload)
     samples = []
@@ -218,7 +218,7 @@ def scenario_stale(tool) -> tuple[list[int], int]:
         t0 = _now_ns()
         try:
             tool(q=f"stale {i}")
-        except Exception:  # noqa: BLE001  # fail-safe : action bloquée = attendu
+        except Exception:  # fail-safe : action bloquée = attendu
             blocked += 1  # l'outil protégé N'A PAS été exécuté
         samples.append(_now_ns() - t0)
     return samples, blocked
@@ -227,7 +227,6 @@ def scenario_stale(tool) -> tuple[list[int], int]:
 def scenario_concurrent(tool) -> tuple[list[int], int]:
     """200 appels depuis un pool de threads : tenue sous charge."""
     samples: list[int] = []
-    blocked = 0
 
     def one(i: int) -> None:
         dur, blk = _timed_call(tool, q=str(i))
@@ -312,16 +311,6 @@ def main() -> None:
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     print(f"Résultats bruts : {OUT}/")
 
-    poller = getattr(guard, "_poller", None)
-    if poller is not None:
-        snap = poller.snapshot()
-        summary["poller"] = {
-            "status_ok": snap.status_ok_at > 0,
-            "mode_ok": snap.mode_ok_at > 0,
-            "status_age_s": round(poller.status_age(), 1),
-            "conn_state": snap.conn_state,
-            "shadow": snap.shadow,
-        }
 
 if __name__ == "__main__":
     main()

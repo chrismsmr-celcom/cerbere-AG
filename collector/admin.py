@@ -24,6 +24,7 @@ from flask import (
 )
 
 from collector.auth import hash_key, safe_compare
+from collector.auth.api_keys import invalidate_key_cache
 from collector.db import _get_db_path, get_pg_conn, is_postgres
 
 logger = structlog.get_logger("agentguard.admin")
@@ -300,6 +301,10 @@ def create_customer():
 
         return jsonify({"error": "database error"}), 500
 
+    # CACHE : la clé vient d'être créée — effacer tout « None » négatif
+    # éventuellement mis en cache pour elle (clé testée avant sa création).
+    invalidate_key_cache()
+
     # ----------------------------------------------------------
     # AUDIT
     # ----------------------------------------------------------
@@ -474,6 +479,10 @@ def revoke_customer(org_id):
         )
 
         return jsonify({"error": "database error"}), 500
+
+    # CACHE : les clés viennent d'être révoquées — sans ceci, elles resteraient
+    # acceptées jusqu'à 30 s (TTL du cache de résolution, cf. auth/api_keys.py).
+    invalidate_key_cache()
 
     # ----------------------------------------------------------
     # AUDIT
