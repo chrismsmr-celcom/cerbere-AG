@@ -29,6 +29,7 @@ import collector.api.metrics
 import collector.api.settings
 import collector.api.shadow_log
 import collector.api.spans
+import collector.api.whoami
 
 # --- Modules de routes : chacun enregistre ses routes sur api_bp à l'import. ---
 # ⚠️ Style ABSOLU obligatoire (from collector.api import X échouerait : package
