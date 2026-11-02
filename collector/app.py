@@ -228,6 +228,14 @@ def create_app() -> Flask:
 
     app.config["RATELIMIT_STORAGE_URI"] = limiter_storage
 
+    # IP client réelle derrière un proxy (Render). Désactivé par défaut (0) : le limiteur
+    # voit alors l'adresse du proxy. n = nombre de proxys de confiance (voir /api/_whoami).
+    trusted_proxies = int(os.environ.get("AGENTGUARD_TRUSTED_PROXIES", "0") or 0)
+    if trusted_proxies > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxies, x_proto=0, x_host=0, x_prefix=0)
+
     # Une panne du stockage du limiteur (Redis) ne doit jamais faire tomber le site :
     # repli sur la mémoire locale (limites par worker) et erreurs avalées.
     app.config.setdefault("RATELIMIT_SWALLOW_ERRORS", True)
