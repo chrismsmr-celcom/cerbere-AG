@@ -29,14 +29,14 @@ import collector.api.metrics
 import collector.api.settings
 import collector.api.shadow_log
 import collector.api.spans
-import collector.api.whoami
 
 # --- Modules de routes : chacun enregistre ses routes sur api_bp à l'import. ---
 # ⚠️ Style ABSOLU obligatoire (from collector.api import X échouerait : package
 # partiellement initialisé). PAS de try/except ici : une erreur doit éclater.
 import collector.api.static_assets
 import collector.api.timeline
-import collector.api.traces  # noqa: F401
+import collector.api.traces
+import collector.api.whoami  # noqa: F401  # enregistre le Blueprint
 
 # Ré-exports pour compatibilité avec les imports existants (app.py, tests, SDK).
 from collector.api.helpers import (  # noqa: F401
