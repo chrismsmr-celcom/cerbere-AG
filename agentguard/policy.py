@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 import structlog
+from opentelemetry import metrics
 
 from .models import RiskLevel, SecurityAction, SecurityCheck
 
@@ -109,6 +110,28 @@ class PolicyEngine:
         self._arbiter_consecutive_failures = 0
         self._arbiter_open_until = 0.0
         self._arbiter_breaker_logged = False
+
+        # ── OpenTelemetry Metrics pour le Circuit Breaker ──────────────
+        self._meter = metrics.get_meter("agentguard.policy")
+        
+        # Compteur : s'incrémente à chaque fois que le disjoncteur se déclenche
+        self._cb_trips_counter = self._meter.create_counter(
+            "agentguard_llm_judge_circuit_breaker_trips_total",
+            description="Nombre total de déclenchements du circuit breaker du juge LLM",
+            unit="1"
+        )
+        
+        # Gauge : 1 = ouvert (mode fail-closed actif), 0 = fermé (normal)
+        # Note: create_gauge est disponible dans opentelemetry-api >= 1.23.0
+        try:
+            self._cb_state_gauge = self._meter.create_gauge(
+                "agentguard_llm_judge_circuit_breaker_state",
+                description="État actuel du circuit breaker (1 = fail-closed, 0 = normal)",
+                unit="1"
+            )
+            self._cb_state_gauge.set(0)  # État initial : normal
+        except AttributeError:
+            self._cb_state_gauge = None  # Fallback silencieux pour les anciennes versions
 
         # Whitelist : FERMÉE par défaut. Un agent non couvert par une
         # whitelist (policy scoped à d'autres agents) est refusé.
@@ -239,6 +262,9 @@ class PolicyEngine:
         return True
 
     def _record_arbiter_success(self):
+        if self._arbiter_consecutive_failures > 0 and self._cb_state_gauge:
+            self._cb_state_gauge.set(0)  # Retour à l'état normal
+
         self._arbiter_consecutive_failures = 0
         self._arbiter_open_until = 0.0
         self._arbiter_breaker_logged = False
@@ -246,12 +272,21 @@ class PolicyEngine:
     def _record_arbiter_failure(self):
         self._arbiter_consecutive_failures += 1
         if self._arbiter_consecutive_failures >= self._arbiter_failure_threshold:
+            # Si c'est le premier déclenchement de cette série, on incrémente le compteur total
+            if self._arbiter_open_until == 0.0:
+                self._cb_trips_counter.add(1)
+            
             self._arbiter_open_until = time.monotonic() + self._arbiter_cooldown
-            logger.warning(
-                "llm_arbiter_breaker_tripped",
-                failures=self._arbiter_consecutive_failures,
-                cooldown_s=self._arbiter_cooldown,
-            )
+            
+            if self._cb_state_gauge:
+                self._cb_state_gauge.set(1)  # Passe en état fail-closed
+                
+            if not self._arbiter_breaker_logged:
+                logger.warning(
+                    "llm_arbiter_breaker_tripped",
+                    failures=self._arbiter_consecutive_failures,
+                    cooldown_s=self._arbiter_cooldown,
+                )
 
     def _call_arbiter(self, text: str, timeout: float):
         """Appelle la méthode de jugement de l'arbitre, de façon

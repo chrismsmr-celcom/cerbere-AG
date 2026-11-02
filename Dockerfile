@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
-COPY requirements-ml.tx[t] . 2>/dev/null || true
+RUN if [ -f requirements-ml.txt ]; then cp requirements-ml.txt .; else touch requirements-ml.txt; fi
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt

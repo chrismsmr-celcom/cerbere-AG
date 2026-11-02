@@ -13,7 +13,8 @@ services:
       # ── CORE ──────────────────────────────────────────────────
       PORT: 8080
       AGENTGUARD_DB_TYPE: ${AGENTGUARD_DB_TYPE:-postgres}
-      DATABASE_URL: postgresql://agentguard:${POSTGRES_PASSWORD}@postgres:5432/agentguard
+      DATABASE_URL: postgresql://agentguard:${POSTGRES_PASSWORD}@postgres:5432/agentguard?sslmode=${DB_SSL_MODE:-require}
+      AGENTGUARD_DB_SSL_ROOT_CERT: ${AGENTGUARD_DB_SSL_ROOT_CERT:-/certs/ca.crt}
       AGENTGUARD_API_KEY: ${AGENTGUARD_API_KEY}
       AGENTGUARD_ADMIN_SECRET: ${AGENTGUARD_ADMIN_SECRET}
       AGENTGUARD_FLASK_SECRET: ${AGENTGUARD_FLASK_SECRET}
@@ -77,6 +78,7 @@ services:
       - /tmp
     volumes:
       - agentguard_data:/data
+      - agentguard_certs:/certs:ro  # ✅ CORRIGÉ : Utilisation du volume nommé (pas ./certs)
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -101,8 +103,14 @@ services:
       POSTGRES_DB: agentguard
       POSTGRES_USER: agentguard
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
+    volumes: # ✅ CORRIGÉ : Indentation réparée (était décalée vers la droite)
       - postgres_data:/var/lib/postgresql/data
+      - agentguard_certs:/certs:ro  
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/certs/server.crt
+      -c ssl_key_file=/certs/server.key
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentguard -d agentguard"]
       interval: 10s
@@ -143,6 +151,7 @@ volumes:
   agentguard_data:
   postgres_data:
   redis_data:
+  agentguard_certs: # ✅ CORRIGÉ : Ajout du volume nommé global qui manquait
 
 networks:
   agentguard_network:
