@@ -1,0 +1,22 @@
+groups:
+  - name: agentguard_security_alerts
+    rules:
+      # Alerte si le circuit breaker s'est déclenché au moins une fois dans les 5 dernières minutes
+      - alert: AgentGuardLLMJudgeCircuitBreakerTripped
+        expr: rate(agentguard_llm_judge_circuit_breaker_trips_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Le juge LLM de Cerbère-AG est en mode dégradé (fail-closed)"
+          description: "Le circuit breaker du juge LLM s'est déclenché {{ $value | humanize }} fois par seconde en moyenne sur les 5 dernières minutes. Les décisions de sécurité reposent uniquement sur le modèle ML local."
+
+      # Alerte CRITIQUE si l'état reste bloqué à 1 (fail-closed) pendant plus de 15 minutes
+      - alert: AgentGuardLLMJudgeProlongedFailClosed
+        expr: agentguard_llm_judge_circuit_breaker_state == 1
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cerbère-AG est bloqué en mode fail-closed de manière prolongée"
+          description: "Le juge LLM est indisponible depuis plus de 15 minutes. Vérifiez la connectivité réseau et la validité de la clé API du fournisseur LLM (AGENTGUARD_JUDGE_API_KEY)."
