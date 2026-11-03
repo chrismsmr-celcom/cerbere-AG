@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextvars
+import json
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -45,6 +46,52 @@ current_identity: contextvars.ContextVar[dict[str, Any] | None] = (
 current_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "cerbere_api_key", default=None
 )
+
+# Tarif blended par défaut (USD / million de tokens) pour le budget par serveur.
+DEFAULT_PRICE_PER_MTOK = 3.0
+
+
+class ServerBudgetLedger:
+    """Budget USD par (identité, serveur amont).
+
+    Estimation heuristique : ~4 caractères par token, tarif blended
+    configurable (défaut 3 $/Mtok). Volontairement conservateur : le but
+    est de borner le coût d'un serveur bruyant, pas de facturer au token.
+    Fail-closed : budget épuisé ⇒ SecurityException avant tout forward.
+    """
+
+    def __init__(self, price_per_mtok: float = DEFAULT_PRICE_PER_MTOK) -> None:
+        self._spent: dict[tuple[str, str], float] = {}
+        self._price_per_token = price_per_mtok / 1_000_000.0
+
+    @staticmethod
+    def _texts(*parts: Any) -> str:
+        out: list[str] = []
+        for p in parts:
+            if isinstance(p, str) and p:
+                out.append(p)
+        return " ".join(out)
+
+    def estimate_usd(self, *texts: Any) -> float:
+        total_chars = len(self._texts(*texts))
+        return (total_chars / 4.0) * self._price_per_token
+
+    def check(self, agent_id: str, label: str, budget: float) -> None:
+        spent = self._spent.get((agent_id, label), 0.0)
+        if spent >= budget:
+            sys.stderr.write(
+                f"[cerbere-ag-gateway] BUDGET {label} exhausted for '{agent_id}': "
+                f"${spent:.4f} >= ${budget:.2f}\n"
+            )
+            raise SecurityException(
+                f"Per-server budget exhausted for '{label}' "
+                f"(${spent:.4f} spent >= ${budget:.2f} allowed)"
+            )
+
+    def charge(self, agent_id: str, label: str, amount: float) -> float:
+        key = (agent_id, label)
+        self._spent[key] = self._spent.get(key, 0.0) + amount
+        return self._spent[key]
 
 
 class GuardPool:
@@ -125,6 +172,7 @@ class CerbereGateway:
         self.config = config
         self.guards = GuardPool(config)
         self.inspector = ResponseInspector(config.redact_pii, config.redact_secrets)
+        self.server_budgets = ServerBudgetLedger()
         self.upstreams: dict[str, Upstream] = {}
         self.executor = ThreadPoolExecutor(max_workers=config.workers)
         self._tools_cache: list | None = None
@@ -142,9 +190,10 @@ class CerbereGateway:
             self.upstreams[spec.label] = up
             allow = "*" if spec.allow_all else ",".join(spec.allowed_tools)
             mode = " (external: taint-enforced)" if spec.external else ""
+            budget = f", budget=${spec.budget:.2f}" if spec.budget is not None else ""
             sys.stderr.write(
                 f"[cerbere-ag-gateway] upstream '{spec.label}' up — "
-                f"allowed_tools={allow}{mode}\n"
+                f"allowed_tools={allow}{mode}{budget}\n"
             )
         if not self.upstreams:
             raise ConfigError("No upstream connected")
@@ -164,6 +213,7 @@ class CerbereGateway:
         config = self.config
         guards = self.guards
         executor = self.executor
+        ledger = self.server_budgets
 
         def _identity() -> dict[str, Any]:
             identity = current_identity.get()
@@ -180,6 +230,12 @@ class CerbereGateway:
                 raise SecurityException(
                     f"Server '{label}' is not allowed for this agent identity"
                 )
+
+            # Budget par serveur (fail-closed) : vérifié avant l'enforcement.
+            spec = config.server(label)
+            if spec.budget is not None:
+                ledger.check(identity["agent_id"], label, spec.budget)
+
             guard = guards.get(identity)
             guard.guard_tool_call(
                 f"mcp:{label}:{tool}",
@@ -271,6 +327,22 @@ class CerbereGateway:
             # 5. Forward vers l'amont, puis inspection de la réponse
             result = await up.session.call_tool(tool, args)
             content = inspector.inspect_content(list(result.content))
+
+            # 6. Budget par serveur : charge heuristique (arguments + réponse)
+            if spec.budget is not None:
+                agent_id = _identity()["agent_id"]
+                response_texts = [
+                    getattr(c, "text", "") or "" for c in content
+                ]
+                cost = ledger.estimate_usd(
+                    json.dumps(args, ensure_ascii=False, default=str),
+                    *response_texts,
+                )
+                spent = ledger.charge(agent_id, label, cost)
+                sys.stderr.write(
+                    f"[cerbere-ag-gateway] budget '{label}' for '{agent_id}': "
+                    f"+${cost:.6f} → ${spent:.4f} / ${spec.budget:.2f}\n"
+                )
 
             if result.isError:
                 text = " ".join(getattr(c, "text", "") for c in content).strip()
