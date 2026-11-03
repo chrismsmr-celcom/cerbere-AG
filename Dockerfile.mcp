@@ -1,22 +1,40 @@
-# Dockerfile.mcp
+# Dockerfile.mcp — image de la gateway MCP universelle CerbereAG
+# Build :  docker build -f Dockerfile.mcp -t cerbere-ag-gateway .
+# Run :    docker run --rm -p 8081:8081 \
+#            -v $(pwd)/gateway.json:/config/gateway.json:ro \
+#            -e CERBERE_GATEWAY_CONFIG=/config/gateway.json \
+#            cerbere-ag-gateway
+# stdio :  docker run --rm -i -v $(pwd)/gateway.json:/config/gateway.json:ro \
+#            cerbere-ag-gateway --config /config/gateway.json
+
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Utilisateur non-root : le serveur n'a pas besoin de privilèges
+# Utilisateur non-root : la gateway n'a pas besoin de privilèges
 RUN useradd --create-home --uid 10001 appuser
 
-# Installation des dépendances
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# node + npx : les serveurs amonts MCP officiels sont souvent lancés via npx
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copie du code du serveur SSE (le fichier vit dans collector/)
-COPY collector/mcp_server_sse.py ./mcp_server_sse.py
+# Installation du package MCP (serveur + gateway) avec l'extra HTTP
+COPY mcp/pyproject.toml ./mcp/pyproject.toml
+COPY mcp/mcp_server.py ./mcp/
+COPY mcp/gateway_server.py ./mcp/
+COPY mcp/gateway_config.py ./mcp/
+COPY mcp/gateway_inspection.py ./mcp/
+RUN pip install --no-cache-dir "./mcp[gateway-http,yaml]"
+
+# Emplacement attendu de la config (montée en lecture seule au run)
+RUN mkdir -p /config && chown appuser:appuser /config
+ENV CERBERE_GATEWAY_CONFIG=/config/gateway.json
 
 USER appuser
 
-# Exposition du port 8080 (standard pour la plupart des hébergeurs)
-EXPOSE 8080
+# Port du transport Streamable HTTP (si transport: "http" dans la config)
+EXPOSE 8081
 
-# Commande de lancement du serveur SSE
-CMD ["python", "mcp_server_sse.py"]
+# Entrée : cerbere-ag-gateway (stdio ou HTTP selon la config)
+CMD ["cerbere-ag-gateway", "--config", "/config/gateway.json"]
