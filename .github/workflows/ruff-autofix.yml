@@ -1,0 +1,68 @@
+name: Ruff Auto-Fix
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+
+jobs:
+  ruff-check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_errors: ${{ steps.check.outputs.has_errors }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Check for ruff errors
+        id: check
+        run: |
+          if python -m ruff check .; then
+            echo "has_errors=false" >> $GITHUB_OUTPUT
+            echo "✅ No ruff errors found"
+          else
+            echo "has_errors=true" >> $GITHUB_OUTPUT
+            echo "❌ Ruff errors detected, fix job will run"
+          fi
+
+  ruff-fix:
+    needs: ruff-check
+    if: needs.ruff-check.outputs.has_errors == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Apply safe fixes
+        run: python -m ruff check . --fix
+
+      - name: Apply unsafe fixes
+        run: python -m ruff check . --fix --unsafe-fixes
+
+      - name: Commit and push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-fix ruff linting issues"
