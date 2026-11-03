@@ -30,7 +30,7 @@ if "_deliver_span" in src:
 TOTAL = 7
 
 
-def step(n, label, pattern, repl, flags=re.M | re.S):
+def step(n, label, pattern, repl, flags=re.MULTILINE | re.DOTALL):
     global src
     new, count = re.subn(pattern, repl, src, count=1, flags=flags)
     if count != 1:
@@ -38,13 +38,13 @@ def step(n, label, pattern, repl, flags=re.M | re.S):
     src = new
 
 
-step(1, "import threading", r"^import time$", "import threading\nimport time", re.M)
+step(1, "import threading", r"^import time$", "import threading\nimport time", re.MULTILINE)
 step(2, "import background + verrou module", r"^from \.ids import uuid7$",
      "from .background import SpanSender, StatusPoller, bg_enabled\n"
      "from .ids import uuid7\n\n"
      "# Protège seulement la création des threads d'E/S ; partagé entre instances,\n"
      "# jamais tenu pendant un appel réseau.\n"
-     "_BG_LOCK = threading.Lock()", re.M)
+     "_BG_LOCK = threading.Lock()", re.MULTILINE)
 
 step(3, "attributs de classe", r"^class AgentGuard:\n",
      'class AgentGuard:\n'
@@ -52,15 +52,15 @@ step(3, "attributs de classe", r"^class AgentGuard:\n",
      '    _poller = None\n'
      '    _sender = None\n'
      '    _applied_status_version = -1\n'
-     '    _incident_sync_at = 0.0\n\n', re.M)
+     '    _incident_sync_at = 0.0\n\n', re.MULTILINE)
 
 step(4, "hook _refresh_runtime_mode",
      r'^(    def _refresh_runtime_mode\(self\) -> None:\n        """[^\n]*"""\n)',
-     r"\1        if bg_enabled():\n            return self._refresh_mode_fast()\n", re.M)
+     r"\1        if bg_enabled():\n            return self._refresh_mode_fast()\n", re.MULTILINE)
 
 step(5, "hook _ensure_connected",
      r'^(    def _ensure_connected\(self\):\n        """[^\n]*"""\n)',
-     r"\1        if bg_enabled():\n            return self._ensure_connected_fast()\n", re.M)
+     r"\1        if bg_enabled():\n            return self._ensure_connected_fast()\n", re.MULTILINE)
 
 step(6, "envoi du span",
      r'( {12})response = requests\.post\(\n {16}f"\{self\.collector_url\}/span",.*?'
@@ -208,7 +208,7 @@ NEW_METHODS = '''    # =========================================================
 
 '''
 step(7, "nouvelles méthodes", r"^(    def _send_to_collector\(self, span: GuardSpan\):\n)",
-     lambda m: NEW_METHODS + m.group(1), re.M)
+     lambda m: NEW_METHODS + m.group(1), re.MULTILINE)
 
 try:
     compile(src, str(path), "exec")

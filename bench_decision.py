@@ -18,15 +18,11 @@ Usage :
     python bench_decision.py --calls 200 --ttl-ms 0      # TTL nul = réseau à chaque appel
 """
 
-import argparse
 import json
 import os
-import statistics
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-from agentguard import AgentGuard
 
 
 class _Fake:

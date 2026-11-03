@@ -30,7 +30,7 @@ else:
     new, n = re.subn(
         r"^([ \t]*)(structlog\.processors\.add_log_level,\n)([ \t]*)(structlog\.processors\.JSONRenderer\(\),)",
         r"\1\2\3structlog.processors.format_exc_info,\n\3\4",
-        src, count=1, flags=re.M)
+        src, count=1, flags=re.MULTILINE)
     if n:
         src = new
         done.append("1/2 logs : format_exc_info ajouté")
@@ -41,7 +41,7 @@ else:
 if "RATELIMIT_SWALLOW_ERRORS" in src:
     skipped.append("2/2 limiteur : déjà configuré")
 else:
-    matches = re.findall(r"^[ \t]*limiter\.init_app\(app\)[ \t]*$", src, flags=re.M)
+    matches = re.findall(r"^[ \t]*limiter\.init_app\(app\)[ \t]*$", src, flags=re.MULTILINE)
     if len(matches) == 1:
         src = re.sub(
             r"^([ \t]*)(limiter\.init_app\(app\))[ \t]*$",
@@ -50,7 +50,7 @@ else:
             r'\1app.config.setdefault("RATELIMIT_SWALLOW_ERRORS", True)\n'
             r'\1app.config.setdefault("RATELIMIT_IN_MEMORY_FALLBACK_ENABLED", True)\n'
             r'\1\2',
-            src, count=1, flags=re.M)
+            src, count=1, flags=re.MULTILINE)
         done.append("2/2 limiteur : repli mémoire + erreurs avalées")
     else:
         skipped.append(f"2/2 limiteur : `limiter.init_app(app)` trouvé {len(matches)} fois (attendu : 1), ignoré")
