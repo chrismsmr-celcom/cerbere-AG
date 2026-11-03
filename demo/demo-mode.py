@@ -25,6 +25,7 @@ mode du dashboard n'est pas lu (le SDK reste en enforce).
 
 Le secret ci-dessous est FAUX (valeur de test), jamais une vraie clé.
 """
+
 import argparse
 import os
 import random
@@ -184,8 +185,10 @@ class Guard:
 
     # -- simulation locale pour répéter sans collector ------------------------
     def _dry_verdict(self, tool, args, fn):
-        if tool == "send_email" and self.tainted and not args["to"].endswith(
-            "@acme.com"
+        if (
+            tool == "send_email"
+            and self.tainted
+            and not args["to"].endswith("@acme.com")
         ):
             if DRY_MODE["mode"] == "shadow":
                 return "shadow_would_block", None
@@ -371,7 +374,11 @@ def act_control(guard, meter):
     waited = time.time() - t0
 
     if verdict == "approved" or (verdict == "allow" and waited >= 1.0):
-        log("HITL", f"approuvé par un humain après {waited:.0f}s -> l'agent reprend : {res}", "grn")
+        log(
+            "HITL",
+            f"approuvé par un humain après {waited:.0f}s -> l'agent reprend : {res}",
+            "grn",
+        )
     elif verdict == "rejected":
         log("HITL", "rejeté par l'admin : l'agent abandonne l'action", "red")
     elif verdict == "require_approval":

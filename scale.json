@@ -1,0 +1,59 @@
+{
+  "config": {
+    "agents": 1000,
+    "agent_offset": 0,
+    "rate": 0.2,
+    "ramp": 20,
+    "duration": 40,
+    "burst_factor": 5.0,
+    "burst_seconds": 10.0,
+    "blocked_pct": 3.0,
+    "connections": 500,
+    "max_inflight": 3000,
+    "timeout": 15.0,
+    "probe_dashboard": true,
+    "out": "scale.json"
+  },
+  "requests": 5322,
+  "outcomes": {
+    "err": 5322
+  },
+  "client_dropped": 10153,
+  "latency_ok_ms": {
+    "p50": NaN,
+    "p95": NaN,
+    "p99": NaN
+  },
+  "dashboard_probes": {
+    "/api/audit/trail?limit=300": [
+      {
+        "status": 401,
+        "ms": 421.43060000034893
+      },
+      {
+        "status": 401,
+        "ms": 48809.16559999969
+      }
+    ],
+    "/api/audit/summary": [
+      {
+        "status": 401,
+        "ms": 396.0047000000486
+      },
+      {
+        "status": 401,
+        "ms": 48515.11130000017
+      }
+    ],
+    "/api/cost/trend": [
+      {
+        "status": 401,
+        "ms": 428.4199000003355
+      },
+      {
+        "status": 401,
+        "ms": 18064.676800000598
+      }
+    ]
+  }
+}
