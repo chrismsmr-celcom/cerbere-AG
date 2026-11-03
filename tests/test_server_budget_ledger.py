@@ -73,8 +73,15 @@ def test_check_blocks_only_the_exhausted_pair():
 
 def test_check_default_spends_are_independent_and_lazy():
     ledger = ServerBudgetLedger()
-    # Aucune charge enregistrée : tout passe, quel que soit le plafond.
-    ledger.check("nobody", "nothing", budget=0.0)
+    # Aucune charge enregistrée : tout passe, même avec un tout petit plafond.
+    ledger.check("nobody", "nothing", budget=0.01)
+
+
+def test_check_budget_zero_blocks_everything():
+    """Un budget de 0 $ est un plafond valide et bloque tout appel (fail-closed)."""
+    ledger = ServerBudgetLedger()
+    with pytest.raises(SecurityException):
+        ledger.check("anyone", "any", budget=0.0)
 
 
 # ------------------------------------------------------- enforcement wiring
