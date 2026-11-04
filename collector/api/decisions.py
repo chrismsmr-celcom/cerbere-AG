@@ -5,7 +5,9 @@ import secrets
 from flask import g, jsonify, request
 
 from agentguard.decision_engine import DecisionRequest
+from agentguard.signing import params_digest
 from collector.api.helpers import (
+    _bound_agent_id,
     _reject_if_agent_disconnected,
     api_bp,
     decision_engine,
@@ -53,9 +55,21 @@ def decide():
 
     authenticated_agent_id = (
         getattr(g, "agent_id", None)
+        or _bound_agent_id()
         or getattr(g, "api_key_id", None)
         or f"org:{g.org_id}"
     )
+
+    # Liaison de la décision signée à l'action exacte (outil, arguments, org,
+    # agent authentifié, nonce fourni par le SDK) : une décision ne peut être
+    # ni rejouée ni transposée à une autre action.
+    binding = {
+        "tool_name": tool_name,
+        "agent_id": str(authenticated_agent_id),
+        "org_id": str(g.org_id),
+        "args_sha256": params_digest(params),
+        "nonce": str(data.get("nonce"))[:128] if data.get("nonce") else None,
+    }
 
     requested_policy = data.get("policy")
     metadata = {"org_id": g.org_id, "source": "api_decide"}
@@ -97,6 +111,7 @@ def decide():
                     "policy_name": "fail_closed",
                     "policy_version": 0,
                     "reason": "Decision engine failure",
+                    **binding,
                 }
             )
             return jsonify(signed), 503
@@ -112,6 +127,7 @@ def decide():
                 "policy_name": result.policy,
                 "policy_version": 1,
                 "reason": "; ".join(result.reasons[:5]),
+                **binding,
             }
         )
         signed["risk_score"] = result.risk_score

@@ -45,6 +45,7 @@ from collector.api.helpers import (  # noqa: F401
     _agent_state,
     _agent_status,
     _as_json,
+    _bound_agent_id,
     _db_run,
     _iso_utc,
     _reject_if_agent_disconnected,

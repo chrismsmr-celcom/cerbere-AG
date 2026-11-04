@@ -43,6 +43,10 @@ except ImportError:
 logger = logging.getLogger("agentguard.audit")
 
 
+class AuditPersistenceError(RuntimeError):
+    """Un événement d'audit n'a pu être enregistré dans aucun stockage."""
+
+
 class AuditEventType(str, Enum):
     """Types d'événements auditables."""
 
@@ -172,6 +176,15 @@ class ImmutableAuditLog:
         )
         self.sign_every = sign_every
         self._write_lock = __import__("threading").RLock()
+
+        # État de santé de la persistance : une défaillance ne doit jamais être
+        # silencieuse pour un produit de sécurité.
+        #   AGENTGUARD_AUDIT_ON_FAILURE = "degrade" (défaut) : état AUDIT_DEGRADED,
+        #     compteur et log ERROR ; "block" : lève AuditPersistenceError.
+        self.degraded = False
+        self.persist_failures = 0
+        mode = os.getenv("AGENTGUARD_AUDIT_ON_FAILURE", "degrade").lower()
+        self.on_failure = mode if mode in ("degrade", "block") else "block"
 
         # Signer (côté collector : clé privée)
         self._signer = None
@@ -337,7 +350,9 @@ class ImmutableAuditLog:
                     f"Audit chain checkpoint at {count} entries, "
                     f"head_hash={entry.entry_hash}"
                 ),
-            }
+            },
+            # Preuve d'audit : doit rester vérifiable des mois/années plus tard.
+            ttl=None,
         )
         # On stocke le payload signé complet (avec signature + expiration)
         # pour que verify_chain() puisse vérifier la signature.
@@ -407,7 +422,13 @@ class ImmutableAuditLog:
         return entry
 
     def _persist(self, entry: AuditEntry):
-        """Persiste l'entrée dans Postgres ET backup file."""
+        """Persiste l'entrée dans Postgres ET backup file.
+
+        Si AUCUN stockage n'a enregistré l'événement, l'état AUDIT_DEGRADED est
+        positionné (et AuditPersistenceError levée en mode "block").
+        """
+        pg_ok = False
+        file_ok = False
         # Postgres
         if self.database_url and PSYCOPG_AVAILABLE:
             try:
@@ -437,6 +458,7 @@ class ImmutableAuditLog:
                     )
                 conn.commit()
                 conn.close()
+                pg_ok = True
             except Exception as e:
                 logger.warning("AuditLog Postgres persist failed: %s", e)
 
@@ -444,8 +466,39 @@ class ImmutableAuditLog:
         try:
             with open(self.backup_file, "a") as f:
                 f.write(json.dumps(entry.to_dict()) + "\n")
+            file_ok = True
         except Exception as e:
             logger.warning("AuditLog file backup failed: %s", e)
+
+        if pg_ok or file_ok:
+            if self.degraded:
+                self.degraded = False
+                logger.warning("AUDIT_RECOVERED: persistence is working again")
+            return
+
+        self.persist_failures += 1
+        if not self.degraded:
+            self.degraded = True
+        logger.error(
+            "AUDIT_DEGRADED: event %s (%s) was NOT persisted anywhere "
+            "(failures=%d, on_failure=%s)",
+            entry.event_id,
+            entry.event_type,
+            self.persist_failures,
+            self.on_failure,
+        )
+        if self.on_failure == "block":
+            raise AuditPersistenceError(
+                f"audit event {entry.event_id} could not be persisted"
+            )
+
+    def status(self) -> dict:
+        """État de santé exposable (health check / métriques)."""
+        return {
+            "state": "AUDIT_DEGRADED" if self.degraded else "OK",
+            "persist_failures": self.persist_failures,
+            "on_failure": self.on_failure,
+        }
 
     def verify_chain(self, limit: int | None = None) -> tuple:
         """
@@ -528,7 +581,8 @@ class ImmutableAuditLog:
                     continue
 
                 try:
-                    if self._verifier.verify(signed_payload):
+                    # Pas d'expiration : une preuve d'audit ne "périme" pas.
+                    if self._verifier.verify(signed_payload, check_expiry=False):
                         # Cohérence : le head_hash signé doit être celui
                         # de l'entrée checkpoint elle-même.
                         signed_head = str(
@@ -595,8 +649,47 @@ class ImmutableAuditLog:
             "entry_count": count,
             "ts": time.time(),
         }
-        # Log append-only : simple, aucune dépendance.
+        # Log append-only : simple, aucune dépendance. NE SUFFIT PAS à lui seul :
+        # il faut un sink indépendant (ci-dessous) pour prouver une troncature.
         logger.warning("AUDIT_ANCHOR %s", json.dumps(anchor, sort_keys=True))
+
+        published = ["log"]
+        line = json.dumps(anchor, sort_keys=True)
+
+        # Sink fichier append-only (monter un volume séparé / WORM / S3 FUSE).
+        anchor_file = os.getenv("AGENTGUARD_AUDIT_ANCHOR_FILE")
+        if anchor_file:
+            try:
+                with open(anchor_file, "a", encoding="utf-8") as fh:
+                    fh.write(line + "\n")
+                published.append("file")
+            except Exception as e:
+                logger.error("AUDIT_ANCHOR file sink failed: %s", e)
+
+        # Sink HTTP (webhook vers un stockage indépendant de la base).
+        anchor_url = os.getenv("AGENTGUARD_AUDIT_ANCHOR_URL")
+        if anchor_url:
+            try:
+                import requests
+
+                resp = requests.post(anchor_url, json=anchor, timeout=5)
+                if 200 <= resp.status_code < 300:
+                    published.append("http")
+                else:
+                    logger.error(
+                        "AUDIT_ANCHOR http sink returned %s", resp.status_code
+                    )
+            except Exception as e:
+                logger.error("AUDIT_ANCHOR http sink failed: %s", e)
+
+        anchor["published_to"] = published
+        anchor["independent"] = len(published) > 1
+        if not anchor["independent"]:
+            logger.warning(
+                "AUDIT_ANCHOR is only written to the application log: configure "
+                "AGENTGUARD_AUDIT_ANCHOR_FILE or AGENTGUARD_AUDIT_ANCHOR_URL "
+                "for tamper/truncation evidence independent of the database."
+            )
         return anchor
 
     def _load_entries(self, limit: int | None = None) -> list[dict]:

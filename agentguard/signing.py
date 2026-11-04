@@ -6,6 +6,7 @@ the client cannot forge an ALLOW decision.
 """
 
 import base64
+import hashlib
 import json
 import os
 import time
@@ -14,6 +15,24 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
+
+
+# Champs optionnels qui lient une décision à l'action exacte demandée. Ils sont
+# inclus dans la charge signée : le SDK peut ainsi prouver que la décision reçue
+# concerne CET outil, avec CES arguments, pour CETTE requête (anti-rejeu).
+BINDING_FIELDS = ("tool_name", "agent_id", "org_id", "args_sha256", "nonce")
+
+
+def params_digest(params) -> str:
+    """Empreinte SHA-256 canonique des arguments d'un outil (SDK et collector)."""
+    canonical = json.dumps(
+        params if params is not None else {},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class DecisionSigner:
@@ -78,11 +97,16 @@ class DecisionSigner:
             serialization.NoEncryption(),
         ).decode()
 
-    def sign_decision(self, decision: dict) -> dict:
+    def sign_decision(self, decision: dict, ttl: int | None = 300) -> dict:
         """
         Sign a security decision.
 
         The signed payload contains only security-authoritative fields.
+
+        ttl: validity in seconds (runtime decisions). ``None`` = no expiry, for
+        signatures that must stay verifiable for years (audit checkpoints). Such
+        a payload is REJECTED by ``DecisionVerifier.verify()`` (expiry required),
+        so it can never be used as a runtime decision.
         """
 
         now = int(time.time())
@@ -94,8 +118,14 @@ class DecisionSigner:
             "policy_version": decision.get("policy_version"),
             "reason": decision.get("reason"),
             "issued_at": now,
-            "expires_at": now + 300,
         }
+        if ttl is not None:
+            payload["expires_at"] = now + int(ttl)
+
+        # Liaison à l'action : seulement les champs fournis (anciens appelants OK).
+        for field in BINDING_FIELDS:
+            if decision.get(field) is not None:
+                payload[field] = decision[field]
 
         canonical = json.dumps(
             payload,
@@ -116,8 +146,12 @@ class DecisionVerifier:
     def __init__(self, public_key_pem: str):
         self._pub = serialization.load_pem_public_key(public_key_pem.encode())
 
-    def verify(self, signed: dict) -> bool:
-        """Verify signature and expiration."""
+    def verify(self, signed: dict, check_expiry: bool = True) -> bool:
+        """Verify signature and expiration.
+
+        check_expiry=False is for long-lived evidence (audit checkpoints) whose
+        signature must remain verifiable after the runtime validity window.
+        """
 
         if not isinstance(signed, dict):
             return False
@@ -130,16 +164,17 @@ class DecisionVerifier:
         except Exception:
             return False
 
-        expires_at = signed.get("expires_at")
+        if check_expiry:
+            expires_at = signed.get("expires_at")
 
-        try:
-            if not expires_at:
-                return False
+            try:
+                if not expires_at:
+                    return False
 
-            if float(expires_at) < time.time():
+                if float(expires_at) < time.time():
+                    return False
+            except (TypeError, ValueError):
                 return False
-        except (TypeError, ValueError):
-            return False
 
         payload = {key: value for key, value in signed.items() if key != "signature"}
 
@@ -156,5 +191,30 @@ class DecisionVerifier:
             )
             return True
 
+        except Exception:
+            return False
+
+    def verify_for(
+        self,
+        signed: dict,
+        *,
+        tool_name: str,
+        params,
+        nonce: str,
+    ) -> bool:
+        """Vérifie la signature ET que la décision concerne exactement cette action.
+
+        Une décision valide mais émise pour un autre outil, d'autres arguments ou
+        une autre requête (rejeu) est refusée. Les champs de liaison sont
+        OBLIGATOIRES : une décision sans liaison n'est pas acceptée.
+        """
+        if not self.verify(signed):
+            return False
+        try:
+            return (
+                signed.get("tool_name") == tool_name
+                and signed.get("args_sha256") == params_digest(params)
+                and signed.get("nonce") == nonce
+            )
         except Exception:
             return False

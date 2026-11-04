@@ -60,7 +60,7 @@ See what the agent actually does.
 - Traces of LLM and tool calls
 - Latency, tokens and cost
 - Per-span taint level and risk score
-- Signed, tamper-evident decision log
+- Hash-chained audit log with signed checkpoints (tamper evidence; add an independent anchor sink for truncation evidence, see below)
 
 </td>
 <td width="33%" valign="top">
@@ -123,7 +123,7 @@ Optional extras:
 
 | Extra | Adds |
 |---|---|
-| `cerbere-ag[signing]` | Verification of signed policy decisions (Ed25519) |
+| `cerbere-ag[signing]` | Ed25519 verification of signed server decisions. **Opt-in**: set `AGENTGUARD_PUBLIC_KEY` (or pass `public_key_pem=`); without a key the SDK does not request signed decisions |
 | `cerbere-ag[pii]` | Advanced PII detection via Presidio |
 | `cerbere-ag[redis]` | Distributed rate limiting and LLM-judge cache |
 | `cerbere-ag[ml]` | Local ML classifier (torch + transformers) |
@@ -177,6 +177,10 @@ Each span carries `taint_level` and `risk_score`, so blocked flows appear in the
 |---|---|---|
 | `AGENTGUARD_TAINT_ENABLED` | `true` | Turn taint tracking on or off |
 | `AGENTGUARD_TAINT_SESSION_MODE` | `false` | Session-wide taint instead of per-value matching |
+| `AGENTGUARD_TAINT_ON_SATURATION` | `block` | When the tracker can no longer store sensitive values (≈60 secrets: each value is stored in several encodings, 500 entries max), `block` treats every payload as `SECRET` (fail-closed) until `clear()`; `warn` only logs |
+| `AGENTGUARD_PUBLIC_KEY` / `_FILE` | – | Collector Ed25519 public key; enables verified, action-bound signed decisions in the SDK |
+| `AGENTGUARD_AUDIT_ON_FAILURE` | `degrade` | If an audit event cannot be persisted anywhere: `degrade` sets `AUDIT_DEGRADED` (visible via `status()`), `block` raises |
+| `AGENTGUARD_AUDIT_ANCHOR_FILE` / `_URL` | – | Independent sinks for the audit chain anchor; without one, the anchor only goes to the application log |
 
 <br/>
 
@@ -292,7 +296,7 @@ Cerbère sits at the execution boundary, so the underlying model does not need t
 |---|---|
 | ✅ Shipped | Three-layer detection · taint tracking · runtime risk and trajectory analysis · human approval queue · signed decisions · multi-tenant collector · MCP server · public benchmark |
 | 🔨 Next | Publish `cerbere-ag-mcp` · HTTP gateway for agents whose code cannot be changed · "Why was this blocked?" view · documentation site |
-| 🔭 Later | OpenTelemetry export · judge router across models · CLI · advanced RBAC |
+| 🔭 Later | OpenTelemetry export · judge router across models · CLI · fine-grained RBAC (today: `admin`/`developer` can approve, reject and disconnect agents; `auditor`/`viewer` are read-only) |
 
 Roadmap items are subject to change.
 

@@ -692,10 +692,26 @@ class TestE2ESignedDecisions:
         from agentguard.sdk import AgentGuard
         from agentguard.signing import DecisionSigner
 
+        # Clé "collector" explicite (le live_server de test n'a pas de clé de
+        # signature configurée) : le SDK doit avoir un vérificateur ACTIF, sinon
+        # ce test ne prouverait rien.
+        collector_pem = (
+            Ed25519PrivateKey.generate()
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode()
+        )
+        pub_pem = DecisionSigner(private_key_pem=collector_pem).public_key_pem()
+
         guard = AgentGuard(
             collector_url=live_server.url,
             api_key=agent_setup["api_key"],
+            public_key_pem=pub_pem,
         )
+        assert guard._verifier is not None
 
         # L'attaquant utilise sa propre clé, explicitement fournie : DecisionSigner
         # refuse désormais de générer une clé éphémère sans opt-in, et ce test ne doit
@@ -726,5 +742,4 @@ class TestE2ESignedDecisions:
         )
 
         # SDK should reject because public key doesn't match
-        if guard._verifier:
-            assert guard._verifier.verify(dict(forged)) is False
+        assert guard._verifier.verify(dict(forged)) is False

@@ -12,6 +12,7 @@ from collector.api.helpers import (
     _audit_human_action,
     _db_run,
     _human_auth,
+    _human_decider_or_error,
     _iso_utc,
     _request_agent_id,
     api_bp,
@@ -101,8 +102,9 @@ def api_list_agents():
 
 def _set_agent_status(agent_id, new_status):
     # Décision humaine uniquement : un agent ne doit pas pouvoir se (re)connecter lui-même.
-    if not _human_auth():
-        return jsonify({"error": "Human session required"}), 401
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     org_id = g.org_id
     actor = getattr(g, "human_email", None) or f"org:{org_id}"
 

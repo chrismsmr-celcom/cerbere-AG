@@ -20,6 +20,8 @@ Flux interdits (par défaut) :
 import base64
 import binascii
 import json
+import logging
+import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -318,6 +320,15 @@ _MAX_SCAN_CHARS = 200_000
 
 _PII_STRONG_PATTERNS = _PII_PATTERNS[1:]
 
+_logger = logging.getLogger("agentguard.taint")
+
+# Que faire quand le stockage de valeurs suivies est saturé ?
+#   "block" (défaut, fail-closed) : tant que le tracker a dû ignorer des valeurs
+#            sensibles, toute charge utile est traitée au minimum comme SECRET
+#            (une donnée non suivie n'est JAMAIS considérée comme sûre).
+#   "warn"  : ancien comportement (silencieux côté décision), mais journalisé.
+_SATURATION_MODES = ("block", "warn")
+
 
 def _b64_aligned(raw: bytes, urlsafe: bool) -> list[str]:
     """Base64 d'un secret tel qu'il apparaît DANS un texte plus long."""
@@ -351,12 +362,19 @@ def _encodings(raw: str) -> list[str]:
 class FlowTracker:
     """Mémorise les données sensibles vues dans une session."""
 
-    def __init__(self, session_mode: bool = False):
+    def __init__(self, session_mode: bool = False, on_saturation: str | None = None):
         self.session_mode = session_mode
         self._tracker = TaintTracker()
         self._needles: dict[str, TaintLevel] = {}
         self._session_level = TaintLevel.PUBLIC
         self._counter = 0
+        mode = (
+            on_saturation or os.environ.get("AGENTGUARD_TAINT_ON_SATURATION") or "block"
+        ).lower()
+        # Valeur inconnue -> fail-closed.
+        self.on_saturation = mode if mode in _SATURATION_MODES else "block"
+        self.saturated = False
+        self.dropped_needles = 0
 
     def _extract(self, text: str):
         text = text[:_MAX_SCAN_CHARS]
@@ -374,10 +392,38 @@ class FlowTracker:
             if len(variant) < _MIN_TRACKED_LEN:
                 continue
             if len(self._needles) >= _MAX_TRACKED and variant not in self._needles:
-                return
+                # Plein : on évince d'abord la plus ancienne entrée de niveau
+                # STRICTEMENT inférieur, pour garder les secrets les plus graves.
+                victim = next(
+                    (k for k, lv in self._needles.items() if lv < level), None
+                )
+                if victim is None:
+                    self._on_saturated(level)
+                    return
+                del self._needles[victim]
+                self._on_saturated(None)  # une valeur moins grave n'est plus suivie
             prev = self._needles.get(variant)
             if prev is None or level > prev:
                 self._needles[variant] = level
+
+    def _on_saturated(self, dropped_level: TaintLevel | None) -> None:
+        """Enregistre explicitement qu'une valeur n'est (plus) suivie."""
+        self.dropped_needles += 1
+        if not self.saturated:
+            self.saturated = True
+            _logger.warning(
+                "taint_tracker_saturated: max=%d on_saturation=%s "
+                "(untracked sensitive values; external flows %s)",
+                _MAX_TRACKED,
+                self.on_saturation,
+                "BLOCKED until clear()" if self.on_saturation == "block" else "not blocked",
+            )
+
+    def clear(self) -> None:
+        """Réinitialise les valeurs suivies et l'état de saturation (fin de session)."""
+        self._needles.clear()
+        self.saturated = False
+        self.dropped_needles = 0
 
     def track(
         self, value: Any, source: str = "user", level: TaintLevel | None = None
@@ -451,6 +497,10 @@ class FlowTracker:
                 direct = TaintLevel.CONFIDENTIAL
             if direct > level:
                 level, source = direct, "pattern_in_params"
+        if self.saturated and self.on_saturation == "block" and level < TaintLevel.SECRET:
+            # Fail-closed : des valeurs sensibles ont été ignorées, donc une
+            # charge utile "propre" n'est pas prouvée sûre.
+            level, source = TaintLevel.SECRET, "tracker_saturated"
         if self._session_level == TaintLevel.MALICIOUS:
             level, source = TaintLevel.MALICIOUS, "session_malicious"
         elif (
@@ -468,4 +518,6 @@ class FlowTracker:
         r = self._tracker.get_report()
         r["session_level"] = self._session_level.name
         r["tracked_needles"] = len(self._needles)
+        r["saturated"] = self.saturated
+        r["dropped_needles"] = self.dropped_needles
         return r

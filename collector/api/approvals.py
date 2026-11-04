@@ -8,7 +8,8 @@ from collector.api.helpers import (
     _as_json,
     _audit_human_action,
     _db_run,
-    _human_auth,
+
+    _human_decider_or_error,
     _iso_utc,
     _reject_if_agent_disconnected,
     _request_agent_id,
@@ -89,8 +90,9 @@ def api_list_approvals():
 
 def _resolve_approval(approval_id, new_status):
     # Un agent (clé API) ne doit JAMAIS pouvoir valider sa propre demande.
-    if not _human_auth():
-        return jsonify({"error": "Human session required"}), 401
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
 
     org_id = g.org_id
     decided_by = getattr(g, "human_email", None) or f"org:{org_id}"
@@ -198,7 +200,8 @@ def hitl_sdk_create_approval():
 
     data = request.get_json(silent=True) or {}
     approval_id = data.get("approval_id") or data.get("id")
-    agent_id = data.get("agent_id") or _request_agent_id() or "unknown"
+    # Agent lié à la clé > identité déclarée > corps de requête (jamais l'inverse).
+    agent_id = _request_agent_id() or data.get("agent_id") or "unknown"
     tool_name = data.get("tool_name")
     params = data.get("params", {})
     reason = data.get("reason", "Approval required by policy")

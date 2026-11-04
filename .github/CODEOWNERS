@@ -5,7 +5,7 @@
 *                       @chrismsmr-celcom
 
 # Cœur sécurité — review obligatoire
-/collector/auth.py      @chrismsmr-celcom
+/collector/auth/        @chrismsmr-celcom
 /collector/authz.py     @chrismsmr-celcom
 /collector/api/         @chrismsmr-celcom
 /collector/dashboard.py @chrismsmr-celcom

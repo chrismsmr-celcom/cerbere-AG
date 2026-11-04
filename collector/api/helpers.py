@@ -141,6 +141,45 @@ def _human_auth():
     return _pkg.require_human_auth()
 
 
+# Rôles autorisés à prendre une décision de sécurité (approuver / rejeter une
+# action, déconnecter / reconnecter un agent). Auditor et viewer sont en lecture seule.
+_DECIDER_ROLES = ("admin", "developer")
+
+
+def _has_decider_role():
+    """True si l'identité humaine résolue a un rôle autorisé à décider (fail-closed)."""
+    try:
+        from collector.auth.identity_resolution import resolve_full_identity
+
+        identity = resolve_full_identity()
+        if not identity:
+            return False
+        role = getattr(identity.role, "value", identity.role)
+        return str(role).lower() in _DECIDER_ROLES
+    except Exception:
+        return False
+
+
+def _human_decider_or_error():
+    """Session humaine (jamais une clé API) ET rôle autorisé à décider.
+
+    Retourne None si OK, sinon (réponse, code) 401 / 403.
+    """
+    if not _human_auth():
+        return jsonify({"error": "Human session required"}), 401
+    if not _has_decider_role():
+        logger.warning(
+            "human_decision_refused_role",
+            org_id=getattr(g, "org_id", None),
+            actor=getattr(g, "human_email", None),
+            endpoint=request.endpoint,
+        )
+        return jsonify(
+            {"error": "Insufficient role", "required_roles": list(_DECIDER_ROLES)}
+        ), 403
+    return None
+
+
 # ── Sérialisation des events (Trajectory Timeline) ──────────────────────────
 
 _EVENT_JSON_FIELDS = [
@@ -175,14 +214,66 @@ _INGEST_ENDPOINTS = {"api.receive_span", "api.decide", "api.api_sdk_create_appro
 _AGENT_STATUS_TTL = 3.0
 
 
-def _request_agent_id():
-    """Identité déclarée par le SDK (en-tête X-Agent-Id) ou identité de la clé agent."""
-    raw = (request.headers.get("X-Agent-Id") or "").strip()
-    if raw and _AGENT_ID_RE.match(raw):
-        return raw
+def _bound_agent_id():
+    """Identité d'agent PROUVÉE par la clé API (clé liée à un agent), sinon None.
+
+    Une clé d'organisation (legacy) ne prouve aucun agent : dans ce cas seule
+    l'identité *déclarée* (X-Agent-Id) existe, et elle n'est qu'indicative.
+    """
     identity = getattr(g, "agent_identity", None)
     if isinstance(identity, dict) and identity.get("agent_id"):
         return str(identity["agent_id"])[:64]
+    return None
+
+
+def _declared_agent_id():
+    raw = (request.headers.get("X-Agent-Id") or "").strip()
+    if raw and _AGENT_ID_RE.match(raw):
+        return raw
+    return None
+
+
+_MISMATCH_LOGGED = set()
+
+
+def _agent_id_mismatch():
+    """True si le client déclare un autre agent que celui auquel sa clé est liée."""
+    bound = _bound_agent_id()
+    declared = _declared_agent_id()
+    return bool(bound and declared and declared != bound)
+
+
+def _note_agent_id_mismatch():
+    """Journalise (une fois par couple) une discordance X-Agent-Id / agent de la clé."""
+    bound, declared = _bound_agent_id(), _declared_agent_id()
+    key = (getattr(g, "org_id", None), bound, declared)
+    if key not in _MISMATCH_LOGGED and len(_MISMATCH_LOGGED) < 1000:
+        _MISMATCH_LOGGED.add(key)
+        logger.warning(
+            "agent_id_header_ignored",
+            bound_agent_id=bound,
+            declared_agent_id=declared,
+            org_id=key[0],
+            note="X-Agent-Id differs from the agent bound to the API key; key identity used.",
+        )
+
+
+def _request_agent_id():
+    """Identité de l'agent appelant.
+
+    Priorité : (1) agent prouvé par la clé API, (2) identité déclarée par le SDK
+    (X-Agent-Id) pour les clés d'organisation, (3) nom de la clé (anciens SDK).
+    Un en-tête client ne doit JAMAIS l'emporter sur l'identité d'une clé liée
+    à un agent (usurpation d'agent, contournement du kill switch).
+    """
+    bound = _bound_agent_id()
+    if bound:
+        if _agent_id_mismatch():
+            _note_agent_id_mismatch()
+        return bound
+    declared = _declared_agent_id()
+    if declared:
+        return declared
     # SDK < 0.4.1 : pas d'en-tête X-Agent-Id -> l'agent est identifié par le nom de sa clé API
     key_name = getattr(g, "api_key_name", None)
     if key_name:

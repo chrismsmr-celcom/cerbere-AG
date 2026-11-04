@@ -50,11 +50,20 @@ def app_client(tmp_path, monkeypatch):
         yield c, api, monkeypatch
 
 
-def _as_human(api, monkeypatch, org="org-a", email="ciso@acme.io"):
+def _as_human(api, monkeypatch, org="org-a", email="ciso@acme.io", role="admin"):
     def fake():
         from flask import g
 
+        from agentguard.identity import IdentityType, ResolvedIdentity, Role
+
         g.org_id, g.human_email = org, email
+        g.identity = ResolvedIdentity(
+            identity_type=IdentityType.USER,
+            tenant_id="t-test",
+            org_id=org,
+            subject_id="u-test",
+            role=Role(role),
+        )
         return True
 
     monkeypatch.setattr(api, "require_human_auth", fake)

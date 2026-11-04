@@ -2,6 +2,7 @@ import hashlib
 import inspect
 import json
 import os
+import secrets
 import threading
 import time
 import warnings
@@ -40,7 +41,7 @@ from .vault import IncidentVault
 
 logger = structlog.get_logger("agentguard.sdk")
 
-SDK_VERSION = "0.6.1"
+SDK_VERSION = "0.6.2"
 
 _ENCODING_CACHE: dict[str, Any] = {}
 
@@ -136,6 +137,7 @@ class AgentGuard:
         notification_webhook: str | None = None,
         approval_timeout: float | None = None,
         approval_poll_interval: float | None = None,
+        public_key_pem: str | None = None,
     ):
         self.collector_url = (
             collector_url
@@ -174,7 +176,11 @@ class AgentGuard:
         )
 
         self.policy_engine = PolicyEngine(policies or [], redis_url)
-        self._verifier = None
+        # Vérification des décisions signées du collector (Ed25519).
+        # Activée dès qu'une clé publique est fournie (argument, AGENTGUARD_PUBLIC_KEY
+        # ou AGENTGUARD_PUBLIC_KEY_FILE). Une clé fournie mais invalide fait ÉCHOUER
+        # la construction : on ne démarre jamais "protégé" en apparence seulement.
+        self._verifier = self._init_verifier(public_key_pem)
 
         # Gestion de l'approbation.
         env_wait = os.getenv("AGENTGUARD_WAIT_FOR_APPROVAL")
@@ -765,28 +771,84 @@ class AgentGuard:
     # DÉCISION SIGNÉE SERVEUR
     # ==========================================================
 
+    @staticmethod
+    def _init_verifier(public_key_pem: str | None):
+        """Construit le DecisionVerifier à partir de la clé publique du collector."""
+        pem = public_key_pem or os.getenv("AGENTGUARD_PUBLIC_KEY")
+        key_file = os.getenv("AGENTGUARD_PUBLIC_KEY_FILE")
+
+        if not pem and key_file:
+            with open(key_file, encoding="utf-8") as fh:
+                pem = fh.read()
+
+        if not pem or not pem.strip():
+            return None
+
+        # Les variables d'environnement contiennent souvent "\\n" littéral.
+        pem = pem.replace("\\n", "\n").strip()
+
+        try:
+            from .signing import DecisionVerifier
+
+            return DecisionVerifier(pem)
+        except ImportError as exc:
+            raise ImportError(
+                "A public key was provided but the 'cryptography' package is "
+                "missing. Install it with: pip install 'cerbere-ag[signing]'"
+            ) from exc
+        except Exception as exc:
+            raise ValueError(
+                f"Invalid AGENTGUARD_PUBLIC_KEY (cannot load Ed25519 public key): {exc}"
+            ) from exc
+
     def _request_signed_decision(
         self,
         tool_name: str,
         params: dict[str, Any],
     ) -> dict | None:
+        """Demande une décision signée ET la vérifie (signature, expiration, liaison).
+
+        Retourne None si la décision est indisponible OU invalide ; l'appelant
+        refuse alors l'action (fail-closed).
+        """
         if not self._verifier:
             return None
 
+        nonce = secrets.token_hex(16)
+
         try:
+            # Même représentation que celle reçue par le collector (aller-retour JSON).
+            wire_params = json.loads(json.dumps(params or {}, default=str))
+
             response = requests.post(
                 f"{self.collector_url}/api/decide",
                 json={
                     "tool_name": tool_name,
-                    "params": params or {},
+                    "params": wire_params,
                     "agent_id": self.agent_id,
+                    "nonce": nonce,
                 },
                 headers=self._headers(),
                 timeout=self.collector_timeout,
             )
 
             if response.status_code == 200:
-                return response.json()
+                signed = response.json()
+
+                if not self._verifier.verify_for(
+                    signed,
+                    tool_name=tool_name,
+                    params=wire_params,
+                    nonce=nonce,
+                ):
+                    logger.warning(
+                        "signed_decision_invalid",
+                        tool=tool_name,
+                        note="bad signature, expired, or bound to another action",
+                    )
+                    return None
+
+                return signed
 
         except Exception as exc:
             logger.warning(

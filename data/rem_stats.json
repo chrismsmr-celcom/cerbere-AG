@@ -1,0 +1,11 @@
+{
+  "total": 1414,
+  "train": 1273,
+  "val": 141,
+  "by_verdict": {
+    "ATTACK": 1083,
+    "BENIGN": 320,
+    "DIDACTIC": 6,
+    "AMBIGUOUS": 5
+  }
+}
