@@ -152,7 +152,7 @@ def test_admin_and_developer_can_approve(app_client, role):
 
 
 def test_approval_agent_comes_from_key_not_body(app_client):
-    app, c, api, _ = app_client
+    _app, c, _api, _ = app_client
     # Org key + corps qui tente d'imposer un autre agent : l'en-tête déclaré gagne
     # sur le corps (le corps n'est qu'un dernier recours).
     c.post(
@@ -276,7 +276,7 @@ def test_verifier_is_initialised_when_public_key_given(signer, monkeypatch):
 
 def test_verifier_from_environment_with_escaped_newlines(signer, monkeypatch):
     monkeypatch.setenv(
-        "AGENTGUARD_PUBLIC_KEY", signer.public_key_pem().replace("\n", "\\n")
+        "AGENTGUARD_PUBLIC_KEY", signer.public_key_pem().replace("\n", "\n")
     )
     assert _guard()._verifier is not None
 
@@ -299,7 +299,7 @@ def _serve(monkeypatch, make_body):
     """Fait répondre au SDK un collector simulé qui signe make_body(request_json)."""
     import agentguard.sdk as sdk_mod
 
-    def fake_post(url, json=None, **kw):  # noqa: A002
+    def fake_post(url, json=None, **kw):
         return _Resp(make_body(json))
 
     monkeypatch.setattr(sdk_mod.requests, "post", fake_post)
@@ -413,7 +413,7 @@ def _log(log, n):
 
     for i in range(n):
         log.log_event(
-            list(AuditEventType)[0], "org", "actor", f"res{i}", "act", {"i": i}
+            next(iter(AuditEventType)), "org", "actor", f"res{i}", "act", {"i": i}
         )
 
 
@@ -443,7 +443,8 @@ def test_audit_checkpoint_signature_is_not_a_valid_runtime_decision(
 
     log = _audit_log(tmp_path, signer, monkeypatch)
     _log(log, 1)
-    line = json.loads(open(tmp_path / "audit.jsonl").readline())
+    with open(tmp_path / "audit.jsonl") as f:
+        line = json.loads(f.readline())
     payload = json.loads(line["signature"])
     assert "expires_at" not in payload
     v = DecisionVerifier(signer.public_key_pem())
