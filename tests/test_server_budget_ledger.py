@@ -16,8 +16,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
-from agentguard import SecurityException  # noqa: E402
-from gateway_server import ServerBudgetLedger  # noqa: E402
+from gateway_server import ServerBudgetLedger
+
+from agentguard import SecurityException
 
 
 # ---------------------------------------------------------------- estimate
@@ -112,7 +113,7 @@ def test_authorize_blocks_when_server_budget_exhausted():
         ],
     )
     gateway = CerbereGateway(config)
-    server = gateway.build_server()
+    gateway.build_server()
 
     # On épuise le budget du serveur 'fs' pour l'agent 'alice'.
     gateway.server_budgets.charge("alice", "fs", 1.0)
@@ -141,7 +142,6 @@ def test_authorize_blocks_when_server_budget_exhausted():
 def test_gateway_start_reports_budget_per_upstream(capsys):
     """La ligne de log au démarrage mentionne le budget par serveur."""
     from gateway_config import GatewayConfig, ServerSpec
-    from gateway_server import CerbereGateway
 
     config = GatewayConfig(
         agent_id="alice",
