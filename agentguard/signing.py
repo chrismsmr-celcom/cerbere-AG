@@ -16,7 +16,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-
 # Champs optionnels qui lient une décision à l'action exacte demandée. Ils sont
 # inclus dans la charge signée : le SDK peut ainsi prouver que la décision reçue
 # concerne CET outil, avec CES arguments, pour CETTE requête (anti-rejeu).

@@ -8,7 +8,6 @@ from collector.api.helpers import (
     _as_json,
     _audit_human_action,
     _db_run,
-
     _human_decider_or_error,
     _iso_utc,
     _reject_if_agent_disconnected,
