@@ -8,7 +8,7 @@ import sys
 
 
 def main() -> None:
-    api_key = os.environ.get("CERBERE_STAGING_GATEWAY_KEY", "").strip()
+    api_key = os.environ.get("AGENTGUARD_API_KEY", "").strip()
     collector_hostport = os.environ.get("AGENTGUARD_COLLECTOR_HOSTPORT", "").strip()
     if not api_key:
         raise SystemExit("AGENTGUARD_API_KEY is required")
