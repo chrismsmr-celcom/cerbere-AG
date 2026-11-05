@@ -1,0 +1,31 @@
+{
+  "agent_id": "cerbere-staging-default",
+  "collector_url": "http://127.0.0.1:9",
+  "budget": 1.0,
+  "transport": "http",
+  "workers": 1,
+  "http": {
+    "host": "0.0.0.0",
+    "port": 10000,
+    "path": "/mcp",
+    "api_keys": {
+      "REPLACE_WITH_EPHEMERAL_TEST_KEY": {
+        "agent_id": "external-auditor",
+        "budget": 0.25,
+        "allowed_servers": ["synthetic"]
+      }
+    }
+  },
+  "response_inspection": {
+    "redact_pii": true,
+    "redact_secrets": true
+  },
+  "servers": [
+    {
+      "label": "synthetic",
+      "command": ["python", "mcp/staging_synthetic_upstream.py"],
+      "allowed_tools": ["echo", "increment_counter", "get_counter"],
+      "external": false
+    }
+  ]
+}

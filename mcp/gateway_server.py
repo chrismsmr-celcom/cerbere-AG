@@ -50,6 +50,55 @@ current_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 # Tarif blended par défaut (USD / million de tokens) pour le budget par serveur.
 DEFAULT_PRICE_PER_MTOK = 3.0
 
+class APIKeyAuthMiddleware:
+    """ASGI middleware that authenticates each HTTP request and scopes its identity."""
+
+    def __init__(self, app, config: GatewayConfig) -> None:
+        self.app = app
+        self.config = config
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+        api_key = headers.get("x-api-key", "").strip()
+        authorization = headers.get("authorization", "").strip()
+        if not api_key and authorization.lower().startswith("bearer "):
+            api_key = authorization[7:].strip()
+
+        # HTTP must never fall back to the stdio/default identity.
+        if not api_key:
+            from starlette.responses import JSONResponse
+            response = JSONResponse(
+                {"error": "invalid or missing API key"}, status_code=401
+            )
+            await response(scope, receive, send)
+            return
+        try:
+            identity = self.config.key_identity(api_key)
+        except ConfigError:
+            from starlette.responses import JSONResponse
+            response = JSONResponse(
+                {"error": "invalid or missing API key"}, status_code=401
+            )
+            await response(scope, receive, send)
+            return
+
+        key_token = current_api_key.set(api_key)
+        identity_token = current_identity.set(identity)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_identity.reset(identity_token)
+            current_api_key.reset(key_token)
+
+
+
 
 class ServerBudgetLedger:
     """Budget USD par (identité, serveur amont).
@@ -99,7 +148,7 @@ class GuardPool:
 
     def __init__(self, config: GatewayConfig) -> None:
         self._config = config
-        self._guards: dict[str, AgentGuard] = {}
+        self._guards: dict[tuple[str, str | None], AgentGuard] = {}
 
     def _build(self, agent_id: str, budget: float) -> AgentGuard:
         policies = [
@@ -125,12 +174,15 @@ class GuardPool:
 
     def get(self, identity: dict[str, Any]) -> AgentGuard:
         agent_id = identity.get("agent_id", self._config.agent_id)
-        guard = self._guards.get(agent_id)
+        # A guard captures the collector API key at construction time. Keep
+        # separate instances when two HTTP credentials share an agent_id.
+        cache_key = (agent_id, current_api_key.get())
+        guard = self._guards.get(cache_key)
         if guard is None:
             guard = self._build(
                 agent_id, float(identity.get("budget", self._config.budget))
             )
-            self._guards[agent_id] = guard
+            self._guards[cache_key] = guard
         return guard
 
 
@@ -310,7 +362,12 @@ class CerbereGateway:
 
             # 4. Enforcement AgentGuard avant tout forward — fail-closed
             try:
-                await loop.run_in_executor(executor, _authorize, label, tool, args)
+                # ContextVars are not propagated automatically to a thread pool.
+                # Preserve the authenticated identity and API key for enforcement.
+                context = contextvars.copy_context()
+                await loop.run_in_executor(
+                    executor, context.run, _authorize, label, tool, args
+                )
             except (ApprovalRequiredException, SecurityException) as exc:
                 approval_id = getattr(exc, "approval_id", None)
                 suffix = f" (approval_id={approval_id})" if approval_id else ""
@@ -366,8 +423,6 @@ class CerbereGateway:
             from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
             from starlette.applications import Starlette
             from starlette.middleware import Middleware
-            from starlette.requests import Request
-            from starlette.responses import JSONResponse
             from starlette.routing import Mount
         except ImportError as exc:  # pragma: no cover
             raise ConfigError(
@@ -380,24 +435,9 @@ class CerbereGateway:
             app=server, json_response=True, stateless=True
         )
 
-        async def _authenticate(request: Request, call_next):
-            api_key = request.headers.get("x-api-key") or None
-            auth = request.headers.get("authorization") or ""
-            if not api_key and auth.lower().startswith("bearer "):
-                api_key = auth[7:].strip()
-            try:
-                identity = config.key_identity(api_key)
-            except ConfigError:
-                return JSONResponse(
-                    {"error": "invalid or missing API key"}, status_code=401
-                )
-            current_api_key.set(api_key)
-            current_identity.set(identity)
-            return await call_next(request)
-
         app = Starlette(
             routes=[Mount(config.path, app=session_manager.handle_request)],
-            middleware=[Middleware(_authenticate)],
+            middleware=[Middleware(APIKeyAuthMiddleware, config=config)],
             lifespan=session_manager.run(),
         )
         sys.stderr.write(
