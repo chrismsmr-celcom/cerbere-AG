@@ -1,4 +1,5 @@
 """Launch the isolated Render staging gateway from platform environment variables."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ import sys
 
 
 def main() -> None:
-    api_key = os.environ.get("AGENTGUARD_API_KEY", "").strip()
+    api_key = os.environ.get("CERBERE_STAGING_GATEWAY_KEY", "").strip()
     collector_hostport = os.environ.get("AGENTGUARD_COLLECTOR_HOSTPORT", "").strip()
     if not api_key:
         raise SystemExit("AGENTGUARD_API_KEY is required")
@@ -51,6 +52,7 @@ def main() -> None:
     }
     os.environ["CERBERE_GATEWAY_CONFIG_JSON"] = json.dumps(config)
     from gateway_server import main as gateway_main
+
     gateway_main()
 
 
