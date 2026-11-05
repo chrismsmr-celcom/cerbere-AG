@@ -181,6 +181,10 @@ Each span carries `taint_level` and `risk_score`, so blocked flows appear in the
 | `AGENTGUARD_PUBLIC_KEY` / `_FILE` | – | Collector Ed25519 public key; enables verified, action-bound signed decisions in the SDK |
 | `AGENTGUARD_AUDIT_ON_FAILURE` | `degrade` | If an audit event cannot be persisted anywhere: `degrade` sets `AUDIT_DEGRADED` (visible via `status()`), `block` raises |
 | `AGENTGUARD_AUDIT_ANCHOR_FILE` / `_URL` | – | Independent sinks for the audit chain anchor; without one, the anchor only goes to the application log |
+| `AGENTGUARD_STATUS_MAX_AGE` | `300` | Kill switch: if the collector status cannot be refreshed for this many seconds, the agent stops (`AgentStatusStaleException`). `0` disables the check |
+| `AGENTGUARD_FAIL_OPEN` | `false` | `true` (or `fail_open=True`) lets the agent keep running when the collector is unreachable |
+| `AGENTGUARD_APPROVAL_REUSE_TTL` | `0` | Approvals are single-use (consumed atomically by the collector, bound to org, agent, tool and exact arguments). A value > 0 re-enables a reuse window (not recommended) |
+| `AGENTGUARD_HTTP_BLOCK_CONFIDENTIAL` | `false` | Also block outbound HTTP carrying `CONFIDENTIAL` data (PII); `SECRET`, `UNTRUSTED` and `MALICIOUS` are always blocked |
 
 <br/>
 

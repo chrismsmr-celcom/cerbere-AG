@@ -24,7 +24,7 @@ from flask import g, jsonify, request
 from collector.api.helpers import (
     _AGENT_ID_RE,
     _db_run,
-    _human_auth,
+    _human_decider_or_error,
     _iso_utc,
     _request_agent_id,
     api_bp,
@@ -261,8 +261,9 @@ def api_get_budget(agent_id):
 
 @api_bp.route("/api/budgets/<agent_id>", methods=["PUT"], endpoint="api_put_budget")
 def api_put_budget(agent_id):
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     if not _valid_agent_id(agent_id):
         return _err("Invalid agent id")
     body = request.get_json(silent=True) or {}
@@ -324,8 +325,9 @@ def api_put_budget(agent_id):
     "/api/budgets/<agent_id>", methods=["DELETE"], endpoint="api_delete_budget"
 )
 def api_delete_budget(agent_id):
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     try:
         ensure_settings_tables()
         _, n = _db_run(
@@ -385,8 +387,9 @@ def api_list_policy_rules():
 
 @api_bp.route("/api/policy-rules", methods=["POST"], endpoint="api_create_policy_rule")
 def api_create_policy_rule():
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     b = request.get_json(silent=True) or {}
     scope = str(b.get("agent_scope") or "all").strip()
     event_type = str(b.get("event_type") or "all")
@@ -460,8 +463,9 @@ def api_create_policy_rule():
     "/api/policy-rules/<rule_id>", methods=["PATCH"], endpoint="api_patch_policy_rule"
 )
 def api_patch_policy_rule(rule_id):
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     b = request.get_json(silent=True) or {}
     if "enabled" not in b:
         return _err("Only 'enabled' can be updated")
@@ -483,8 +487,9 @@ def api_patch_policy_rule(rule_id):
     "/api/policy-rules/<rule_id>", methods=["DELETE"], endpoint="api_delete_policy_rule"
 )
 def api_delete_policy_rule(rule_id):
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     try:
         ensure_settings_tables()
         _, n = _db_run(
@@ -553,8 +558,9 @@ def api_list_alert_destinations():
     "/api/alert-destinations", methods=["POST"], endpoint="api_create_alert_destination"
 )
 def api_create_alert_destination():
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     b = request.get_json(silent=True) or {}
     try:
         dest_type, target = _parse_destination(b)
@@ -610,8 +616,9 @@ def api_create_alert_destination():
     endpoint="api_delete_alert_destination",
 )
 def api_delete_alert_destination(dest_id):
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     try:
         ensure_settings_tables()
         _, n = _db_run(
@@ -633,8 +640,9 @@ def api_delete_alert_destination(dest_id):
 )
 def api_test_alert_destination():
     """Envoie vraiment un message de test (Slack / Discord / webhook générique)."""
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
     b = request.get_json(silent=True) or {}
     try:
         dest_type, target = _parse_destination(b)
@@ -713,8 +721,9 @@ def api_agent_runtime_mode():
 )
 def api_set_agent_runtime_mode(agent_id):
     """Modification du mode réservée à une session humaine authentifiée."""
-    if not _human_auth():
-        return _err("Human session required", 401)
+    refused = _human_decider_or_error()
+    if refused:
+        return refused
 
     if not _valid_agent_id(agent_id):
         return _err("Invalid agent id")

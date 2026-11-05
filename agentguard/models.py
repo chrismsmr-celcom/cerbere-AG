@@ -148,6 +148,11 @@ class AgentDisconnectedException(SecurityException):
     """Levée quand l'agent a été déconnecté depuis le dashboard Cerbere (kill switch)."""
 
 
+class AgentStatusStaleException(AgentDisconnectedException):
+    """Levée (fail-closed) quand le statut du kill switch n'a pas pu être rafraîchi
+    depuis trop longtemps : on ne peut plus prouver que l'agent est toujours autorisé."""
+
+
 class ApprovalRequiredException(Exception):
     """
     Exception levée lorsqu'une opération nécessite une approbation humaine (Human-in-the-Loop).

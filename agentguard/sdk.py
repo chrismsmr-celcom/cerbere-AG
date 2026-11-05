@@ -6,6 +6,7 @@ import secrets
 import threading
 import time
 import warnings
+import weakref
 from collections.abc import Callable
 from datetime import datetime, timezone
 from functools import wraps
@@ -24,6 +25,7 @@ _BG_LOCK = threading.Lock()
 from .masking import SpanMasker
 from .models import (
     AgentDisconnectedException,
+    AgentStatusStaleException,
     ApprovalRejectedException,
     ApprovalRequiredException,
     GuardSpan,
@@ -211,6 +213,21 @@ class AgentGuard:
         # Kill switch contrôlé depuis le dashboard.
         self._conn_state = "connected"
         self._conn_checked_at = 0.0
+
+        # Politique de statut périmé (kill switch) : si le collector est injoignable
+        # depuis plus de `status_max_age` secondes, l'agent s'arrête (fail-closed)
+        # sauf fail_open=True / AGENTGUARD_FAIL_OPEN=true. 0 = vérification désactivée.
+        self.fail_open = bool(fail_open) or os.getenv(
+            "AGENTGUARD_FAIL_OPEN", ""
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            self._status_max_age = max(
+                0.0, float(os.getenv("AGENTGUARD_STATUS_MAX_AGE", "300"))
+            )
+        except ValueError:
+            self._status_max_age = 300.0
+        self._created_at = time.time()
+        self._conn_ok_at = 0.0  # dernière lecture RÉUSSIE (mode synchrone)
         self._status_ttl = max(
             1.0,
             float(os.getenv("AGENTGUARD_STATUS_TTL", "5")),
@@ -318,6 +335,14 @@ class AgentGuard:
             self._flow,
             excluded_urls=(self.collector_url,),
         )
+        # Désenregistre le tracker quand cet agent est libéré (pas de fuite mémoire
+        # ni de tracker orphelin qui continuerait à bloquer).
+        if not getattr(self, "_taint_finalizer", None):
+            from .auto_instrument import remove_taint_tracker
+
+            self._taint_finalizer = weakref.finalize(
+                self, remove_taint_tracker, self._flow
+            )
         enable_auto_instrumentation()
 
     # ==========================================================
@@ -329,20 +354,89 @@ class AgentGuard:
         agent_id: str,
         tool_name: str,
         params: dict[str, Any],
+        scope: str = "",
     ) -> str:
-        """Crée un identifiant déterministe pour une demande d'approbation."""
-        payload = json.dumps(
-            {
-                "agent": agent_id,
-                "tool": tool_name,
-                "params": params or {},
-            },
-            sort_keys=True,
-            default=str,
-        )
+        """Crée un identifiant déterministe pour une demande d'approbation.
+
+        ``scope`` (empreinte de la clé API) sépare les organisations : deux orgs
+        avec le même agent, outil et arguments n'obtiennent plus le même identifiant.
+        """
+        body = {
+            "agent": agent_id,
+            "tool": tool_name,
+            "params": params or {},
+        }
+        if scope:
+            body["scope"] = scope
+        payload = json.dumps(body, sort_keys=True, default=str)
 
         digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
         return f"req_{digest}"
+
+    def approval_id_for(self, tool_name: str, params: dict[str, Any]) -> str:
+        """Identifiant de la demande d'approbation de CET agent pour cette action.
+
+        Inclut une empreinte de la clé API (séparation des organisations).
+        """
+        scope = (
+            hashlib.sha256(self.api_key.encode()).hexdigest()[:12]
+            if self.api_key
+            else ""
+        )
+        return self._stable_approval_id(self.agent_id, tool_name, params, scope=scope)
+
+    def _consume_approval(
+        self,
+        approval_id: str,
+        tool_name: str,
+        params: dict[str, Any],
+    ) -> None:
+        """Consomme l'approbation côté collector ; lève si elle ne peut l'être.
+
+        Un collector sans cette route (404/405, ancienne version) laisse passer avec
+        un avertissement : la compatibilité est préservée, mais SANS usage unique.
+        """
+        from .signing import params_digest
+
+        wire_params = json.loads(json.dumps(params or {}, default=str))
+        try:
+            response = requests.post(
+                f"{self.collector_url}/api/approvals/{approval_id}/consume",
+                json={
+                    "tool_name": tool_name,
+                    "agent_id": self.agent_id,
+                    "args_sha256": params_digest(wire_params),
+                },
+                headers=self._headers(),
+                timeout=self.collector_timeout,
+            )
+        except Exception as exc:
+            raise SecurityException(
+                "AgentGuard DENY: approval could not be consumed (collector unreachable)"
+            ) from exc
+
+        if response.status_code == 200:
+            return
+
+        if response.status_code in (404, 405):
+            logger.warning(
+                "approval_single_use_unsupported",
+                note="collector has no /consume route: approval is NOT single-use",
+            )
+            return
+
+        reason = "refused"
+        try:
+            reason = str(response.json().get("error", reason))
+        except Exception:
+            pass
+        raise ApprovalRequiredException(
+            f"Approval for '{tool_name}' cannot be used ({reason}). "
+            f"A new approval is required. (ID: {approval_id})",
+            approval_id=approval_id,
+            details={"reason": reason},
+            timed_out=False,
+        )
 
     @staticmethod
     def _parse_timestamp(value: Any) -> float | None:
@@ -493,6 +587,7 @@ class AgentGuard:
 
                 if response.status_code == 200:
                     body = response.json()
+                    self._conn_ok_at = now
                     self._conn_state = body.get(
                         "status",
                         "connected",
@@ -503,6 +598,7 @@ class AgentGuard:
                     response.status_code == 403
                     and "agent_disconnected" in response.text
                 ):
+                    self._conn_ok_at = now
                     self._conn_state = "disconnected"
 
             except Exception as exc:
@@ -516,6 +612,20 @@ class AgentGuard:
             raise AgentDisconnectedException(
                 f"Agent '{self.agent_id}' was disconnected "
                 "from the Cerbere dashboard. Reconnect it there to resume."
+            )
+
+        self._check_status_fresh(max(self._conn_ok_at, self._created_at))
+
+    def _check_status_fresh(self, last_ok_at: float) -> None:
+        """Fail-closed si aucun statut fiable depuis `status_max_age` secondes."""
+        if self.fail_open or self._status_max_age <= 0:
+            return
+        age = time.time() - last_ok_at
+        if age > self._status_max_age:
+            raise AgentStatusStaleException(
+                f"Agent '{self.agent_id}' blocked: kill-switch status could not be "
+                f"refreshed for {int(age)}s (max {int(self._status_max_age)}s). "
+                "Restore connectivity to the collector, or set fail_open=True."
             )
 
     # ==========================================================
@@ -571,6 +681,9 @@ class AgentGuard:
                 f"Agent '{self.agent_id}' was disconnected "
                 "from the Cerbere dashboard. Reconnect it there to resume."
             )
+
+        # Statut périmé : dernière lecture réussie (ou démarrage du poller).
+        self._check_status_fresh(snap.status_ok_at or self._created_at)
 
     def _refresh_mode_fast(self) -> None:
         """Mode shadow/enforce : instantané du thread de statut. Fail-safe : erreur
@@ -1444,11 +1557,7 @@ class AgentGuard:
         # Une exigence d'approbation reste obligatoire,
         # y compris en Shadow Mode.
         if requires_approval:
-            approval_id = self._stable_approval_id(
-                self.agent_id,
-                tool_name,
-                params,
-            )
+            approval_id = self.approval_id_for(tool_name, params)
 
             now = time.time()
             cache_ttl = max(
@@ -1461,9 +1570,21 @@ class AgentGuard:
                 ),
             )
 
-            cached_ts = self._approved_cache.get(approval_id)
+            # Une approbation est à USAGE UNIQUE : pas de réutilisation par défaut.
+            # AGENTGUARD_APPROVAL_REUSE_TTL=<secondes> réactive l'ancienne fenêtre
+            # de réutilisation (déconseillé : elle permet de rejouer une approbation).
+            try:
+                reuse_ttl = max(
+                    0.0, float(os.getenv("AGENTGUARD_APPROVAL_REUSE_TTL", "0"))
+                )
+            except ValueError:
+                reuse_ttl = 0.0
 
-            if cached_ts is not None and (now - cached_ts) > cache_ttl:
+            cached_ts = (
+                self._approved_cache.get(approval_id) if reuse_ttl > 0 else None
+            )
+
+            if cached_ts is not None and (now - cached_ts) > reuse_ttl:
                 self._approved_cache.pop(approval_id, None)
                 cached_ts = None
 
@@ -1494,7 +1615,11 @@ class AgentGuard:
                         if status == "approved":
                             ts = self._approval_timestamp(approval_data)
 
-                            if ts is not None and (now - ts) <= cache_ttl:
+                            if (
+                                ts is not None
+                                and (now - ts) <= cache_ttl
+                                and not approval_data.get("consumed")
+                            ):
                                 approved = True
 
                 except ApprovalRejectedException:
@@ -1607,8 +1732,12 @@ class AgentGuard:
                             if ts is not None and ts < wait_started - cache_ttl:
                                 continue
 
+                            if approval_data.get("consumed"):
+                                continue  # déjà utilisée : on attend une nouvelle décision
+
                             approved = True
-                            self._approved_cache[approval_id] = time.time()
+                            if reuse_ttl > 0:
+                                self._approved_cache[approval_id] = time.time()
                             break
 
                         if status == "rejected":
@@ -1636,6 +1765,13 @@ class AgentGuard:
                         details=check.metadata,
                         timed_out=True,
                     )
+
+        # Approbation à usage unique : la consommer (atomique, côté serveur) juste
+        # avant l'exécution. Échec = déjà utilisée ou ne correspond pas à l'action.
+        if requires_approval and not (
+            reuse_ttl > 0 and self._approved_cache.get(approval_id) is not None
+        ):
+            self._consume_approval(approval_id, tool_name, params)
 
         # 9. Exécuter l'outil après les contrôles applicables.
         try:

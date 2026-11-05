@@ -4,6 +4,7 @@ import json
 
 from flask import g, jsonify, request
 
+from agentguard.signing import params_digest
 from collector.api.helpers import (
     _as_json,
     _audit_human_action,
@@ -166,7 +167,7 @@ def api_get_approval_status(approval_id):
 
     try:
         row, _ = _db_run(
-            "SELECT id, status, resolved_by, resolved_at FROM approval_requests WHERE id = ? AND org_id = ?",
+            "SELECT id, status, resolved_by, resolved_at, consumed_at FROM approval_requests WHERE id = ? AND org_id = ?",
             (approval_id, org_id),
             fetch="one",
         )
@@ -182,8 +183,95 @@ def api_get_approval_status(approval_id):
             "status": row[1],
             "resolved_by": row[2],
             "resolved_at": _iso_utc(row[3]),
+            # Une approbation déjà utilisée n'autorise plus rien.
+            "consumed": row[4] is not None,
         }
     ), 200
+
+
+@api_bp.route(
+    "/api/approvals/<approval_id>/consume",
+    methods=["POST"],
+    endpoint="api_consume_approval",
+)
+def api_consume_approval(approval_id):
+    """Consomme une approbation (USAGE UNIQUE, atomique).
+
+    Réservé aux clés API (l'agent qui exécute) — un humain n'a pas à la consommer.
+    Réussit uniquement si l'approbation est `approved`, jamais consommée, et si
+    l'organisation, l'agent, l'outil ET les arguments correspondent exactement à
+    ce qui a été approuvé. Sinon 409 : l'action doit être redemandée.
+    """
+    if not require_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    refused = _reject_if_agent_disconnected()
+    if refused:
+        return refused
+
+    org_id = getattr(g, "org_id", None) or "default"
+    data = request.get_json(silent=True) or {}
+    tool_name = data.get("tool_name")
+    sent_digest = data.get("args_sha256")
+    agent_id = _request_agent_id() or data.get("agent_id") or "unknown"
+
+    if not tool_name or not sent_digest:
+        return jsonify({"error": "tool_name and args_sha256 are required"}), 400
+
+    try:
+        row, _ = _db_run(
+            "SELECT status, agent_id, tool_name, params, consumed_at FROM approval_requests WHERE id = ? AND org_id = ?",
+            (approval_id, org_id),
+            fetch="one",
+        )
+    except Exception as e:
+        logger.error("approval_consume_lookup_failed", error=str(e))
+        return jsonify({"error": "Database error"}), 500
+
+    if not row:
+        return jsonify({"error": "Approval not found"}), 404
+
+    status, row_agent, row_tool, row_params, consumed_at = row
+    stored_digest = params_digest(_as_json(row_params, {}))
+
+    reason = None
+    if status != "approved":
+        reason = "not_approved"
+    elif consumed_at is not None:
+        reason = "already_consumed"
+    elif str(row_agent) != str(agent_id)[:64]:
+        reason = "agent_mismatch"
+    elif row_tool != tool_name:
+        reason = "tool_mismatch"
+    elif stored_digest != sent_digest:
+        reason = "arguments_mismatch"
+
+    if reason:
+        logger.warning(
+            "approval_consume_refused",
+            approval_id=approval_id,
+            reason=reason,
+            org_id=org_id,
+        )
+        return jsonify({"consumed": False, "error": reason}), 409
+
+    # Atomique : une seule requête concurrente peut passer de NULL à une date.
+    try:
+        _, changed = _db_run(
+            """UPDATE approval_requests SET consumed_at = CURRENT_TIMESTAMP
+               WHERE id = ? AND org_id = ? AND status = 'approved' AND consumed_at IS NULL""",
+            (approval_id, org_id),
+            commit=True,
+        )
+    except Exception as e:
+        logger.error("approval_consume_failed", error=str(e))
+        return jsonify({"error": "Database error"}), 500
+
+    if changed != 1:
+        return jsonify({"consumed": False, "error": "already_consumed"}), 409
+
+    logger.info("approval_consumed", approval_id=approval_id, org_id=org_id)
+    return jsonify({"consumed": True, "id": approval_id}), 200
 
 
 @api_bp.route("/api/approvals", methods=["POST"], endpoint="api_sdk_create_approval")
@@ -210,12 +298,13 @@ def hitl_sdk_create_approval():
 
     org_id = getattr(g, "org_id", None) or "default"
     try:
-        _db_run(
+        approval_id = str(approval_id)[:128]
+        _, inserted = _db_run(
             """INSERT INTO approval_requests (id, org_id, agent_id, tool_name, params, reason, status)
                VALUES (?, ?, ?, ?, ?, ?, 'pending')
                ON CONFLICT (id) DO NOTHING""",
             (
-                str(approval_id)[:128],
+                approval_id,
                 org_id,
                 str(agent_id)[:64],
                 tool_name,
@@ -224,6 +313,32 @@ def hitl_sdk_create_approval():
             ),
             commit=True,
         )
+        if inserted != 1:
+            existing, _ = _db_run(
+                "SELECT org_id, status, consumed_at FROM approval_requests WHERE id = ?",
+                (approval_id,),
+                fetch="one",
+            )
+            if existing and existing[0] != org_id:
+                # Même identifiant dans une autre organisation : on ne ment pas
+                # avec un 201 (l'ancien code répondait "succès" sans rien créer).
+                logger.warning("approval_id_conflict", approval_id=approval_id)
+                return jsonify({"error": "approval_id_conflict"}), 409
+            if existing and existing[2] is not None:
+                # L'approbation précédente a été CONSOMMÉE : cette nouvelle demande
+                # identique repart de zéro et exige une nouvelle décision humaine.
+                _db_run(
+                    """UPDATE approval_requests
+                       SET status = 'pending', consumed_at = NULL, resolved_at = NULL,
+                           resolved_by = NULL, created_at = CURRENT_TIMESTAMP, reason = ?
+                       WHERE id = ? AND org_id = ? AND consumed_at IS NOT NULL""",
+                    (reason, approval_id, org_id),
+                    commit=True,
+                )
+            else:
+                return jsonify(
+                    {"status": "success", "id": approval_id, "existing": True}
+                ), 200
         logger.warning(
             "approval_request_created",
             approval_id=approval_id,

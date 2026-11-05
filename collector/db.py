@@ -568,6 +568,7 @@ def init_db():
                 ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
                 ("resolved_at", "TIMESTAMP"),
                 ("resolved_by", "TEXT"),
+                ("consumed_at", "TIMESTAMP"),  # approbation à USAGE UNIQUE
             ]:
                 cur.execute(
                     f"ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS {col} {dtype}"
@@ -710,6 +711,7 @@ def init_db():
                 ("created_at", "TIMESTAMP"),
                 ("resolved_at", "TIMESTAMP"),
                 ("resolved_by", "TEXT"),
+                ("consumed_at", "TIMESTAMP"),  # approbation à USAGE UNIQUE
             ]:
                 if col not in existing:
                     c.execute(f"ALTER TABLE approval_requests ADD COLUMN {col} {dtype}")

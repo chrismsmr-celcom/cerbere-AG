@@ -81,7 +81,7 @@ def test_wait_for_approval_blocks_then_executes_the_tool(server):
         approval_timeout=5,
         approval_poll_interval=0.2,
     )
-    approval_id = g._stable_approval_id("finance-bot", "send_email", EMAIL)
+    approval_id = g.approval_id_for("send_email", EMAIL)
     calls = []
 
     approver = threading.Thread(
@@ -114,7 +114,7 @@ def test_wait_for_approval_raises_on_rejection(server):
         approval_poll_interval=0.2,
     )
     REJECT_EMAIL = {"to": "reject-me@gmail.com"}
-    approval_id = g._stable_approval_id("finance-bot", "send_email", REJECT_EMAIL)
+    approval_id = g.approval_id_for("send_email", REJECT_EMAIL)
 
     def reject_it():
         deadline = time.time() + 5
@@ -245,10 +245,73 @@ def test_decorator_form_respects_env_wait_flag(server, monkeypatch):
     def send_email(to):
         return "SENT to " + to
 
-    approval_id = g._stable_approval_id(
-        "finance-bot", "send_email", {"to": "c@gmail.com"}
-    )
+    approval_id = g.approval_id_for("send_email", {"to": "c@gmail.com"})
     t = threading.Thread(target=lambda: _approve(url, cookie, approval_id, delay=0.3))
     t.start()
     assert send_email(to="c@gmail.com") == "SENT to c@gmail.com"
     t.join(timeout=5)
+
+
+def test_an_approval_cannot_be_replayed_for_a_second_execution(server):
+    """Une approbation = UNE exécution. Avant : la même approbation relançait
+    l'action autant de fois qu'on voulait pendant 30 s (cache SDK + statut)."""
+    url, cookie = server
+    g = AgentGuard(
+        collector_url=url,
+        api_key="key-a",
+        agent_id="finance-bot",
+        wait_for_approval=True,
+        approval_timeout=1.5,
+        approval_poll_interval=0.25,
+    )
+    approval_id = g.approval_id_for("send_email", EMAIL)
+    calls = []
+
+    approver = threading.Thread(
+        target=lambda: _approve(url, cookie, approval_id, delay=0.3)
+    )
+    approver.start()
+    assert (
+        g.guard_tool_call(
+            "send_email", EMAIL, func=lambda **kw: calls.append(kw) or "SENT"
+        )
+        == "SENT"
+    )
+    approver.join(timeout=5)
+    assert calls == [EMAIL]
+
+    # Même action, aucun humain ne ré-approuve : elle NE doit PAS s'exécuter.
+    with pytest.raises(ApprovalRequiredException):
+        g.guard_tool_call(
+            "send_email", EMAIL, func=lambda **kw: calls.append(kw) or "SENT"
+        )
+    assert calls == [EMAIL]
+
+
+def test_a_new_human_decision_unlocks_the_next_execution(server):
+    url, cookie = server
+    g = AgentGuard(
+        collector_url=url,
+        api_key="key-a",
+        agent_id="finance-bot",
+        wait_for_approval=True,
+        approval_timeout=5,
+        approval_poll_interval=0.2,
+    )
+    approval_id = g.approval_id_for("send_email", EMAIL)
+    calls = []
+
+    for round_no in range(2):
+        approver = threading.Thread(
+            target=lambda: _approve(url, cookie, approval_id, delay=0.4)
+        )
+        approver.start()
+        assert (
+            g.guard_tool_call(
+                "send_email", EMAIL, func=lambda **kw: calls.append(kw) or "SENT"
+            )
+            == "SENT"
+        )
+        approver.join(timeout=8)
+
+    assert calls == [EMAIL, EMAIL]  # deux décisions humaines -> deux exécutions
