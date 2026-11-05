@@ -423,7 +423,7 @@ class CerbereGateway:
             from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
             from starlette.applications import Starlette
             from starlette.middleware import Middleware
-                        from starlette.routing import Mount
+            from starlette.routing import Mount
         except ImportError as exc:  # pragma: no cover
             raise ConfigError(
                 "HTTP transport needs: pip install 'mcp>=1.9' uvicorn starlette"
