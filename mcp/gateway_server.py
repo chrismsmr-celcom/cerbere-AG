@@ -63,7 +63,7 @@ class APIKeyAuthMiddleware:
             return
 
         headers = {
-            key.lower(): value.decode("latin-1")
+            key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])
         }
         api_key = headers.get("x-api-key", "").strip()
