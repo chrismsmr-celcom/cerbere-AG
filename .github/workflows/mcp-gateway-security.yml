@@ -1,0 +1,32 @@
+name: MCP gateway security tests
+
+on:
+  pull_request:
+    paths:
+      - "mcp/**"
+      - ".github/workflows/mcp-gateway-security.yml"
+  push:
+    branches:
+      - main
+      - "security/mcp-audit-staging"
+    paths:
+      - "mcp/**"
+      - ".github/workflows/mcp-gateway-security.yml"
+
+jobs:
+  gateway-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: mcp/pyproject.toml
+      - name: Install MCP gateway and test dependencies
+        run: python -m pip install -e "./mcp[gateway-http,dev]"
+      - name: Run gateway security tests
+        env:
+          PYTHONPATH: mcp
+        run: python -m pytest -q mcp/tests/test_gateway_security.py
