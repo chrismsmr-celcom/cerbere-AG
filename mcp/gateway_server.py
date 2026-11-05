@@ -50,6 +50,55 @@ current_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 # Tarif blended par défaut (USD / million de tokens) pour le budget par serveur.
 DEFAULT_PRICE_PER_MTOK = 3.0
 
+class APIKeyAuthMiddleware:
+    """ASGI middleware that authenticates each HTTP request and scopes its identity."""
+
+    def __init__(self, app, config: GatewayConfig) -> None:
+        self.app = app
+        self.config = config
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+        api_key = headers.get("x-api-key", "").strip()
+        authorization = headers.get("authorization", "").strip()
+        if not api_key and authorization.lower().startswith("bearer "):
+            api_key = authorization[7:].strip()
+
+        # HTTP must never fall back to the stdio/default identity.
+        if not api_key:
+            from starlette.responses import JSONResponse
+            response = JSONResponse(
+                {"error": "invalid or missing API key"}, status_code=401
+            )
+            await response(scope, receive, send)
+            return
+        try:
+            identity = self.config.key_identity(api_key)
+        except ConfigError:
+            from starlette.responses import JSONResponse
+            response = JSONResponse(
+                {"error": "invalid or missing API key"}, status_code=401
+            )
+            await response(scope, receive, send)
+            return
+
+        key_token = current_api_key.set(api_key)
+        identity_token = current_identity.set(identity)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_identity.reset(identity_token)
+            current_api_key.reset(key_token)
+
+
+
 
 class ServerBudgetLedger:
     """Budget USD par (identité, serveur amont).
@@ -374,9 +423,7 @@ class CerbereGateway:
             from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
             from starlette.applications import Starlette
             from starlette.middleware import Middleware
-            from starlette.requests import Request
-            from starlette.responses import JSONResponse
-            from starlette.routing import Mount
+                        from starlette.routing import Mount
         except ImportError as exc:  # pragma: no cover
             raise ConfigError(
                 "HTTP transport needs: pip install 'mcp>=1.9' uvicorn starlette"
@@ -388,53 +435,9 @@ class CerbereGateway:
             app=server, json_response=True, stateless=True
         )
 
-        class APIKeyAuthMiddleware:
-            """ASGI middleware: authenticate each HTTP request and scope its identity."""
-
-            def __init__(self, app):
-                self.app = app
-
-            async def __call__(self, scope, receive, send):
-                if scope.get("type") != "http":
-                    await self.app(scope, receive, send)
-                    return
-
-                headers = {
-                    key.lower(): value.decode("latin-1")
-                    for key, value in scope.get("headers", [])
-                }
-                api_key = headers.get("x-api-key", "").strip()
-                authorization = headers.get("authorization", "").strip()
-                if not api_key and authorization.lower().startswith("bearer "):
-                    api_key = authorization[7:].strip()
-
-                # HTTP must never fall back to the stdio/default identity.
-                if not api_key:
-                    response = JSONResponse(
-                        {"error": "invalid or missing API key"}, status_code=401
-                    )
-                    await response(scope, receive, send)
-                    return
-                try:
-                    identity = config.key_identity(api_key)
-                except ConfigError:
-                    response = JSONResponse(
-                        {"error": "invalid or missing API key"}, status_code=401
-                    )
-                    await response(scope, receive, send)
-                    return
-
-                key_token = current_api_key.set(api_key)
-                identity_token = current_identity.set(identity)
-                try:
-                    await self.app(scope, receive, send)
-                finally:
-                    current_identity.reset(identity_token)
-                    current_api_key.reset(key_token)
-
         app = Starlette(
             routes=[Mount(config.path, app=session_manager.handle_request)],
-            middleware=[Middleware(APIKeyAuthMiddleware)],
+            middleware=[Middleware(APIKeyAuthMiddleware, config=config)],
             lifespan=session_manager.run(),
         )
         sys.stderr.write(
