@@ -6,7 +6,6 @@ Run from the repository root with:
 import asyncio
 
 import pytest
-
 from gateway_config import GatewayConfig
 from gateway_server import (
     APIKeyAuthMiddleware,
