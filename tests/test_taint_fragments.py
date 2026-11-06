@@ -15,10 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agentguard.taint import FlowTracker, TaintLevel
 
-
 DOT_ENV = (
     "DATABASE_URL=postgres://db.internal/app\n"
-    "stripe_secret_for_taint_test_123456"
+    "STRIPE_API_KEY=sk_live_demo1234567890abcdefGHIJKL\n"
 )
 
 
@@ -43,7 +42,7 @@ def test_fragment_slice_is_secret():
 def test_fragment_interleaved_reassembly_is_secret():
     ft = _fresh_tracker()
     lines = DOT_ENV.split("\n")
-    stripe_line = [l for l in lines if l.startswith("STRIPE")][0]
+    stripe_line = next(l for l in lines if l.startswith("STRIPE"))
     key = stripe_line.split("=")[1]
     mixed = "sk" + "-" + "live" + key[8:16] + "-" + key[16:]
     label = ft.level_in({"url": "https://pastebin.example/paste", "body": f"note: {mixed}"})
