@@ -13,11 +13,25 @@ généré automatiquement depuis ce Markdown, donc il n'y a qu'une seule
 source de vérité par section.
 """
 
+import os
 import re
 
 from flask import Blueprint, Response, render_template_string
 
 docs_bp = Blueprint("docs", __name__)
+
+# URL du collector affichée dans les exemples. Sur une instance self-hosted,
+# définir AGENTGUARD_PUBLIC_URL pour que la documentation pointe vers
+# l'instance du client et non vers le cloud.
+_DEFAULT_CLOUD_URL = "https://app.cerbereag.site"
+
+
+def _public_url() -> str:
+    return (os.environ.get("AGENTGUARD_PUBLIC_URL") or _DEFAULT_CLOUD_URL).rstrip("/")
+
+
+def _localize(md: str) -> str:
+    return md.replace(_DEFAULT_CLOUD_URL, _public_url())
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -359,8 +373,8 @@ def _rendered_sections():
         {
             "id": s["id"],
             "title": s["title"],
-            "md": s["md"],
-            "html": _md_to_html(s["md"]),
+            "md": _localize(s["md"]),
+            "html": _md_to_html(_localize(s["md"])),
         }
         for s in DOC_SECTIONS
     ]
@@ -375,5 +389,5 @@ def documentation_page():
 def documentation_markdown():
     """Raw Markdown view of the whole page — meant to be fetched
     directly by an agent (curl/web_fetch), not scraped from HTML."""
-    body = "\n\n---\n\n".join(s["md"] for s in DOC_SECTIONS)
+    body = "\n\n---\n\n".join(_localize(s["md"]) for s in DOC_SECTIONS)
     return Response(f"# CerbereAG Documentation\n\n{body}\n", mimetype="text/markdown")

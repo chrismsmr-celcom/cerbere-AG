@@ -6,6 +6,7 @@ def _audit_login(
     email: str | None = None,
     org_id: str = "unknown",
     reason: str | None = None,
+    method: str = "magic_link",
 ):
     try:
         from collector.audit_routes import (
@@ -23,7 +24,7 @@ def _audit_login(
         )
 
         details = {
-            "method": "magic_link",
+            "method": method,
         }
 
         if reason:

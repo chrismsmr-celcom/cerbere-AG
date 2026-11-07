@@ -12,6 +12,20 @@ MAGIC_LINK_ENABLED = os.environ.get(
     "AGENTGUARD_MAGIC_LINK_ENABLED", "true"
 ).lower() in {"1", "true", "yes", "on"}
 
+# Connexion locale par mot de passe (self-hosted sans SMTP ni Supabase).
+# Ne fonctionne que pour les comptes qui ont un mot de passe défini
+# (voir `python -m collector.cli create-admin`).
+PASSWORD_LOGIN_ENABLED = os.environ.get(
+    "AGENTGUARD_PASSWORD_LOGIN_ENABLED", "true"
+).lower() in {"1", "true", "yes", "on"}
+
+# Inscription publique (/signup). Elle crée un workspace + un admin pour
+# n'importe quel visiteur : à désactiver (=false) sur une instance
+# self-hosted ; le docker-compose le fait par défaut.
+SIGNUP_ENABLED = os.environ.get(
+    "AGENTGUARD_SIGNUP_ENABLED", "true"
+).lower() in {"1", "true", "yes", "on"}
+
 
 def _env_first(*names: str, default: str = "") -> str:
     """Lit la première variable d'env définie parmi plusieurs alias.
@@ -83,6 +97,9 @@ PUBLIC_ENDPOINTS = frozenset(
         "auth.signup",
         "auth.logout",
         "auth.verify_magic_link",
+        "auth.password_login",
+        "auth.sso_login",
+        "auth.sso_callback",
         "auth.auth_login",
         "auth.supabase_public_config",
         "auth.supabase_session",

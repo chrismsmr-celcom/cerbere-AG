@@ -89,6 +89,9 @@ from .routes_login import (  # noqa: F401
     login,
     verify_magic_link,
 )
+from .routes_password import (  # noqa: F401
+    password_login,
+)
 from .routes_session import (  # noqa: F401
     auth_login,
     auth_me,
@@ -98,6 +101,10 @@ from .routes_session import (  # noqa: F401
 )
 from .routes_signup import (  # noqa: F401
     signup,
+)
+from .routes_sso import (  # noqa: F401
+    sso_callback,
+    sso_login,
 )
 from .routes_supabase import (  # noqa: F401
     supabase_public_config,

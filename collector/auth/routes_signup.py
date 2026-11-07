@@ -11,7 +11,7 @@ from flask import render_template_string, request
 from collector.db import _get_db_path, get_pg_conn, is_postgres, sql_placeholder
 
 from .blueprint import auth_bp
-from .config import MAGIC_LINK_TOKEN_BYTES, MAGIC_LINK_TTL_SECONDS
+from .config import MAGIC_LINK_TOKEN_BYTES, MAGIC_LINK_TTL_SECONDS, SIGNUP_ENABLED
 from .magic_link import (
     _build_magic_link,
     _ensure_magic_link_table,
@@ -27,6 +27,13 @@ logger = structlog.get_logger("agentguard.auth")
 
 @auth_bp.route("/signup", methods=["GET", "POST"])
 def signup():
+    if not SIGNUP_ENABLED:
+        return render_template_string(
+            SIGNUP_HTML,
+            error="Public sign-up is disabled on this instance. Ask an administrator for an account.",
+            success=None,
+        ), 403
+
     if request.method == "GET":
         return render_template_string(SIGNUP_HTML, error=None, success=None)
 

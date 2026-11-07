@@ -30,6 +30,7 @@ certifi>=2024.0.0              # CA bundle à jour
 flask-limiter>=3.5.0,<4.0.0
 redis>=5.0.0,<6.0.0            # Backend pour rate-limit distribué + cache LLM Judge
 cryptography>=50.0.0,<51.0.0   # Chiffrement (si besoin) — >=50.0.0 : fix CVE-2026-26007/34073/69247/69249/69248
+PyJWT>=2.8.0,<3.0.0           # Vérification des id_token OIDC (SSO entreprise)
 
 # ----------------------------------------------------------------------------
 # SECURITY - Détection (Budget)

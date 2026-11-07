@@ -6,6 +6,8 @@ tout se fait en JS dans le navigateur) + les commandes d'installation et
 liens utiles pour un développeur qui intègre CerbereAG.
 """
 
+import os
+
 from flask import Blueprint, render_template_string
 
 devtools_bp = Blueprint("devtools", __name__)
@@ -104,7 +106,7 @@ DEVTOOLS_TEMPLATE = """
             <div class="row">
                 <div class="field">
                     <label for="collector_url">Collector URL</label>
-                    <input id="collector_url" value="https://app.cerbereag.site" oninput="render()">
+                    <input id="collector_url" value="{{ collector_url }}" oninput="render()">
                 </div>
                 <div class="field">
                     <label for="api_key">API key</label>
@@ -139,7 +141,7 @@ pip install cerbere-ag-mcp    # MCP server, for Claude Code / Cursor / Cline</co
         function render() {
             const client = document.getElementById('client').value;
             const agentId = document.getElementById('agent_id').value || 'my-agent';
-            const url = document.getElementById('collector_url').value || 'https://app.cerbereag.site';
+            const url = document.getElementById('collector_url').value || '{{ collector_url }}';
             const key = document.getElementById('api_key').value || 'ag-your-key';
 
             const config = {
@@ -180,4 +182,7 @@ pip install cerbere-ag-mcp    # MCP server, for Claude Code / Cursor / Cline</co
 
 @devtools_bp.route("/devtools")
 def devtools_page():
-    return render_template_string(DEVTOOLS_TEMPLATE)
+    collector_url = (
+        os.environ.get("AGENTGUARD_PUBLIC_URL") or "https://app.cerbereag.site"
+    ).rstrip("/")
+    return render_template_string(DEVTOOLS_TEMPLATE, collector_url=collector_url)

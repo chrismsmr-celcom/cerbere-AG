@@ -13,11 +13,43 @@ services:
       # ── CORE ──────────────────────────────────────────────────
       PORT: 8080
       AGENTGUARD_DB_TYPE: ${AGENTGUARD_DB_TYPE:-postgres}
-      DATABASE_URL: postgresql://agentguard:${POSTGRES_PASSWORD}@postgres:5432/agentguard?sslmode=${DB_SSL_MODE:-require}
-      AGENTGUARD_DB_SSL_ROOT_CERT: ${AGENTGUARD_DB_SSL_ROOT_CERT:-/certs/ca.crt}
-      AGENTGUARD_API_KEY: ${AGENTGUARD_API_KEY}
-      AGENTGUARD_ADMIN_SECRET: ${AGENTGUARD_ADMIN_SECRET}
-      AGENTGUARD_FLASK_SECRET: ${AGENTGUARD_FLASK_SECRET}
+      AGENTGUARD_ENVIRONMENT: ${AGENTGUARD_ENVIRONMENT:-production}
+      # Réseau Docker interne : TLS Postgres désactivé par défaut.
+      # Pour l'activer : docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+      DATABASE_URL: postgresql://agentguard:${POSTGRES_PASSWORD:?run ./scripts/selfhost-init.sh to create .env}@postgres:5432/agentguard?sslmode=${DB_SSL_MODE:-disable}
+      AGENTGUARD_API_KEY: ${AGENTGUARD_API_KEY:?run ./scripts/selfhost-init.sh to create .env}
+      AGENTGUARD_ADMIN_SECRET: ${AGENTGUARD_ADMIN_SECRET:?run ./scripts/selfhost-init.sh to create .env}
+      AGENTGUARD_FLASK_SECRET: ${AGENTGUARD_FLASK_SECRET:?run ./scripts/selfhost-init.sh to create .env}
+
+      # ── ACCÈS ─────────────────────────────────────────────────
+      # Connexion par mot de passe (sans SMTP ni Supabase). Premier admin :
+      #   docker compose exec collector python -m collector.cli create-admin --email ...
+      AGENTGUARD_PASSWORD_LOGIN_ENABLED: ${AGENTGUARD_PASSWORD_LOGIN_ENABLED:-true}
+      # Lien magique par email : nécessite AGENTGUARD_SMTP_HOST. Désactivé par défaut.
+      AGENTGUARD_MAGIC_LINK_ENABLED: ${AGENTGUARD_MAGIC_LINK_ENABLED:-false}
+
+      # ── SSO D'ENTREPRISE (OIDC, optionnel) ────────────────────
+      # Okta, Entra ID, Google Workspace, Keycloak, Auth0... Voir docs/SELF_HOSTING.md
+      AGENTGUARD_OIDC_ISSUER: ${AGENTGUARD_OIDC_ISSUER:-}
+      AGENTGUARD_OIDC_CLIENT_ID: ${AGENTGUARD_OIDC_CLIENT_ID:-}
+      AGENTGUARD_OIDC_CLIENT_SECRET: ${AGENTGUARD_OIDC_CLIENT_SECRET:-}
+      AGENTGUARD_OIDC_ALLOWED_DOMAINS: ${AGENTGUARD_OIDC_ALLOWED_DOMAINS:-}
+      AGENTGUARD_OIDC_SCOPES: ${AGENTGUARD_OIDC_SCOPES:-openid email profile}
+      AGENTGUARD_OIDC_DEFAULT_ROLE: ${AGENTGUARD_OIDC_DEFAULT_ROLE:-viewer}
+      AGENTGUARD_OIDC_GROUPS_CLAIM: ${AGENTGUARD_OIDC_GROUPS_CLAIM:-groups}
+      AGENTGUARD_OIDC_GROUP_ROLE_MAP: ${AGENTGUARD_OIDC_GROUP_ROLE_MAP:-}
+      AGENTGUARD_OIDC_REQUIRE_EMAIL_VERIFIED: ${AGENTGUARD_OIDC_REQUIRE_EMAIL_VERIFIED:-true}
+      AGENTGUARD_OIDC_ORG_ID: ${AGENTGUARD_OIDC_ORG_ID:-}
+      AGENTGUARD_OIDC_BUTTON_LABEL: ${AGENTGUARD_OIDC_BUTTON_LABEL:-company SSO}
+      # /signup crée un workspace admin pour n'importe quel visiteur :
+      # désactivé par défaut en self-hosted.
+      AGENTGUARD_SIGNUP_ENABLED: ${AGENTGUARD_SIGNUP_ENABLED:-false}
+      # Cookie de session "Secure" : mettre true dès que l'accès se fait en HTTPS
+      # (reverse proxy). false permet d'évaluer en http://localhost ou sur un LAN.
+      AGENTGUARD_COOKIE_SECURE: ${AGENTGUARD_COOKIE_SECURE:-false}
+      # Nombre de reverse proxies de confiance devant Cerbere (1 si Caddy/nginx/Traefik) :
+      # sans cela, le limiteur de débit voit l'IP du proxy pour tous les clients.
+      AGENTGUARD_TRUSTED_PROXIES: ${AGENTGUARD_TRUSTED_PROXIES:-0}
 
       # ── SECURITY ──────────────────────────────────────────────
       AGENTGUARD_MAX_BODY_BYTES: ${AGENTGUARD_MAX_BODY_BYTES:-262144}
@@ -78,7 +110,6 @@ services:
       - /tmp
     volumes:
       - agentguard_data:/data
-      - agentguard_certs:/certs:ro  # ✅ CORRIGÉ : Utilisation du volume nommé (pas ./certs)
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -102,15 +133,9 @@ services:
     environment:
       POSTGRES_DB: agentguard
       POSTGRES_USER: agentguard
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes: # ✅ CORRIGÉ : Indentation réparée (était décalée vers la droite)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./scripts/selfhost-init.sh to create .env}
+    volumes:
       - postgres_data:/var/lib/postgresql/data
-      - agentguard_certs:/certs:ro  
-    command: >
-      postgres
-      -c ssl=on
-      -c ssl_cert_file=/certs/server.crt
-      -c ssl_key_file=/certs/server.key
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentguard -d agentguard"]
       interval: 10s
@@ -151,7 +176,6 @@ volumes:
   agentguard_data:
   postgres_data:
   redis_data:
-  agentguard_certs: # ✅ CORRIGÉ : Ajout du volume nommé global qui manquait
 
 networks:
   agentguard_network:
