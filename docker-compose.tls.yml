@@ -1,0 +1,55 @@
+# Surcouche optionnelle : chiffre la connexion collector <-> PostgreSQL (TLS).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+#
+# Au premier démarrage, `certs-init` génère un certificat auto-signé propre à
+# CETTE installation (stocké dans le volume `agentguard_certs`, jamais dans le
+# dépôt). Pour utiliser votre propre PKI, remplacez les fichiers du volume
+# (server.crt, server.key, ca.crt) avant de relancer.
+
+services:
+  certs-init:
+    image: alpine/openssl:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ ! -f /certs/server.crt ]; then
+          openssl req -new -x509 -days 825 -nodes \
+            -out /certs/server.crt -keyout /certs/server.key \
+            -subj "/CN=postgres/O=Cerbere AG" \
+            -addext "subjectAltName=DNS:postgres"
+          cp /certs/server.crt /certs/ca.crt
+        fi
+        chown 70:70 /certs/server.key
+        chmod 600 /certs/server.key
+        chmod 644 /certs/server.crt /certs/ca.crt
+    volumes:
+      - agentguard_certs:/certs
+    restart: "no"
+    networks:
+      - agentguard_network
+
+  postgres:
+    depends_on:
+      certs-init:
+        condition: service_completed_successfully
+    volumes:
+      - agentguard_certs:/certs:ro
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/certs/server.crt
+      -c ssl_key_file=/certs/server.key
+
+  collector:
+    depends_on:
+      certs-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://agentguard:${POSTGRES_PASSWORD}@postgres:5432/agentguard?sslmode=verify-full&sslrootcert=/certs/ca.crt
+    volumes:
+      - agentguard_certs:/certs:ro
+
+volumes:
+  agentguard_certs:

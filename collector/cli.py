@@ -1,0 +1,134 @@
+"""CLI d'administration pour une instance self-hosted.
+
+Usage :
+    python -m collector.cli create-admin --email admin@corp.com [--org "ACME"] [--name "Alice"]
+    python -m collector.cli set-password --email admin@corp.com
+    python -m collector.cli list-users
+
+Le mot de passe est demandé de façon interactive (jamais en argument, pour
+ne pas finir dans l'historique du shell). Pour l'automatisation, utiliser
+`--password-stdin` ou la variable d'environnement AGENTGUARD_ADMIN_PASSWORD.
+
+Avec Docker :
+    docker compose run --rm collector python -m collector.cli create-admin --email ...
+"""
+
+from __future__ import annotations
+
+import argparse
+import getpass
+import os
+import sys
+
+
+def _init_database() -> None:
+    from collector.db import init_db, init_identity_tables
+
+    init_db()
+    init_identity_tables()
+
+
+def _read_password(args, confirm: bool = True) -> str:
+    if getattr(args, "password_stdin", False):
+        return sys.stdin.readline().rstrip("\r\n")
+
+    env_pw = os.environ.get("AGENTGUARD_ADMIN_PASSWORD")
+    if env_pw:
+        return env_pw
+
+    password = getpass.getpass("Password (min 12 characters): ")
+    if confirm and getpass.getpass("Confirm password: ") != password:
+        raise SystemExit("Passwords do not match.")
+    return password
+
+
+def cmd_create_admin(args) -> int:
+    from collector.auth.local_password import PasswordError, provision_workspace
+
+    _init_database()
+    password = _read_password(args)
+    try:
+        _user_id, org_id, _tenant = provision_workspace(
+            email=args.email,
+            password=password,
+            display_name=args.name,
+            org_name=args.org,
+            role=args.role,
+        )
+    except PasswordError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Created {args.role} {args.email.strip().lower()} (org_id={org_id}).")
+    print("You can now sign in on /login.")
+    return 0
+
+
+def cmd_set_password(args) -> int:
+    from collector.auth.local_password import PasswordError, set_user_password
+    from collector.auth.users import _user_by_email
+
+    _init_database()
+    user = _user_by_email(args.email)
+    if not user:
+        print("Error: no such user.", file=sys.stderr)
+        return 1
+    password = _read_password(args)
+    try:
+        set_user_password(user[0], password)
+    except PasswordError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print("Password updated.")
+    return 0
+
+
+def cmd_list_users(_args) -> int:
+    from collector.auth.users import _db_execute
+
+    _init_database()
+    rows = _db_execute(
+        "SELECT email, role, active, org_id FROM users ORDER BY email", fetchall=True
+    )
+    if not rows:
+        print("No users yet. Create one with: python -m collector.cli create-admin")
+        return 0
+    for email, role, active, org_id in rows:
+        print(
+            f"{email}\t{role}\t{'active' if bool(active) else 'disabled'}\torg={org_id}"
+        )
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="collector.cli", description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("create-admin", help="Create a workspace and its first admin")
+    p.add_argument("--email", required=True)
+    p.add_argument("--name")
+    p.add_argument("--org", help="Organization / workspace name")
+    p.add_argument(
+        "--role",
+        default="admin",
+        choices=["admin", "developer", "auditor", "viewer"],
+    )
+    p.add_argument("--password-stdin", action="store_true")
+    p.set_defaults(func=cmd_create_admin)
+
+    p = sub.add_parser("set-password", help="Set or reset a user's password")
+    p.add_argument("--email", required=True)
+    p.add_argument("--password-stdin", action="store_true")
+    p.set_defaults(func=cmd_set_password)
+
+    p = sub.add_parser("list-users", help="List users")
+    p.set_defaults(func=cmd_list_users)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
