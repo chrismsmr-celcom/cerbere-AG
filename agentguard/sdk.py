@@ -1580,9 +1580,7 @@ class AgentGuard:
             except ValueError:
                 reuse_ttl = 0.0
 
-            cached_ts = (
-                self._approved_cache.get(approval_id) if reuse_ttl > 0 else None
-            )
+            cached_ts = self._approved_cache.get(approval_id) if reuse_ttl > 0 else None
 
             if cached_ts is not None and (now - cached_ts) > reuse_ttl:
                 self._approved_cache.pop(approval_id, None)

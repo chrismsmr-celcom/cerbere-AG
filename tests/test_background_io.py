@@ -49,7 +49,9 @@ def collector():
             self.wfile.write(data)
 
         def do_POST(self):
-            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            payload = json.loads(
+                self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}"
+            )
             time.sleep(fake.delay)
             if self.path == "/span":
                 fake.span_posts += 1
@@ -150,7 +152,9 @@ def test_spans_do_not_block_and_arrive_in_order(collector, async_env):
     assert elapsed < 0.25  # sans file d'attente : au moins 5 x 0,3 s
     assert guard.flush(15) is True
     sent = [p["span_id"] for p in fake.spans]
-    assert sent == [s.span_id for s in guard.spans[-5:]]  # ordre préservé, même par grappes
+    assert sent == [
+        s.span_id for s in guard.spans[-5:]
+    ]  # ordre préservé, même par grappes
 
 
 def test_spans_are_batched_off_the_hot_path(collector, async_env):
@@ -195,7 +199,9 @@ def test_queue_full_drops_and_counts():
     assert started.wait(2)  # le thread d'envoi tient le 1er lot ; la file est vide
     assert sender.submit({"n": 2}) and sender.submit({"n": 3})
     assert sender.submit({"n": 4}) is False and sender.submit({"n": 5}) is False
-    assert sender.dropped == 2 and sender.submitted == 3  # pertes comptées, entrées comptées
+    assert (
+        sender.dropped == 2 and sender.submitted == 3
+    )  # pertes comptées, entrées comptées
     release.set()
     assert sender.flush(5) is True
 
@@ -210,7 +216,9 @@ def test_sender_survives_delivery_errors():
 
     sender = SpanSender(deliver, maxsize=10, flush_interval=0.0)
     sender.submit({"n": 1})
-    assert sender.flush(5) is True  # la file est TRAITÉE (lot échoué compté), pas « persistée »
+    assert (
+        sender.flush(5) is True
+    )  # la file est TRAITÉE (lot échoué compté), pas « persistée »
     sender.submit({"n": 2})
     assert sender.flush(5) is True
     assert got == [2]
@@ -220,7 +228,9 @@ def test_sender_survives_delivery_errors():
 
 def test_flush_returns_false_when_delivery_is_stuck():
     release = threading.Event()
-    sender = SpanSender(lambda batch, session: release.wait(5), maxsize=10, flush_interval=0.0)
+    sender = SpanSender(
+        lambda batch, session: release.wait(5), maxsize=10, flush_interval=0.0
+    )
     sender.submit({"n": 1})
     assert sender.flush(0.2) is False
     release.set()
@@ -265,7 +275,9 @@ def test_no_span_lost_when_collector_is_slow(collector, async_env):
     assert [p["span_id"] for p in fake.spans] == [s.span_id for s in guard.spans[-40:]]
 
 
-def test_saturation_counts_drops_and_keeps_oldest_spans(collector, async_env, monkeypatch):
+def test_saturation_counts_drops_and_keeps_oldest_spans(
+    collector, async_env, monkeypatch
+):
     fake, url = collector
     monkeypatch.setenv("AGENTGUARD_TELEMETRY_QUEUE", "4")
     monkeypatch.setenv("AGENTGUARD_TELEMETRY_BATCH", "2")
@@ -338,10 +350,14 @@ def test_outage_then_recovery_resumes_without_duplicates(collector, async_env):
     assert guard.flush(5) is True
     fake.spans.clear()
 
-    fake.span_code = 500  # panne : le collector rejette les POST /span AVANT persistance
+    fake.span_code = (
+        500  # panne : le collector rejette les POST /span AVANT persistance
+    )
     tool(q="rejeté")  # lot rejeté et journalisé : le thread d'envoi SURVIT
     assert guard.flush(5) is True
-    assert fake.spans == []  # RIEN n'est persisté pendant la panne (rejet avant écriture)
+    assert (
+        fake.spans == []
+    )  # RIEN n'est persisté pendant la panne (rejet avant écriture)
     assert guard._sender.delivered >= 1  # compteur : le lot est traité, pas persisté
 
     fake.span_code = 201  # retour du collector
@@ -349,7 +365,9 @@ def test_outage_then_recovery_resumes_without_duplicates(collector, async_env):
     t0 = time.perf_counter()
     for i in range(5):
         tool(q=str(i))
-    assert _wait(lambda: len(fake.spans) == 5, 5)  # reprise immédiate, sans rejeu du lot perdu
+    assert _wait(
+        lambda: len(fake.spans) == 5, 5
+    )  # reprise immédiate, sans rejeu du lot perdu
     assert time.perf_counter() - t0 < 5
     ids = [p["span_id"] for p in fake.spans]
     assert len(ids) == len(set(ids))  # aucun DOUBLON après la panne
@@ -386,7 +404,9 @@ def test_consecutive_timeouts_then_recovery(collector, async_env):
 # ── décision de sécurité en mode enforce ────────────────────────────────────
 
 
-def test_enforce_never_executes_protected_action_when_disconnected(collector, async_env):
+def test_enforce_never_executes_protected_action_when_disconnected(
+    collector, async_env
+):
     fake, url = collector
     fake.status_body = {"status": "disconnected", "incident_open": False}
     guard = AgentGuard(collector_url=url, api_key="k", agent_id="t")
@@ -430,7 +450,9 @@ def test_multiple_concurrent_agents_no_cross_talk(collector, async_env):
         mine = [s.span_id for s in g.spans]
         assert set(mine) <= delivered_set  # chaque agent a tout son telemetry livré
         it = iter(delivered)
-        assert all(any(e == d for e in it) for d in mine)  # ordre relatif préservé par agent
+        assert all(
+            any(e == d for e in it) for d in mine
+        )  # ordre relatif préservé par agent
 
 
 def test_true_concurrency_hundreds_of_calls_from_thread_pool(collector, async_env):
@@ -443,15 +465,23 @@ def test_true_concurrency_hundreds_of_calls_from_thread_pool(collector, async_en
     fake.spans.clear()
     start = len(guard.spans)
     sender = guard._sender
-    baseline = (sender.submitted, sender.delivered, sender.dropped)  # cumulatif : mesurer un DELTA
+    baseline = (
+        sender.submitted,
+        sender.delivered,
+        sender.dropped,
+    )  # cumulatif : mesurer un DELTA
 
     def hammer(i):
         return tool(q=str(i))
 
     with ThreadPoolExecutor(max_workers=32) as pool:
-        results = list(pool.map(hammer, range(200)))  # 200 appels, 32 threads simultanés
+        results = list(
+            pool.map(hammer, range(200))
+        )  # 200 appels, 32 threads simultanés
 
-    assert all(r.startswith("ok ") for r in results)  # aucune exception, aucun appel perdu
+    assert all(
+        r.startswith("ok ") for r in results
+    )  # aucune exception, aucun appel perdu
     assert guard.flush(30) is True
 
     sender = guard._sender
@@ -461,7 +491,9 @@ def test_true_concurrency_hundreds_of_calls_from_thread_pool(collector, async_en
     assert sender.pending == 0  # tout traité
     assert (
         sender.submitted - baseline[0]
-        == (sender.delivered - baseline[1]) + (sender.dropped - baseline[2]) + sender.pending
+        == (sender.delivered - baseline[1])
+        + (sender.dropped - baseline[2])
+        + sender.pending
     )  # invariants comptables cohérents
 
     delivered = [p["span_id"] for p in fake.spans]
@@ -490,9 +522,11 @@ def test_shadow_mode_propagates_then_fails_safe_to_enforce(collector, async_env)
     assert guard.shadow_mode is True  # 1re lecture synchrone : exact dès le 1er appel
 
     fake.mode_code = 500  # collector en panne : on revient à enforce
+
     def back_to_enforce():
         tool(q="b")
         return guard.shadow_mode is False
+
     assert _wait(back_to_enforce, 6)
 
 
@@ -508,7 +542,9 @@ def test_stale_mode_reading_means_enforce(collector, async_env):
 
     guard._poller = Stub()
     guard._refresh_runtime_mode()
-    assert guard.shadow_mode is False  # lecture périmée : jamais de shadow « resté allumé »
+    assert (
+        guard.shadow_mode is False
+    )  # lecture périmée : jamais de shadow « resté allumé »
 
     class Fresh:
         def snapshot(self):
@@ -545,6 +581,7 @@ def test_kill_switch_blocks_first_call_then_recovers(collector, async_env):
             return True
         except AgentDisconnectedException:
             return False
+
     assert _wait(reconnected, 6)
 
 

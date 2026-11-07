@@ -331,9 +331,7 @@ class CerbereGateway:
             # 6. Budget par serveur : charge heuristique (arguments + réponse)
             if spec.budget is not None:
                 agent_id = _identity()["agent_id"]
-                response_texts = [
-                    getattr(c, "text", "") or "" for c in content
-                ]
+                response_texts = [getattr(c, "text", "") or "" for c in content]
                 cost = ledger.estimate_usd(
                     json.dumps(args, ensure_ascii=False, default=str),
                     *response_texts,

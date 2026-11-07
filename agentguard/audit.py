@@ -676,9 +676,7 @@ class ImmutableAuditLog:
                 if 200 <= resp.status_code < 300:
                     published.append("http")
                 else:
-                    logger.error(
-                        "AUDIT_ANCHOR http sink returned %s", resp.status_code
-                    )
+                    logger.error("AUDIT_ANCHOR http sink returned %s", resp.status_code)
             except Exception as e:
                 logger.error("AUDIT_ANCHOR http sink failed: %s", e)
 

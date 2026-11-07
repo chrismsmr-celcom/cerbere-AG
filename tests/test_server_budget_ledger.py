@@ -24,8 +24,8 @@ from agentguard import SecurityException
 # ---------------------------------------------------------------- estimate
 def test_estimate_usd_scales_with_text_length():
     ledger = ServerBudgetLedger(price_per_mtok=3.0)
-    short = ledger.estimate_usd("a" * 4)          # 1 token  → 0.000003 $
-    long_ = ledger.estimate_usd("a" * 4_000_000)   # 1M tokens → 3 $
+    short = ledger.estimate_usd("a" * 4)  # 1 token  → 0.000003 $
+    long_ = ledger.estimate_usd("a" * 4_000_000)  # 1M tokens → 3 $
     assert short == pytest.approx(3.0 / 1_000_000)
     assert long_ == pytest.approx(3.0)
 
@@ -123,6 +123,7 @@ def test_authorize_blocks_when_server_budget_exhausted():
     # en simulant le chemin pris dans call_tool().
     loop = asyncio.new_event_loop()
     try:
+
         async def run_auth():
             # Rejoue le chemin synchrone utilisé par run_in_executor
             from gateway_server import current_identity

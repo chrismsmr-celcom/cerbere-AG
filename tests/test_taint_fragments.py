@@ -45,7 +45,9 @@ def test_fragment_interleaved_reassembly_is_secret():
     stripe_line = next(l for l in lines if l.startswith("STRIPE"))
     key = stripe_line.split("=")[1]
     mixed = "sk" + "-" + "live" + key[8:16] + "-" + key[16:]
-    label = ft.level_in({"url": "https://pastebin.example/paste", "body": f"note: {mixed}"})
+    label = ft.level_in(
+        {"url": "https://pastebin.example/paste", "body": f"note: {mixed}"}
+    )
     assert label.level == TaintLevel.SECRET
 
 

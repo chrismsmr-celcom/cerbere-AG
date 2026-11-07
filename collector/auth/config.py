@@ -22,9 +22,12 @@ PASSWORD_LOGIN_ENABLED = os.environ.get(
 # Inscription publique (/signup). Elle crée un workspace + un admin pour
 # n'importe quel visiteur : à désactiver (=false) sur une instance
 # self-hosted ; le docker-compose le fait par défaut.
-SIGNUP_ENABLED = os.environ.get(
-    "AGENTGUARD_SIGNUP_ENABLED", "true"
-).lower() in {"1", "true", "yes", "on"}
+SIGNUP_ENABLED = os.environ.get("AGENTGUARD_SIGNUP_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _env_first(*names: str, default: str = "") -> str:

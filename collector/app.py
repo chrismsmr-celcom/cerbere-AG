@@ -234,7 +234,9 @@ def create_app() -> Flask:
     if trusted_proxies > 0:
         from werkzeug.middleware.proxy_fix import ProxyFix
 
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxies, x_proto=0, x_host=0, x_prefix=0)
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=trusted_proxies, x_proto=0, x_host=0, x_prefix=0
+        )
 
     # Une panne du stockage du limiteur (Redis) ne doit jamais faire tomber le site :
     # repli sur la mémoire locale (limites par worker) et erreurs avalées.

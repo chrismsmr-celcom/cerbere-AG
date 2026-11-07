@@ -331,20 +331,18 @@ _MAX_SCAN_CHARS = 200_000
 # "shingles" : des sous-chaînes glissantes de chaque valeur sensible, et on
 # exige plusieurs hits du MÊME needle pour éviter les faux positifs.
 
-_SHINGLE_LEN = 10              # taille d'un fragment indexé
-_SHINGLE_STEP = 1              # pas du glissement (dense : fragments courts couverts)
+_SHINGLE_LEN = 10  # taille d'un fragment indexé
+_SHINGLE_STEP = 1  # pas du glissement (dense : fragments courts couverts)
 _MAX_SHINGLES_PER_NEEDLE = 32  # plafond mémoire (couverture régulière)
-_FRAGMENT_MIN_HITS = 2         # ≥ 2 shingles du même needle → sensible
-_MAX_DECODE_CANDIDATES = 8     # plafond CPU : tokens décodés par appel
+_FRAGMENT_MIN_HITS = 2  # ≥ 2 shingles du même needle → sensible
+_MAX_DECODE_CANDIDATES = 8  # plafond CPU : tokens décodés par appel
 
 # Exfiltration cumulative : un caractère seul ne prouve rien, mais quand une
 # fraction du secret a déjà transité vers un sink externe, on coupe.
 _FRAGMENT_COVERAGE_BLOCK = float(
     os.environ.get("AGENTGUARD_TAINT_FRAGMENT_COVERAGE", "0.25")
 )
-_MAX_MICRO_HITS = int(
-    os.environ.get("AGENTGUARD_TAINT_MICRO_HITS", "16")
-)
+_MAX_MICRO_HITS = int(os.environ.get("AGENTGUARD_TAINT_MICRO_HITS", "16"))
 
 _B64_TOKEN_RE = re.compile(r"[A-Za-z0-9+/=_-]{16,}")
 _HEX_TOKEN_RE = re.compile(r"\b[0-9a-fA-F]{16,}\b")
@@ -402,7 +400,9 @@ def _shingle_positions(n: int) -> list[int]:
         # Sous-échantillonnage régulier : la couverture reste répartie
         # sur TOUTE la valeur, pas seulement sur son début.
         stride = len(positions) / _MAX_SHINGLES_PER_NEEDLE
-        positions = [positions[int(i * stride)] for i in range(_MAX_SHINGLES_PER_NEEDLE)]
+        positions = [
+            positions[int(i * stride)] for i in range(_MAX_SHINGLES_PER_NEEDLE)
+        ]
     return positions
 
 
@@ -434,7 +434,10 @@ class FlowTracker:
         # tests using monkeypatch.setenv) is honoured without reloading module.
         try:
             self._max_micro_hits = max(
-                1, int(os.environ.get("AGENTGUARD_TAINT_MICRO_HITS", str(_MAX_MICRO_HITS)))
+                1,
+                int(
+                    os.environ.get("AGENTGUARD_TAINT_MICRO_HITS", str(_MAX_MICRO_HITS))
+                ),
             )
         except (TypeError, ValueError):
             self._max_micro_hits = max(1, _MAX_MICRO_HITS)
@@ -499,7 +502,9 @@ class FlowTracker:
                 "(untracked sensitive values; external flows %s)",
                 _MAX_TRACKED,
                 self.on_saturation,
-                "BLOCKED until clear()" if self.on_saturation == "block" else "not blocked",
+                "BLOCKED until clear()"
+                if self.on_saturation == "block"
+                else "not blocked",
             )
 
     def clear(self) -> None:
@@ -619,6 +624,7 @@ class FlowTracker:
         """
         for nid, n in hits.items():
             self._coverage.setdefault(nid, set()).update(range(n))
+
     @staticmethod
     def _iter_micro_values(value: Any):
         """Yield short string leaves from structured tool arguments."""
@@ -661,9 +667,7 @@ class FlowTracker:
             return TaintLevel.SECRET, "fragment_accumulation"
         return None
 
-    def level_in(
-        self, params: Any, external: bool | None = None
-    ) -> TaintLabel:
+    def level_in(self, params: Any, external: bool | None = None) -> TaintLabel:
         """Niveau de taint le plus élevé présent dans `params`.
 
         Renvoie TOUJOURS un TaintLabel (PUBLIC au minimum) — jamais None.
@@ -721,7 +725,11 @@ class FlowTracker:
                     escalation = self._coverage_escalation()
                     if escalation and level < escalation[0]:
                         level, source = escalation
-        if self.saturated and self.on_saturation == "block" and level < TaintLevel.SECRET:
+        if (
+            self.saturated
+            and self.on_saturation == "block"
+            and level < TaintLevel.SECRET
+        ):
             # Fail-closed : des valeurs sensibles ont été ignorées, donc une
             # charge utile "propre" n'est pas prouvée sûre.
             level, source = TaintLevel.SECRET, "tracker_saturated"
@@ -747,7 +755,5 @@ class FlowTracker:
         # Anti-fragmentation : visibilité de l'état des fragments.
         r["shingles_tracked"] = len(self._shingles)
         r["micro_hits"] = self.micro_hits
-        r["fragment_coverage"] = {
-            nid: len(cov) for nid, cov in self._coverage.items()
-        }
+        r["fragment_coverage"] = {nid: len(cov) for nid, cov in self._coverage.items()}
         return r
