@@ -47,6 +47,7 @@ import requests
 import structlog
 
 from collector.db import is_postgres, sql_placeholder
+from collector.licensing import has_feature
 from collector.migrations import ensure_migrated
 
 from .users import _db_execute, _user_by_email
@@ -117,6 +118,14 @@ def get_config() -> OidcConfig | None:
     if not (issuer and client_id and client_secret):
         return None
 
+    # Le SSO d'entreprise est une fonction des offres Team et Enterprise.
+    if not has_feature("sso_oidc"):
+        _warn_once(
+            "oidc_disabled_not_licensed",
+            hint="company SSO needs a Team or Enterprise license (AGENTGUARD_LICENSE_KEY)",
+        )
+        return None
+
     allow_http = _truthy(os.environ.get("AGENTGUARD_OIDC_ALLOW_HTTP"), False)
     if not issuer.startswith("https://") and not allow_http:
         _warn_once("oidc_disabled_issuer_not_https", issuer=issuer)
@@ -163,6 +172,19 @@ def get_config() -> OidcConfig | None:
         button_label=_env("AGENTGUARD_OIDC_BUTTON_LABEL", "company SSO"),
         allow_http=allow_http,
     )
+
+
+def blocked_by_license() -> bool:
+    """SSO configuré dans l'environnement mais non couvert par la licence actuelle."""
+    configured = all(
+        _env(v)
+        for v in (
+            "AGENTGUARD_OIDC_ISSUER",
+            "AGENTGUARD_OIDC_CLIENT_ID",
+            "AGENTGUARD_OIDC_CLIENT_SECRET",
+        )
+    )
+    return configured and not has_feature("sso_oidc")
 
 
 # ── HTTP (isolé pour pouvoir être remplacé dans les tests) ────────────────

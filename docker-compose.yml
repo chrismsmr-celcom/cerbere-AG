@@ -41,6 +41,11 @@ services:
       AGENTGUARD_OIDC_REQUIRE_EMAIL_VERIFIED: ${AGENTGUARD_OIDC_REQUIRE_EMAIL_VERIFIED:-true}
       AGENTGUARD_OIDC_ORG_ID: ${AGENTGUARD_OIDC_ORG_ID:-}
       AGENTGUARD_OIDC_BUTTON_LABEL: ${AGENTGUARD_OIDC_BUTTON_LABEL:-company SSO}
+
+      # ── LICENCE (Pro / Team / Enterprise ; sans clé = Community, gratuit) ─────
+      # Clé en variable d'environnement, ou fichier (installé via `cli license install`).
+      AGENTGUARD_LICENSE_KEY: ${AGENTGUARD_LICENSE_KEY:-}
+      AGENTGUARD_LICENSE_FILE: ${AGENTGUARD_LICENSE_FILE:-/data/license.key}
       # /signup crée un workspace admin pour n'importe quel visiteur :
       # désactivé par défaut en self-hosted.
       AGENTGUARD_SIGNUP_ENABLED: ${AGENTGUARD_SIGNUP_ENABLED:-false}

@@ -5,6 +5,7 @@ Usage :
     python -m collector.cli set-password --email admin@corp.com
     python -m collector.cli list-users
     python -m collector.cli migrate [--status]
+    python -m collector.cli license status | install <file|->
 
 Le mot de passe est demandé de façon interactive (jamais en argument, pour
 ne pas finir dans l'historique du shell). Pour l'automatisation, utiliser
@@ -107,6 +108,58 @@ def cmd_migrate(args) -> int:
     return 0
 
 
+def cmd_license_status(_args) -> int:
+    from collector import licensing
+
+    info = licensing.status_dict()
+    print(f"Plan:     {info['plan']}  ({info['status']})")
+    print(f"Message:  {info['message']}")
+    if info["customer"]:
+        print(f"Customer: {info['customer']}  (license {info['license_id']})")
+        print(f"Expires:  {info['expires_on']}  ({info['days_left']} day(s) left)")
+    print("Paid features: " + (", ".join(info["features"]) or "none (Community)"))
+    return 0
+
+
+def cmd_license_install(args) -> int:
+    import os
+    import tempfile
+    from pathlib import Path
+
+    from collector import licensing
+
+    token = (
+        sys.stdin.read().strip()
+        if args.file == "-"
+        else Path(args.file).read_text(encoding="utf-8").strip()
+    )
+    try:
+        lic = licensing.verify_license(token)
+    except licensing.LicenseError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    target = os.environ.get("AGENTGUARD_LICENSE_FILE", "").strip()
+    if not target:
+        print(
+            "Error: set AGENTGUARD_LICENSE_FILE (the Docker Compose setup uses /data/license.key), "
+            "or put the key in AGENTGUARD_LICENSE_KEY instead.",
+            file=sys.stderr,
+        )
+        return 1
+    dest = Path(target)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(dest.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(token + "\n")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, dest)  # écriture atomique
+    print(
+        f"Installed {lic.plan} license for {lic.customer} -> {dest}. No restart needed."
+    )
+    return 0
+
+
 def cmd_list_users(_args) -> int:
     from collector.auth.users import _db_execute
 
@@ -150,6 +203,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--status", action="store_true", help="Show applied and pending migrations"
     )
     p.set_defaults(func=cmd_migrate)
+
+    p = sub.add_parser("license", help="Show or install the license key")
+    lic_sub = p.add_subparsers(dest="license_command", required=True)
+    q = lic_sub.add_parser("status", help="Show the current plan and expiry")
+    q.set_defaults(func=cmd_license_status)
+    q = lic_sub.add_parser("install", help="Verify and install a license key")
+    q.add_argument("file", help="File holding the license key, or - for stdin")
+    q.set_defaults(func=cmd_license_install)
 
     p = sub.add_parser("list-users", help="List users")
     p.set_defaults(func=cmd_list_users)

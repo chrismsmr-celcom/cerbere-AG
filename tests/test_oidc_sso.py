@@ -109,6 +109,10 @@ def app_ctx(tmp_path, monkeypatch, idp):
     from tests.dbmode import configure_db
 
     configure_db(monkeypatch, tmp_path, "sso")
+    from tests.licensing_helpers import install
+
+    install(monkeypatch, "team")  # le SSO d'entreprise est une fonction Team
+
     monkeypatch.setenv("AGENTGUARD_FLASK_SECRET", "test-flask-secret-for-ci-only")
     monkeypatch.setenv("AGENTGUARD_COOKIE_SECURE", "false")
     monkeypatch.delenv("AGENTGUARD_ENVIRONMENT", raising=False)

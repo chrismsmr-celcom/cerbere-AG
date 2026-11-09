@@ -13,6 +13,7 @@ from .blueprint import auth_bp
 from .oidc import (
     OidcError,
     authorization_url,
+    blocked_by_license,
     discover,
     exchange_code,
     get_config,
@@ -37,10 +38,24 @@ def _login_page_context():
     return {
         "sso_enabled": cfg is not None,
         "sso_name": cfg.button_label if cfg else "",
-        "password_enabled": auth_config.PASSWORD_LOGIN_ENABLED,
+        # Anti-verrouillage : le mot de passe ne peut être masqué que tant que le SSO
+        # fonctionne réellement (configuré ET couvert par la licence).
+        "password_enabled": auth_config.PASSWORD_LOGIN_ENABLED or cfg is None,
         "magic_enabled": auth_config.MAGIC_LINK_ENABLED,
         "signup_enabled": auth_config.SIGNUP_ENABLED,
     }
+
+
+def _sso_unavailable():
+    if blocked_by_license():
+        return render_template_string(
+            LOGIN_HTML,
+            error="Company SSO is part of the Team and Enterprise plans. Ask your administrator to install a license.",
+            success=None,
+        ), 403
+    return render_template_string(
+        LOGIN_HTML, error="SSO is not configured on this instance.", success=None
+    ), 404
 
 
 def _redirect_uri() -> str:
@@ -62,9 +77,7 @@ def _fail(message: str, status: int, reason: str, email: str | None = None):
 def sso_login():
     cfg = get_config()
     if not cfg:
-        return render_template_string(
-            LOGIN_HTML, error="SSO is not configured on this instance.", success=None
-        ), 404
+        return _sso_unavailable()
 
     try:
         meta = discover(cfg)
@@ -103,9 +116,7 @@ def sso_login():
 def sso_callback():
     cfg = get_config()
     if not cfg:
-        return render_template_string(
-            LOGIN_HTML, error="SSO is not configured on this instance.", success=None
-        ), 404
+        return _sso_unavailable()
 
     if request.args.get("error"):
         logger.warning(

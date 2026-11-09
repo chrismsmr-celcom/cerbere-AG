@@ -103,7 +103,10 @@ def test_user_without_password_cannot_login(app_ctx):
         assert r.status_code == 401
 
 
-def test_password_login_can_be_disabled(app_ctx, monkeypatch):
+def test_password_login_flag_cannot_lock_out_an_instance_without_sso(
+    app_ctx, monkeypatch
+):
+    """Désactiver le mot de passe n'a d'effet que si le SSO fonctionne (sinon plus personne ne se connecterait)."""
     import collector.auth.routes_password as rp
 
     monkeypatch.setattr(rp, "PASSWORD_LOGIN_ENABLED", False)
@@ -113,7 +116,7 @@ def test_password_login_can_be_disabled(app_ctx, monkeypatch):
             "/auth/password",
             data={"email": "admin@corp.example", "password": PASSWORD},
         )
-        assert r.status_code == 503
+        assert r.status_code == 302
 
 
 def test_signup_can_be_disabled(app_ctx, monkeypatch):

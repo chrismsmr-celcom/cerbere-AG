@@ -628,3 +628,7 @@ def init_db():
     _init_db()
     # Évolutions de schéma versionnées : arrêt net (avec message) si l'une échoue.
     run_migrations()
+
+    from collector.licensing import log_status
+
+    log_status()

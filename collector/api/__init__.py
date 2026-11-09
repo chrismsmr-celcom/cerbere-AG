@@ -25,6 +25,7 @@ import collector.api.decisions
 import collector.api.health
 import collector.api.incidents
 import collector.api.insights
+import collector.api.license_info
 import collector.api.metrics
 import collector.api.settings
 import collector.api.shadow_log

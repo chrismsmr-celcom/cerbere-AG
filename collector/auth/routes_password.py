@@ -9,6 +9,7 @@ from .audit_helpers import _audit_login
 from .blueprint import auth_bp
 from .config import PASSWORD_LOGIN_ENABLED
 from .local_password import verify_credentials
+from .oidc import get_config as sso_config
 from .pages import LOGIN_HTML
 from .sessions import _set_human_session
 from .utils import _normalize_email
@@ -21,7 +22,8 @@ _GENERIC_ERROR = "Invalid email or password."
 @auth_bp.post("/auth/password")
 @limiter.limit("10 per minute")
 def password_login():
-    if not PASSWORD_LOGIN_ENABLED:
+    # Désactivable seulement si le SSO fonctionne : sinon on risquerait de verrouiller l'instance.
+    if not PASSWORD_LOGIN_ENABLED and sso_config() is not None:
         return render_template_string(
             LOGIN_HTML,
             error="Password login is disabled on this instance.",
