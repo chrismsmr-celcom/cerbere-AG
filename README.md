@@ -10,7 +10,7 @@ Runtime security & observability for autonomous agents: it sits between the mode
 <br/>
 
 [![PyPI](https://img.shields.io/pypi/v/cerbere-ag?style=flat-square&color=e8845a&label=pypi)](https://pypi.org/project/cerbere-ag/)
-[![Tests](https://img.shields.io/github/actions/workflow/status/chrismsmr-celcom/cerbere-AG/tests.yml?style=flat-square&label=tests)](https://github.com/chrismsmr-celcom/cerbere-AG/actions/workflows/tests.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/chrismsmr-celcom/cerbere-AG/ci.yml?style=flat-square&label=tests)](https://github.com/chrismsmr-celcom/cerbere-AG/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square)](https://www.python.org/)
 [![SDK license](https://img.shields.io/badge/SDK-Apache%202.0-4c9a6a?style=flat-square)](LICENSE)
 [![Website](https://img.shields.io/badge/web-cerbereag.site-0b0b0c?style=flat-square)](https://cerbereag.site)
