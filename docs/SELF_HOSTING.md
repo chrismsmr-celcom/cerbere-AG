@@ -33,8 +33,8 @@ Check health: `curl http://localhost:8080/healthz`.
 from agentguard import AgentGuard
 
 guard = AgentGuard(
-    collector_url="http://localhost:8080",  # your AGENTGUARD_PUBLIC_URL
-    api_key="ag-...",  # create keys in the dashboard
+    collector_url="http://localhost:8080",   # your AGENTGUARD_PUBLIC_URL
+    api_key="ag-...",                         # create keys in the dashboard
     agent_id="my-agent",
 )
 ```
@@ -56,7 +56,8 @@ All settings are environment variables in `.env`. The essentials:
 | `AGENTGUARD_SIGNUP_ENABLED` | Public `/signup`. Keep `false`: it creates an admin workspace for any visitor. |
 | `AGENTGUARD_PASSWORD_LOGIN_ENABLED` | Password sign-in. Default `true`. |
 | `AGENTGUARD_MAGIC_LINK_ENABLED` | Email sign-in links. Default `false` in Compose; needs `AGENTGUARD_SMTP_HOST`. |
-| `AGENTGUARD_OIDC_*` | Company SSO. See [Single sign-on](#single-sign-on-oidc). |
+| `AGENTGUARD_OIDC_*` | Company SSO (Team and Enterprise). See [Single sign-on](#single-sign-on-oidc). |
+| `AGENTGUARD_LICENSE_KEY` / `AGENTGUARD_LICENSE_FILE` | Paid plan key. See [License and plans](#license-and-plans). |
 | `AGENTGUARD_USE_LLM_JUDGE`, `AGENTGUARD_JUDGE_URL`, `AGENTGUARD_JUDGE_MODEL`, `AGENTGUARD_JUDGE_API_KEY` | Optional LLM judge. Any OpenAI-compatible endpoint works. |
 | `AGENTGUARD_ENVIRONMENT` | `production` by default in Compose (strict startup checks). |
 
@@ -111,6 +112,9 @@ Let your people sign in with your identity provider (Okta, Microsoft Entra ID,
 Google Workspace, Keycloak, Auth0, Authentik, ...). It is built into Cerbere and
 does not depend on any external service.
 
+Company SSO is part of the **Team** and **Enterprise** plans (see [License and plans](#license-and-plans)).
+Without a matching license the button stays hidden and password sign-in keeps working.
+
 **1. Register Cerbere in your identity provider** as a *web application* using the
 authorization code flow, with this redirect URI:
 
@@ -158,10 +162,29 @@ is in the same organization; an account already linked to a different identity i
 
 **Requiring SSO.** Once SSO works for everyone, hide the other methods with
 `AGENTGUARD_PASSWORD_LOGIN_ENABLED=false` (and `AGENTGUARD_MAGIC_LINK_ENABLED=false`).
-Test SSO before doing this. If your provider is ever unavailable, set the variable back to `true` and restart to regain access with the administrator's password.
+Test SSO before doing this. Password sign-in is only hidden while SSO is actually working: if the license lapses or SSO is misconfigured, the password form comes back automatically so nobody is locked out. People who only ever used SSO have no password until an administrator sets one with `set-password`.
 
 **Not included yet:** SAML (put Keycloak or Dex in front of Cerbere to bridge SAML to OIDC), several providers per instance, automatic user provisioning and deprovisioning (SCIM), and single logout.
 A user removed in your provider keeps access until their Cerbere session expires or you disable the account.
+
+## License and plans
+
+Cerbere runs fully without a license: the **Community** edition includes the complete collector,
+dashboard, detection layers, human approvals, audit log, API keys and alerts, with no cap on agents.
+A paid license (**Pro**, **Team** or **Enterprise**) adds capabilities for teams and companies,
+such as company SSO, and comes with support. See `docs/LICENSING.md` for the plan comparison.
+
+Install the key you received (no restart needed, no internet needed):
+
+```bash
+echo 'cerbere_lic_v1....' | docker compose exec -T collector python -m collector.cli license install -
+docker compose exec collector python -m collector.cli license status
+```
+
+or set `AGENTGUARD_LICENSE_KEY` in `.env`. Administrators can also read the state at `GET /api/license`.
+
+When a license expires you get 14 days of grace with a warning in the logs; after that the instance
+continues as Community. Detection, blocking, audit and password sign-in are never switched off.
 
 ## Users
 
@@ -188,11 +211,27 @@ Also keep a copy of your `.env`: `AGENTGUARD_FLASK_SECRET` and any evidence-encr
 ## Upgrading
 
 ```bash
+# 1. back up first (see above)
+docker compose exec -T postgres pg_dump -U agentguard agentguard | gzip > cerbere-before-upgrade.sql.gz
+
+# 2. get the new version and restart
 git pull
 docker compose up -d --build
+
+# 3. check the database schema
+docker compose exec collector python -m collector.cli migrate --status
 ```
 
-Schema changes are applied automatically at startup. Take a backup first.
+Database changes are versioned migrations. They are applied automatically, once and in order, when
+Cerbere starts (several workers starting together are handled safely). Each migration runs in its
+own transaction: if one fails, nothing is half-applied and Cerbere stops with a clear message in
+`docker compose logs collector`.
+
+There is no automatic downgrade. To go back to an older version, restore the backup you took in step 1.
+Cerbere refuses to start an older version on a database already migrated by a newer one, so data is never
+silently mismatched.
+
+You can also apply migrations by hand without restarting: `docker compose exec collector python -m collector.cli migrate`.
 
 ## Production checklist
 
@@ -209,6 +248,9 @@ Schema changes are applied automatically at startup. Take a backup first.
 - **`required variable POSTGRES_PASSWORD is missing`**: run `./scripts/selfhost-init.sh` first.
 - **Signed in but immediately logged out over HTTP**: `AGENTGUARD_COOKIE_SECURE` is `true` without HTTPS.
 - **`429 Too Many Requests` for everyone behind a proxy**: set `AGENTGUARD_TRUSTED_PROXIES=1`.
+- **SSO button missing or `/auth/sso/login` says it is part of Team and Enterprise**: no valid Team/Enterprise license is installed. Check `docker compose exec collector python -m collector.cli license status`.
 - **SSO: "Sign-in was refused"**: the page is deliberately vague. The exact reason is in the logs (`docker compose logs collector | grep sso_login_rejected`): domain not allowed, email not verified, no organization yet, several organizations, and so on.
 - **SSO: redirect URI mismatch at the provider**: the registered URI must equal `<AGENTGUARD_PUBLIC_URL>/auth/sso/callback` exactly.
+- **`migration N (...) failed`** at startup: the message says which step and why; nothing was half-applied. Fix the cause (often permissions or a full disk) and restart.
+- **`database schema is newer than this version of the code`**: the database was migrated by a more recent Cerbere. Upgrade the code, or restore a backup taken before that upgrade.
 - **Logs**: `docker compose logs -f collector`

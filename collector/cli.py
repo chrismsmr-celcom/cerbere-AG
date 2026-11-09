@@ -4,6 +4,7 @@ Usage :
     python -m collector.cli create-admin --email admin@corp.com [--org "ACME"] [--name "Alice"]
     python -m collector.cli set-password --email admin@corp.com
     python -m collector.cli list-users
+    python -m collector.cli migrate [--status]
 
 Le mot de passe est demandé de façon interactive (jamais en argument, pour
 ne pas finir dans l'historique du shell). Pour l'automatisation, utiliser
@@ -22,10 +23,9 @@ import sys
 
 
 def _init_database() -> None:
-    from collector.db import init_db, init_identity_tables
+    from collector.migrations import run_migrations
 
-    init_db()
-    init_identity_tables()
+    run_migrations(init=True)
 
 
 def _read_password(args, confirm: bool = True) -> str:
@@ -82,6 +82,31 @@ def cmd_set_password(args) -> int:
     return 0
 
 
+def cmd_migrate(args) -> int:
+    from collector import migrations
+
+    if args.status:
+        info = migrations.status()
+        for version, name in info["applied"]:
+            print(f"applied  {version:04d}  {name}")
+        for version, name in info["pending"]:
+            print(f"pending  {version:04d}  {name}")
+        for version in info["unknown"]:
+            print(f"UNKNOWN  {version:04d}  (applied by a newer version of Cerbere)")
+        return 1 if info["unknown"] else 0
+
+    try:
+        applied = migrations.run_migrations(init=True)
+    except migrations.MigrationError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if applied:
+        print("Applied migrations: " + ", ".join(f"{v:04d}" for v in applied))
+    else:
+        print("Database schema is up to date.")
+    return 0
+
+
 def cmd_list_users(_args) -> int:
     from collector.auth.users import _db_execute
 
@@ -119,6 +144,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--email", required=True)
     p.add_argument("--password-stdin", action="store_true")
     p.set_defaults(func=cmd_set_password)
+
+    p = sub.add_parser("migrate", help="Apply pending database migrations")
+    p.add_argument(
+        "--status", action="store_true", help="Show applied and pending migrations"
+    )
+    p.set_defaults(func=cmd_migrate)
 
     p = sub.add_parser("list-users", help="List users")
     p.set_defaults(func=cmd_list_users)

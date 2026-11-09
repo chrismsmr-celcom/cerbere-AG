@@ -623,5 +623,8 @@ def init_db():
     """Initialize the database at boot."""
 
     from collector.db import init_db as _init_db
+    from collector.migrations import run_migrations
 
     _init_db()
+    # Évolutions de schéma versionnées : arrêt net (avec message) si l'une échoue.
+    run_migrations()

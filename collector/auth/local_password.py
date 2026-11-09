@@ -14,7 +14,8 @@ import uuid
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from collector.db import _get_db_config, _get_db_path, is_postgres, sql_placeholder
+from collector.db import is_postgres, sql_placeholder
+from collector.migrations import ensure_migrated
 
 from .users import _db_execute, _user_by_email
 from .utils import _normalize_email, _valid_email
@@ -25,34 +26,14 @@ MIN_PASSWORD_LENGTH = 12
 # afin que le temps de réponse ne révèle pas l'existence d'un compte.
 _DUMMY_HASH = generate_password_hash("not-a-real-password-for-timing-only")
 
-_ensured: set[tuple] = set()
-
 
 class PasswordError(ValueError):
     """Mot de passe ou paramètres invalides (message affichable)."""
 
 
-def _db_key() -> tuple:
-    db_type, url = _get_db_config()
-    return (db_type, url if db_type == "postgres" else _get_db_path())
-
-
 def ensure_password_column() -> None:
-    """Migration défensive : ajoute users.password_hash si absent."""
-    key = _db_key()
-    if key in _ensured:
-        return
-
-    if is_postgres():
-        _db_execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT")
-    else:
-        cols = {
-            row[1] for row in _db_execute("PRAGMA table_info(users)", fetchall=True)
-        }
-        if "password_hash" not in cols:
-            _db_execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
-
-    _ensured.add(key)
+    """Garantit que le schéma est à jour (migration `users_password_hash`)."""
+    ensure_migrated()
 
 
 def validate_password(password: str) -> None:

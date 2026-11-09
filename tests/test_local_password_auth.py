@@ -10,8 +10,9 @@ PASSWORD = "correct-horse-battery"
 
 @pytest.fixture
 def app_ctx(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENTGUARD_DB_TYPE", "sqlite")
-    monkeypatch.setenv("AGENTGUARD_DB_PATH", str(tmp_path / "local-auth.db"))
+    from tests.dbmode import configure_db
+
+    configure_db(monkeypatch, tmp_path, "local-auth")
     monkeypatch.setenv("AGENTGUARD_FLASK_SECRET", "test-flask-secret-for-ci-only")
     monkeypatch.delenv("AGENTGUARD_ENVIRONMENT", raising=False)
     monkeypatch.delenv("AGENTGUARD_ADMIN_PASSWORD", raising=False)
@@ -78,9 +79,9 @@ def test_duplicate_email_rejected(app_ctx):
 
 def test_inactive_user_cannot_login(app_ctx):
     assert _create_admin() == 0
-    from collector.auth.users import _db_execute
+    from tests.dbmode import set_active
 
-    _db_execute("UPDATE users SET active = 0")
+    set_active("1 = 1", (), False)
     with app_ctx.test_client() as c:
         r = c.post(
             "/auth/password",

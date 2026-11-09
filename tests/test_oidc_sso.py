@@ -100,15 +100,15 @@ def idp(monkeypatch):
     monkeypatch.setattr(oidc, "_http_get", f.get)
     monkeypatch.setattr(oidc, "_http_post", f.post)
     oidc._cache.clear()
-    oidc._ensured.clear()
     oidc._warned.clear()
     return f
 
 
 @pytest.fixture
 def app_ctx(tmp_path, monkeypatch, idp):
-    monkeypatch.setenv("AGENTGUARD_DB_TYPE", "sqlite")
-    monkeypatch.setenv("AGENTGUARD_DB_PATH", str(tmp_path / "sso.db"))
+    from tests.dbmode import configure_db
+
+    configure_db(monkeypatch, tmp_path, "sso")
     monkeypatch.setenv("AGENTGUARD_FLASK_SECRET", "test-flask-secret-for-ci-only")
     monkeypatch.setenv("AGENTGUARD_COOKIE_SECURE", "false")
     monkeypatch.delenv("AGENTGUARD_ENVIRONMENT", raising=False)
@@ -132,6 +132,12 @@ def app_ctx(tmp_path, monkeypatch, idp):
     return app
 
 
+def _pg():
+    from collector.db import is_postgres
+
+    return is_postgres()
+
+
 def _admin(email="admin@acme.example"):
     from collector import cli
 
@@ -150,11 +156,13 @@ def _admin(email="admin@acme.example"):
 def _user(email):
     from collector.auth.oidc import ensure_oidc_columns
     from collector.auth.users import _db_execute
+    from collector.db import sql_placeholder
 
     ensure_oidc_columns()
 
     return _db_execute(
-        "SELECT user_id, org_id, role, active, oidc_issuer, oidc_sub FROM users WHERE LOWER(email) = ?",
+        "SELECT user_id, org_id, role, active, oidc_issuer, oidc_sub FROM users "
+        f"WHERE LOWER(email) = {sql_placeholder()}",
         (email,),
         fetchone=True,
     )
@@ -313,9 +321,9 @@ def test_inactive_user_rejected(app_ctx, idp):
     _admin()
     with app_ctx.test_client() as c:
         assert logged_in(roundtrip(c, idp))
-    from collector.auth.users import _db_execute
+    from tests.dbmode import set_active
 
-    _db_execute("UPDATE users SET active = 0 WHERE email = 'jane@acme.example'")
+    set_active("email = %s" if _pg() else "email = ?", ("jane@acme.example",), False)
     with app_ctx.test_client() as c:
         assert roundtrip(c, idp).status_code == 401
 

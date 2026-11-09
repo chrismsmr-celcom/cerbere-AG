@@ -47,8 +47,8 @@ import requests
 import structlog
 
 from collector.db import is_postgres, sql_placeholder
+from collector.migrations import ensure_migrated
 
-from .local_password import _db_key
 from .users import _db_execute, _user_by_email
 from .utils import _normalize_email
 
@@ -336,26 +336,10 @@ def verify_id_token(cfg: OidcConfig, meta: dict, id_token: str, nonce: str) -> d
 
 # ── Utilisateurs ──────────────────────────────────────────────────────────
 
-_ensured: set = set()
-
 
 def ensure_oidc_columns() -> None:
-    key = _db_key()
-    if key in _ensured:
-        return
-    if is_postgres():
-        _db_execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_issuer TEXT")
-        _db_execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_sub TEXT")
-    else:
-        cols = {r[1] for r in _db_execute("PRAGMA table_info(users)", fetchall=True)}
-        if "oidc_issuer" not in cols:
-            _db_execute("ALTER TABLE users ADD COLUMN oidc_issuer TEXT")
-        if "oidc_sub" not in cols:
-            _db_execute("ALTER TABLE users ADD COLUMN oidc_sub TEXT")
-    _db_execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc ON users(oidc_issuer, oidc_sub)"
-    )
-    _ensured.add(key)
+    """Garantit que le schéma est à jour (migration `users_oidc_identity`)."""
+    ensure_migrated()
 
 
 def _is_true(value) -> bool:
