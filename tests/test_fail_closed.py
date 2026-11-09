@@ -1,6 +1,16 @@
+import os
 import re
 
 import pytest
+
+os.environ.setdefault(
+    "AGENTGUARD_CORS_ORIGINS",
+    "http://localhost:3000",
+)
+os.environ.setdefault(
+    "AGENTGUARD_FLASK_SECRET",
+    "test-secret",
+)
 
 from collector.app import create_app
 from collector.auth.config import PUBLIC_ENDPOINTS

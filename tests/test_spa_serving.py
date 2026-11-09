@@ -1,6 +1,16 @@
 """Nouveau dashboard (SPA Vite servie par Flask en same-origin) + ancien dashboard sur /legacy."""
 
+import os
 import re
+
+os.environ.setdefault(
+    "AGENTGUARD_CORS_ORIGINS",
+    "http://localhost:3000",
+)
+os.environ.setdefault(
+    "AGENTGUARD_FLASK_SECRET",
+    "test-secret",
+)
 from pathlib import Path
 
 import pytest
