@@ -47,6 +47,21 @@ current_api_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "cerbere_api_key", default=None
 )
 
+
+def resolve_http_identity(
+    config: GatewayConfig, headers: Any
+) -> tuple[str, dict[str, Any]]:
+    """Valide strictement l'auth HTTP. L'identité anonyme reste réservée à stdio."""
+    api_key = headers.get("x-api-key") or ""
+    auth = headers.get("authorization") or ""
+    if not api_key and auth.lower().startswith("bearer "):
+        api_key = auth[7:]
+    api_key = api_key.strip()
+    if not api_key:
+        raise ConfigError("Missing API key")
+    return api_key, config.key_identity(api_key)
+
+
 # Tarif blended par défaut (USD / million de tokens) pour le budget par serveur.
 DEFAULT_PRICE_PER_MTOK = 3.0
 
@@ -99,9 +114,11 @@ class GuardPool:
 
     def __init__(self, config: GatewayConfig) -> None:
         self._config = config
-        self._guards: dict[str, AgentGuard] = {}
+        # Une entrée distincte par identité ET credential : deux clés ne doivent
+        # jamais partager un AgentGuard qui aurait capturé la première clé.
+        self._guards: dict[tuple[str, float, str], AgentGuard] = {}
 
-    def _build(self, agent_id: str, budget: float) -> AgentGuard:
+    def _build(self, agent_id: str, budget: float, api_key: str | None) -> AgentGuard:
         policies = [
             {
                 "type": "tool_whitelist",
@@ -116,7 +133,7 @@ class GuardPool:
         ]
         return AgentGuard(
             collector_url=self._config.collector_url,
-            api_key=current_api_key.get() or None,
+            api_key=api_key,
             agent_id=agent_id,
             policies=policies,
             max_budget=budget,
@@ -125,12 +142,13 @@ class GuardPool:
 
     def get(self, identity: dict[str, Any]) -> AgentGuard:
         agent_id = identity.get("agent_id", self._config.agent_id)
-        guard = self._guards.get(agent_id)
+        budget = float(identity.get("budget", self._config.budget))
+        api_key = current_api_key.get() or None
+        cache_key = (agent_id, budget, api_key or "")
+        guard = self._guards.get(cache_key)
         if guard is None:
-            guard = self._build(
-                agent_id, float(identity.get("budget", self._config.budget))
-            )
-            self._guards[agent_id] = guard
+            guard = self._build(agent_id, budget, api_key)
+            self._guards[cache_key] = guard
         return guard
 
 
@@ -310,7 +328,12 @@ class CerbereGateway:
 
             # 4. Enforcement AgentGuard avant tout forward — fail-closed
             try:
-                await loop.run_in_executor(executor, _authorize, label, tool, args)
+                # run_in_executor ne propage pas automatiquement les ContextVars.
+                # Sans copie, l'identité HTTP retombe sur l'identité stdio par défaut.
+                request_context = contextvars.copy_context()
+                await loop.run_in_executor(
+                    executor, request_context.run, _authorize, label, tool, args
+                )
             except (ApprovalRequiredException, SecurityException) as exc:
                 approval_id = getattr(exc, "approval_id", None)
                 suffix = f" (approval_id={approval_id})" if approval_id else ""
@@ -379,19 +402,21 @@ class CerbereGateway:
         )
 
         async def _authenticate(request: Request, call_next):
-            api_key = request.headers.get("x-api-key") or None
-            auth = request.headers.get("authorization") or ""
-            if not api_key and auth.lower().startswith("bearer "):
-                api_key = auth[7:].strip()
             try:
-                identity = config.key_identity(api_key)
+                api_key, identity = resolve_http_identity(config, request.headers)
             except ConfigError:
                 return JSONResponse(
                     {"error": "invalid or missing API key"}, status_code=401
                 )
-            current_api_key.set(api_key)
-            current_identity.set(identity)
-            return await call_next(request)
+            key_token = current_api_key.set(api_key)
+            identity_token = current_identity.set(identity)
+            try:
+                return await call_next(request)
+            finally:
+                # Évite qu'une requête réutilisée dans le même contexte ne
+                # conserve l'identité ou le secret d'une requête précédente.
+                current_identity.reset(identity_token)
+                current_api_key.reset(key_token)
 
         app = Starlette(
             routes=[Mount(config.path, app=session_manager.handle_request)],

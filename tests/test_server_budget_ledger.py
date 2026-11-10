@@ -163,3 +163,21 @@ def test_gateway_start_reports_budget_per_upstream(capsys):
         ],
     )
     assert config.servers[0].budget == 2.5
+
+
+def test_request_context_is_propagated_to_executor():
+    """The gateway must carry request identity into its authorization thread."""
+    import asyncio
+    import contextvars
+    from concurrent.futures import ThreadPoolExecutor
+
+    identity = contextvars.ContextVar("test_gateway_identity", default=None)
+
+    async def run():
+        identity.set({"agent_id": "tenant-a"})
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            ctx = contextvars.copy_context()
+            return await loop.run_in_executor(executor, ctx.run, identity.get)
+
+    assert asyncio.run(run()) == {"agent_id": "tenant-a"}

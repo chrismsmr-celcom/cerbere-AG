@@ -1,6 +1,6 @@
 """
 AgentGuard Immutable Audit Log
-Log append-only cryptographiquement chaîné pour SOC 2 Type II compliance.
+Log append-only cryptographiquement chaîné pour soutenir la production de preuves d’audit SOC 2 Type II.
 
 Architecture :
   - Chaque entrée contient le hash SHA256 de l'entrée précédente

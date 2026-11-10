@@ -37,7 +37,7 @@ jobs:
       - name: Smoke test built wheel
         run: |
           python -m pip install dist/*.whl
-          python -c "import agentguard_sdk; print('cerbere-ag SDK import OK')"
+          python -c "import agentguard; print('cerbere-ag SDK import OK')"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

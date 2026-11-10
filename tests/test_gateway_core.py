@@ -147,3 +147,38 @@ def test_short_values_not_tainted():
     reg = TaintRegistry()
     reg.register("short")
     assert reg.find_in_arguments({"body": "short"}) is None
+
+
+def test_http_identity_rejects_missing_and_unknown_api_keys():
+    from gateway_server import resolve_http_identity
+
+    cfg = _load(
+        {
+            "transport": "http",
+            "http": {"api_keys": {"known-key": {"agent_id": "agent-a"}}},
+            "servers": [{"label": "web", "command": ["x"], "allowed_tools": ["*"]}],
+        }
+    )
+    with pytest.raises(ConfigError):
+        resolve_http_identity(cfg, {})
+    with pytest.raises(ConfigError):
+        resolve_http_identity(cfg, {"x-api-key": "unknown-key"})
+
+    key, identity = resolve_http_identity(cfg, {"x-api-key": "known-key"})
+    assert key == "known-key"
+    assert identity["agent_id"] == "agent-a"
+
+
+def test_http_identity_accepts_bearer_header():
+    from gateway_server import resolve_http_identity
+
+    cfg = _load(
+        {
+            "transport": "http",
+            "http": {"api_keys": {"known-key": {"agent_id": "agent-a"}}},
+            "servers": [{"label": "web", "command": ["x"], "allowed_tools": ["*"]}],
+        }
+    )
+    key, identity = resolve_http_identity(cfg, {"authorization": "Bearer known-key"})
+    assert key == "known-key"
+    assert identity["agent_id"] == "agent-a"
