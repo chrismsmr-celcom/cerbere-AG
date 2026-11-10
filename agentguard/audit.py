@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -35,6 +36,7 @@ from agentguard.ids import uuid7
 try:
     import psycopg
     import psycopg.rows
+    import psycopg.sql
 
     PSYCOPG_AVAILABLE = True
 except ImportError:
@@ -158,8 +160,7 @@ class ImmutableAuditLog:
     DEFAULT_SIGN_EVERY = 100
     # Limite de taille par entrée (protection anti-DoS)
     MAX_DETAILS_SIZE = 10_000  # caractères
-    # Nom de table unifié (l'ancien code mélangeait audit_log
-    # et agentguard.audit_log — la table est créée sans schéma)
+    # Nom de table unifié
     _TABLE = "audit_log"
 
     def __init__(
@@ -171,16 +172,23 @@ class ImmutableAuditLog:
         verifying_key_pem: str | None = None,
     ):
         self.database_url = database_url
-        self.backup_file = backup_file or os.getenv(
-            "AGENTGUARD_AUDIT_BACKUP", "/tmp/agentguard_audit.jsonl"
-        )
+        # Use secure temp file if no backup_file provided and no env var
+        if backup_file:
+            self.backup_file = backup_file
+        else:
+            env_backup = os.getenv("AGENTGUARD_AUDIT_BACKUP")
+            if env_backup:
+                self.backup_file = env_backup
+            else:
+                # Create secure temp file in system temp directory
+                backup_dir = tempfile.gettempdir()
+                self.backup_file = os.path.join(backup_dir, "agentguard_audit.jsonl")
+                # Ensure temp directory exists with secure permissions
+                os.makedirs(backup_dir, mode=0o700, exist_ok=True)
         self.sign_every = sign_every
         self._write_lock = __import__("threading").RLock()
 
-        # État de santé de la persistance : une défaillance ne doit jamais être
-        # silencieuse pour un produit de sécurité.
-        #   AGENTGUARD_AUDIT_ON_FAILURE = "degrade" (défaut) : état AUDIT_DEGRADED,
-        #     compteur et log ERROR ; "block" : lève AuditPersistenceError.
+        # État de santé de la persistance
         self.degraded = False
         self.persist_failures = 0
         mode = os.getenv("AGENTGUARD_AUDIT_ON_FAILURE", "degrade").lower()
@@ -196,8 +204,7 @@ class ImmutableAuditLog:
             except Exception as e:
                 logger.warning("AuditLog signing unavailable: %s", e)
 
-        # Vérificateur (clé publique) : permet à verify_chain()
-        # de VÉRIFIER réellement les checkpoints signés.
+        # Vérificateur (clé publique)
         self._verifier = None
         verify_pem = verifying_key_pem or os.getenv("AGENTGUARD_SIGNING_PUBLIC_KEY")
         if verify_pem:
@@ -225,8 +232,12 @@ class ImmutableAuditLog:
                 conn = psycopg.connect(self.database_url)
                 conn.autocommit = True
                 with conn.cursor() as cur:
-                    cur.execute(f"""
-                        CREATE TABLE IF NOT EXISTS {self._TABLE} (
+                    # Use SQL composition for safe table name usage
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
+
+                    cur.execute(
+                        psycopg.sql.SQL("""
+                        CREATE TABLE IF NOT EXISTS {table} (
                             event_id TEXT PRIMARY KEY,
                             seq_no BIGSERIAL UNIQUE,
                             timestamp DOUBLE PRECISION NOT NULL,
@@ -242,19 +253,29 @@ class ImmutableAuditLog:
                             signature TEXT,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
-                    """)
-                    cur.execute(f"""
+                    """).format(table=table_identifier)
+                    )
+
+                    cur.execute(
+                        psycopg.sql.SQL("""
                         CREATE INDEX IF NOT EXISTS idx_audit_seq
-                        ON {self._TABLE}(seq_no)
-                    """)
-                    cur.execute(f"""
+                        ON {table}(seq_no)
+                    """).format(table=table_identifier)
+                    )
+
+                    cur.execute(
+                        psycopg.sql.SQL("""
                         CREATE INDEX IF NOT EXISTS idx_audit_org_time
-                        ON {self._TABLE}(org_id, timestamp DESC)
-                    """)
-                    cur.execute(f"""
+                        ON {table}(org_id, timestamp DESC)
+                    """).format(table=table_identifier)
+                    )
+
+                    cur.execute(
+                        psycopg.sql.SQL("""
                         CREATE INDEX IF NOT EXISTS idx_audit_type
-                        ON {self._TABLE}(event_type, timestamp DESC)
-                    """)
+                        ON {table}(event_type, timestamp DESC)
+                    """).format(table=table_identifier)
+                    )
                 conn.close()
                 logger.info("AuditLog Postgres storage initialized")
             except Exception as e:
@@ -266,7 +287,7 @@ class ImmutableAuditLog:
         # Backup file (toujours actif en parallèle)
         backup_dir = os.path.dirname(self.backup_file)
         if backup_dir and not os.path.exists(backup_dir):
-            os.makedirs(backup_dir, exist_ok=True)
+            os.makedirs(backup_dir, mode=0o700, exist_ok=True)
 
     def _get_last_hash(self) -> str:
         """Récupère le hash de la dernière entrée (pour chaînage)."""
@@ -274,16 +295,18 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
                     cur.execute(
-                        f"SELECT entry_hash FROM {self._TABLE} "
-                        "ORDER BY seq_no DESC LIMIT 1"
+                        psycopg.sql.SQL(
+                            "SELECT entry_hash FROM {table} ORDER BY seq_no DESC LIMIT 1"
+                        ).format(table=table_identifier)
                     )
                     row = cur.fetchone()
                 conn.close()
                 return row[0] if row else "GENESIS"
 
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("AuditLog _get_last_hash DB failed: %s", e)
 
         # Fallback fichier
         if os.path.exists(self.backup_file):
@@ -293,49 +316,42 @@ class ImmutableAuditLog:
                     if lines:
                         last = json.loads(lines[-1])
                         return last.get("entry_hash", "GENESIS")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("AuditLog _get_last_hash file fallback failed: %s", e)
 
         return "GENESIS"
 
     def _get_entry_count(self) -> int:
         """
         Compte d'entrées PERSISTÉ (DB d'abord, fichier ensuite).
-        Jamais un compteur RAM : il serait perdu au redémarrage et
-        fausserait la périodicité des checkpoints.
+        Jamais un compteur RAM : il serait perdu au redémarrage.
         """
         if self.database_url and PSYCOPG_AVAILABLE:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
-                    cur.execute(f"SELECT COUNT(*) FROM {self._TABLE}")
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
+                    cur.execute(
+                        psycopg.sql.SQL("SELECT COUNT(*) FROM {table}").format(
+                            table=table_identifier
+                        )
+                    )
                     n = cur.fetchone()[0]
                 conn.close()
                 return n
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("AuditLog _get_entry_count DB failed: %s", e)
         if os.path.exists(self.backup_file):
             try:
                 with open(self.backup_file, "r") as f:
                     return sum(1 for line in f if line.strip())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("AuditLog _get_entry_count file fallback failed: %s", e)
         return 0
 
     def _sign_checkpoint(self, entry: AuditEntry) -> None:
         """
         Signe l'état RÉEL de la chaîne au moment de cette entrée.
-
-        Le payload signé (compatible DecisionSigner.sign_decision) couvre :
-          - request_id  : l'event_id du checkpoint
-          - action      : "audit_checkpoint"
-          - policy_name : le head_hash (racine de la chaîne)
-          - policy_version : le nombre d'entrées de la chaîne
-          - reason      : human-readable
-
-        Vérifier cette signature = prouver que la chaîne avait
-        exactement ce head_hash et ce compte d'entrées à ce moment T.
-        Toute suppression d'entrées antérieures (truncation) casse la preuve.
         """
         if not self._signer:
             return
@@ -351,11 +367,8 @@ class ImmutableAuditLog:
                     f"head_hash={entry.entry_hash}"
                 ),
             },
-            # Preuve d'audit : doit rester vérifiable des mois/années plus tard.
             ttl=None,
         )
-        # On stocke le payload signé complet (avec signature + expiration)
-        # pour que verify_chain() puisse vérifier la signature.
         entry.signature = json.dumps(signed, sort_keys=True)
 
     def log_event(
@@ -405,7 +418,7 @@ class ImmutableAuditLog:
 
             entry.entry_hash = entry.compute_hash()
 
-            # Checkpoint périodique : déclenché sur le compte PERSISTÉ.
+            # Checkpoint périodique
             if (
                 self._signer
                 and self.sign_every > 0
@@ -414,7 +427,6 @@ class ImmutableAuditLog:
                 try:
                     self._sign_checkpoint(entry)
                 except Exception as exc:
-                    # Le checkpoint raté n'est pas fatal, mais visible
                     logger.warning("AuditLog checkpoint signing failed: %s", exc)
 
             self._persist(entry)
@@ -422,11 +434,7 @@ class ImmutableAuditLog:
         return entry
 
     def _persist(self, entry: AuditEntry):
-        """Persiste l'entrée dans Postgres ET backup file.
-
-        Si AUCUN stockage n'a enregistré l'événement, l'état AUDIT_DEGRADED est
-        positionné (et AuditPersistenceError levée en mode "block").
-        """
+        """Persiste l'entrée dans Postgres ET backup file."""
         pg_ok = False
         file_ok = False
         # Postgres
@@ -434,13 +442,14 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
                     cur.execute(
-                        f"""
-                        INSERT INTO {self._TABLE}
+                        psycopg.sql.SQL("""
+                        INSERT INTO {table}
                         (event_id, timestamp, event_type, org_id, actor, resource,
                          action, details, risk_level, prev_hash, entry_hash, signature)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    """).format(table=table_identifier),
                         (
                             entry.event_id,
                             entry.timestamp,
@@ -502,11 +511,8 @@ class ImmutableAuditLog:
 
     def verify_chain(self, limit: int | None = None) -> tuple:
         """
-        Vérifie l'intégrité de toute la chaîne : chaînage, hashs,
-        ET signatures de checkpoints (réellement vérifiées).
-
-        Retourne :
-            (is_valid: bool, report: dict)
+        Vérifie l'intégrité de toute la chaîne.
+        Retourne (is_valid: bool, report: dict)
         """
         entries = self._load_entries(limit=limit)
 
@@ -564,7 +570,7 @@ class ImmutableAuditLog:
                     }
                 )
 
-            # Vérifie RÉELLEMENT la signature de checkpoint si présente
+            # Vérifie la signature de checkpoint
             if entry.get("signature") and self._verifier:
                 try:
                     signed_payload = json.loads(entry["signature"])
@@ -581,10 +587,7 @@ class ImmutableAuditLog:
                     continue
 
                 try:
-                    # Pas d'expiration : une preuve d'audit ne "périme" pas.
                     if self._verifier.verify(signed_payload, check_expiry=False):
-                        # Cohérence : le head_hash signé doit être celui
-                        # de l'entrée checkpoint elle-même.
                         signed_head = str(
                             signed_payload.get("policy_name", "")
                         ).removeprefix("chain:")
@@ -627,20 +630,7 @@ class ImmutableAuditLog:
 
     def publish_anchor(self) -> dict:
         """
-        Ancre externe anti-truncation : journalise le head_hash dans un
-        système append-only INDÉPENDANT de la DB.
-
-        Sans ancre externe, un attaquant avec accès à la DB peut
-        supprimer les entrées postérieures au dernier checkpoint et
-        rejouer une chaîne "valide". La divergence entre l'ancre
-        publiée et la DB prouve la truncation.
-
-        Options gratuites pour publier (documente celle que tu choisis) :
-          - ce log WARNING ci-dessous, capturé par Loki/CloudWatch
-            (les logs cloud sont append-only et rétentions longues)
-          - un gist GitHub en écriture via API (l'historique de commits
-            est immuable et publiquement horodaté)
-          - un objet versionné dans un bucket S3
+        Ancre externe anti-truncation.
         """
         head = self._get_last_hash()
         count = self._get_entry_count()
@@ -649,14 +639,12 @@ class ImmutableAuditLog:
             "entry_count": count,
             "ts": time.time(),
         }
-        # Log append-only : simple, aucune dépendance. NE SUFFIT PAS à lui seul :
-        # il faut un sink indépendant (ci-dessous) pour prouver une troncature.
         logger.warning("AUDIT_ANCHOR %s", json.dumps(anchor, sort_keys=True))
 
         published = ["log"]
         line = json.dumps(anchor, sort_keys=True)
 
-        # Sink fichier append-only (monter un volume séparé / WORM / S3 FUSE).
+        # Sink fichier
         anchor_file = os.getenv("AGENTGUARD_AUDIT_ANCHOR_FILE")
         if anchor_file:
             try:
@@ -666,7 +654,7 @@ class ImmutableAuditLog:
             except Exception as e:
                 logger.error("AUDIT_ANCHOR file sink failed: %s", e)
 
-        # Sink HTTP (webhook vers un stockage indépendant de la base).
+        # Sink HTTP
         anchor_url = os.getenv("AGENTGUARD_AUDIT_ANCHOR_URL")
         if anchor_url:
             try:
@@ -698,9 +686,14 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-                    query = f"SELECT * FROM {self._TABLE} ORDER BY seq_no ASC"
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
+                    query = psycopg.sql.SQL(
+                        "SELECT * FROM {table} ORDER BY seq_no ASC"
+                    ).format(table=table_identifier)
                     if limit:
-                        query += f" LIMIT {int(limit)}"
+                        query = psycopg.sql.SQL("{query} LIMIT {limit}").format(
+                            query=query, limit=psycopg.sql.Literal(int(limit))
+                        )
                     cur.execute(query)
                     entries = [dict(row) for row in cur.fetchall()]
                 conn.close()
@@ -738,24 +731,36 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor() as cur:
-                    cur.execute(f"SELECT COUNT(*) FROM {self._TABLE}")
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
+
+                    cur.execute(
+                        psycopg.sql.SQL("SELECT COUNT(*) FROM {table}").format(
+                            table=table_identifier
+                        )
+                    )
                     stats["total_entries"] = cur.fetchone()[0]
 
-                    cur.execute(f"""
+                    cur.execute(
+                        psycopg.sql.SQL("""
                         SELECT event_type, COUNT(*)
-                        FROM {self._TABLE} GROUP BY event_type
-                    """)
+                        FROM {table} GROUP BY event_type
+                    """).format(table=table_identifier)
+                    )
                     stats["by_event_type"] = dict(cur.fetchall())
 
-                    cur.execute(f"""
+                    cur.execute(
+                        psycopg.sql.SQL("""
                         SELECT risk_level, COUNT(*)
-                        FROM {self._TABLE} GROUP BY risk_level
-                    """)
+                        FROM {table} GROUP BY risk_level
+                    """).format(table=table_identifier)
+                    )
                     stats["by_risk_level"] = dict(cur.fetchall())
 
-                    cur.execute(f"""
-                        SELECT MIN(timestamp), MAX(timestamp) FROM {self._TABLE}
-                    """)
+                    cur.execute(
+                        psycopg.sql.SQL("""
+                        SELECT MIN(timestamp), MAX(timestamp) FROM {table}
+                    """).format(table=table_identifier)
+                    )
                     row = cur.fetchone()
                     if row and row[0]:
                         stats["oldest_entry"] = datetime.fromtimestamp(
@@ -767,7 +772,7 @@ class ImmutableAuditLog:
                 conn.close()
             except Exception as e:
                 logger.warning("AuditLog stats failed: %s", e)
-        # Fallback SQLite / fichier (pour tests)
+        # Fallback fichier
         elif os.path.exists(self.backup_file):
             try:
                 entries = []
@@ -777,7 +782,8 @@ class ImmutableAuditLog:
                         if line:
                             try:
                                 entries.append(json.loads(line))
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("Failed to parse audit entry line: %s", e)
                                 continue
 
                 stats["total_entries"] = len(entries)
@@ -811,7 +817,7 @@ class ImmutableAuditLog:
             except Exception as e:
                 logger.warning("AuditLog file stats failed: %s", e)
 
-        # Vérification rapide (uniquement les 1000 dernières entrées)
+        # Vérification rapide
         try:
             is_valid, _ = self.verify_chain(limit=1000)
             stats["chain_intact"] = is_valid
@@ -834,31 +840,40 @@ class ImmutableAuditLog:
             try:
                 conn = psycopg.connect(self.database_url)
                 with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+                    table_identifier = psycopg.sql.Identifier(self._TABLE)
                     conditions = []
                     params = []
 
                     if org_id:
-                        conditions.append("org_id = %s")
+                        conditions.append(psycopg.sql.SQL("org_id = %s"))
                         params.append(org_id)
                     if event_type:
-                        conditions.append("event_type = %s")
+                        conditions.append(psycopg.sql.SQL("event_type = %s"))
                         params.append(event_type)
                     if risk_level:
-                        conditions.append("risk_level = %s")
+                        conditions.append(psycopg.sql.SQL("risk_level = %s"))
                         params.append(risk_level)
                     if since:
-                        conditions.append("timestamp >= %s")
+                        conditions.append(psycopg.sql.SQL("timestamp >= %s"))
                         params.append(since)
                     if until:
-                        conditions.append("timestamp <= %s")
+                        conditions.append(psycopg.sql.SQL("timestamp <= %s"))
                         params.append(until)
 
-                    query = f"SELECT * FROM {self._TABLE}"
+                    query_parts = [psycopg.sql.SQL("SELECT * FROM {table}")]
                     if conditions:
-                        query += " WHERE " + " AND ".join(conditions)
-                    query += " ORDER BY seq_no DESC LIMIT %s"
+                        query_parts.append(
+                            psycopg.sql.SQL(" WHERE ")
+                            + psycopg.sql.SQL(" AND ").join(conditions)
+                        )
+                    query_parts.append(
+                        psycopg.sql.SQL(" ORDER BY seq_no DESC LIMIT %s")
+                    )
                     params.append(limit)
 
+                    query = psycopg.sql.ComposedQuery(*query_parts).format(
+                        table=table_identifier
+                    )
                     cur.execute(query, params)
                     rows = [dict(r) for r in cur.fetchall()]
                 conn.close()

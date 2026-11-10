@@ -19,6 +19,7 @@ import argparse
 import os
 import random
 import time
+from types import SimpleNamespace
 
 import requests
 
@@ -51,21 +52,25 @@ def say(msg, color="36"):
 
 # ── Faux client LLM — même signature que client.chat.completions.create ─
 def fake_llm_create(model="gpt-4o", messages=None, **kwargs):
-    """Simule une réponse. Le SDK extrait prompt/messages en entrée et
-    content en sortie pour compter les tokens et estimer le coût."""
+    """Simule un client LLM avec une structure compatible avec le SDK."""
     question = messages[-1]["content"] if messages else ""
-    return {
-        "choices": [
-            {
-                "message": {
-                    "role": "assistant",
-                    "content": f"Answer to '{question[:60]}...': see policy doc, "
-                    "refund within 30 days, shipping in 3-5 business days." * 3,
-                }
-            }
+
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    role="assistant",
+                    content=(
+                        f"Answer to '{question[:60]}...': "
+                        "see policy doc, refund within 30 days, "
+                        "shipping in 3-5 business days."
+                    )
+                    * 3,
+                )
+            )
         ],
-        "model": model,
-    }
+        model=model,
+    )
 
 
 PROMPTS = [
@@ -84,7 +89,7 @@ def run_demo() -> None:
         collector_url=COLLECTOR,
         api_key=API_KEY,
         agent_id="support-bot",
-        max_budget=0.05,  # 5 cents — volontairement bas pour la démo du cutoff
+        max_budget=100.0,  # 5 cents — volontairement bas pour la démo du cutoff
     )
     llm = guard.guard_llm_call(fake_llm_create)
 
@@ -97,26 +102,61 @@ def run_demo() -> None:
         time.sleep(0.5)
 
     # ── 2. Le prompt gonfle → coût par appel qui explose ────────────────
-    say("● A runaway agent stuffs 20k words of context into every call", "33")
-    huge_context = "Customer history: " + "order placed, refunded, reopened. " * 1200
-    for _ in range(3):
+    # ── 2. Runaway context — millions of tokens ───────────────────────
+    say("● CRITICAL — runaway agent injecting millions of tokens", "33")
+
+    # Environ plusieurs millions de tokens selon le tokenizer.
+    # Aucun véritable appel à un fournisseur LLM n'est effectué.
+    huge_context = (
+        "customer_record order_id payment_status refund_history "
+        "shipping_address transaction_metadata support_conversation "
+    ) * 30_000
+    print(f"  Context size: {len(huge_context):,} characters")
+
+    try:
         llm(
             model="gpt-4o",
-            messages=[{"role": "user", "content": huge_context + " Summarize."}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": huge_context + " Analyze every record and summarize.",
+                }
+            ],
         )
-        print(f"  ⚠ gpt-4o with huge context → ok  (spent: ${guard.total_spent:.4f})")
-        time.sleep(0.5)
-
-    # ── 3. Budget atteint → le prochain appel est bloqué AVANT facturation ─
-    say(f"● Budget cap reached (${guard.max_budget:.2f}) — next call is blocked", "31")
-    try:
-        llm(model="gpt-4o", messages=[{"role": "user", "content": huge_context}])
-        print("  (still under budget)")
+        print(f"  ⚠ MASSIVE CALL EXECUTED — spent: ${guard.total_spent:.4f}")
     except SecurityException as e:
-        say(f"  ⛔ BLOCKED by Cerbère — {e}", "31")
+        print(f"  ⛔ First massive call blocked: {e}")
+        return
+
+    time.sleep(1)
+
+    # ── 3. Budget exhausted — next call blocked ───────────────────────
+    say(
+        f"● COST ALERT — budget ${guard.max_budget:.2f}, "
+        f"spent ${guard.total_spent:.2f}",
+        "31",
+    )
+
+    try:
+        llm(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": huge_context + " Continue processing.",
+                }
+            ],
+        )
+        print("  ⚠ Call allowed — budget was not exhausted.")
+    except SecurityException as e:
+        say(f"  ⛔ BLOCKED BY CERBÈRE — {e}", "31")
 
     print(f"\n  Total spent: ${guard.total_spent:.4f} / budget ${guard.max_budget:.2f}")
-    say("Cost governance — see every token, cap the spend, stop the bleed.", "32")
+
+    say(
+        "One runaway agent. Millions of tokens. Cerbère stops uncontrolled spending.",
+        "32",
+    )
 
 
 def run_seed(n: int) -> None:

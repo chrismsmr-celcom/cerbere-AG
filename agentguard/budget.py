@@ -9,11 +9,14 @@ Utilise Redis INCRBYFLOAT pour atomicité garantie.
 Fallback en mémoire si Redis indisponible (mode dev).
 """
 
+import json
+import logging
 import os
 import threading
 import time
 from dataclasses import dataclass
 
+logger = logging.getLogger("agentguard.budget")
 
 @dataclass
 class BudgetReservation:
@@ -27,7 +30,6 @@ class BudgetReservation:
     trace_id: str
     reconciled: bool = False
     actual_cost: float = 0.0
-
 
 class AtomicBudgetManager:
     """
@@ -76,7 +78,7 @@ class AtomicBudgetManager:
                 self._redis = redis.from_url(redis_url, socket_timeout=2.0)
                 self._redis.ping()
             except Exception as e:
-                print(f"[BudgetManager] Redis unavailable, using memory fallback: {e}")
+                logger.warning("[BudgetManager] Redis unavailable, using memory fallback: %s", e)
                 self._redis = None
 
     def _redis_key(self, org_id: str, scope: str = "session") -> str:
@@ -96,7 +98,8 @@ class AtomicBudgetManager:
             try:
                 val = self._redis.get(key)
                 return float(val) if val else 0.0
-            except Exception:
+            except Exception as e:
+                logger.debug("BudgetManager get_spent Redis error: %s", e)
                 return 0.0
         else:
             with self._memory_lock:
@@ -145,7 +148,7 @@ class AtomicBudgetManager:
                         self._redis.incrbyfloat(key, -estimated_cost)
                         return None
                 except Exception as e:
-                    print(f"[BudgetManager] Redis error during reserve: {e}")
+                    logger.warning("[BudgetManager] Redis error during reserve: %s", e)
                     # Fallback mémoire
                     return self._reserve_memory(
                         org_id, estimated_cost, trace_id, reservation_id
@@ -168,8 +171,6 @@ class AtomicBudgetManager:
 
         if self._redis:
             try:
-                import json
-
                 self._redis.setex(
                     self._reservation_key(reservation_id),
                     self.RESERVATION_TTL,
@@ -181,8 +182,8 @@ class AtomicBudgetManager:
                         }
                     ),
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("BudgetManager reservation storage error: %s", e)
         else:
             with self._memory_lock:
                 self._memory_reservations[reservation_id] = reservation
@@ -239,7 +240,7 @@ class AtomicBudgetManager:
                 # Supprime la réservation
                 self._redis.delete(self._reservation_key(reservation.reservation_id))
             except Exception as e:
-                print(f"[BudgetManager] Redis error during reconcile: {e}")
+                logger.warning("[BudgetManager] Redis error during reconcile: %s", e)
                 return False
         else:
             with self._memory_lock:
@@ -266,7 +267,7 @@ class AtomicBudgetManager:
                     self._redis.incrbyfloat(key, -reservation.amount_reserved)
                 self._redis.delete(self._reservation_key(reservation.reservation_id))
             except Exception as e:
-                print(f"[BudgetManager] Redis error during rollback: {e}")
+                logger.warning("[BudgetManager] Redis error during rollback: %s", e)
                 return False
         else:
             with self._memory_lock:
@@ -298,7 +299,6 @@ class AtomicBudgetManager:
             },
             "redis_available": self._redis is not None,
         }
-
 
 class BudgetExceededException(Exception):
     """Exception levée quand le budget est dépassé."""
