@@ -28,8 +28,9 @@ pytestmark = pytest.mark.skipif(
 def test_gateway_smoke(tmp_path):
     import asyncio
 
-    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+
+    from mcp import ClientSession, StdioServerParameters
 
     gateway_file = MCP_DIR / "gateway_server.py"
 
