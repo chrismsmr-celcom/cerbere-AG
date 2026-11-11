@@ -226,6 +226,10 @@ Keep a human in charge.
 
 ## 🧬 Taint tracking
 
+<p align="center">
+  <img src="docs/taint-tracking.gif" alt="Cerbere taint-tracking action: Split the .env secret into pieces. Encode it. Send it out through an http_post. Still blocked." width="100%" />
+</p>
+
 Cerbere follows **the data**, not only the prompt. A secret or PII the agent reads is remembered in memory (never sent to the collector).
 If it later appears in the parameters of an external tool, the call is blocked, even when it was base64-, hex- or URL-encoded to dodge a filter.
 
