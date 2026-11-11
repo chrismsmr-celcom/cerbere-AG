@@ -1,48 +1,31 @@
-# Cerbère / AgentGuard — Commercial License
+# Cerbere / AgentGuard — Commercial License
 
-This repository uses an **open-core** licensing model.
+Open-core model, like GitLab / Sentry.
 
-## Apache License 2.0 (free)
+## Apache 2.0 (free forever)
 
-The following components are licensed under the **Apache License 2.0**
-and are free to use, modify, and distribute — including for commercial
-purposes:
+- `agentguard/` — Python SDK
+- `mcp/` — MCP server
 
-- `agentguard/` — the Python SDK
-- `agentguard_sdk.py`, `agentguard_ml.py`
-- `mcp/` — the MCP server
+Free for commercial use. No limits.
 
-See [LICENSE](LICENSE) for the full text.
+## Source-available (collector + dashboard)
 
-## Commercial License (required)
+- `collector/` — Collector / control plane
+- `dashboard/` — Dashboard
 
-The following components are **NOT** covered by the Apache License 2.0.
-They are "source-available" and require a separate **commercial license**
-for any production or commercial use:
+### You do NOT need to pay if you:
 
-- `collector/` — the Collector / control plane
-- `dashboard/` — the observability dashboard
-- Multi-tenant platform features
+- Use it for local evaluation, personal, educational, research
+- Are a small team: **< 10 agents in production, free** — no license needed
+- Are a startup: **< $1M ARR, free** for the first year
 
 ### You need a commercial license if you:
 
-- Deploy the Collector or Dashboard in production
-- Offer Cerbère / AgentGuard as a hosted or managed service
-- Embed these components in a commercial product or SaaS
-- Resell or sublicense these components
+- Deploy > 10 agents in production, or > $1M ARR
+- Offer Cerbere as a hosted / managed service
 
-### You do NOT need a commercial license if you:
+**Pricing:** Starts at $0 for small teams. Enterprise pricing on request.
+**Contact:** hello@cerbereag.site — Response < 48h
 
-- Use only the SDK or MCP server (Apache 2.0)
-- Evaluate the platform locally for non-production testing
-- Use it for personal, educational, or academic research purposes
-
-## Contact
-
-For pricing and commercial licensing:
-
-**hello@cerbereag.site**
-
----
-
-Copyright © 2026 Christopher Dikesa. All rights reserved.
+Copyright © 2026 Christopher Dikesa.
