@@ -394,7 +394,7 @@ Cerbere uses an **open-core** model.
 | SDK and MCP server | `agentguard/`, `agentguard_sdk.py`, `mcp/` | **Apache 2.0**: free for commercial and non-commercial use ([LICENSE](LICENSE)) |
 | Collector, dashboard and multi-tenant platform | `collector/`, `dashboard/` | **Source-available**, under the terms of [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) |
 
-Commercial licensing: **contact@cerbereag.site**
+Commercial licensing: **hello@cerbereag.site**
 
 If you reference Cerbere in research or documentation, please credit *Cerbere / AgentGuard, created by Christopher Dikesa*.
 
