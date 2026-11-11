@@ -72,6 +72,8 @@ class PolicyRule:
 
     allow_unknown_tools: bool = False
 
+    deny_confidential_external_side_effect: bool = True
+
 
 @dataclass
 class DecisionRequest:
@@ -342,6 +344,22 @@ class DecisionEngine:
                 request,
             )
 
+        if (
+            policy.deny_confidential_external_side_effect
+            and taint == "CONFIDENTIAL"
+            and request.external_side_effect
+        ):
+            return self._result(
+                Decision.BLOCK,
+                100,
+                "critical",
+                ["CONFIDENTIAL data cannot reach an external side-effect"],
+                [DecisionReason.TAINT.value],
+                policy,
+                {"taint_risk": 100.0},
+                request,
+            )
+
         # ---------------------------------------------------------
         # 6. Risk calculation
         # ---------------------------------------------------------
@@ -367,28 +385,8 @@ class DecisionEngine:
         if risk.reasons:
             reason_codes.append(DecisionReason.RISK.value)
 
-        # ---------------------------------------------------------
-        # 7. Explicit approval policy
-        # ---------------------------------------------------------
-
-        if request.tool_name in policy.require_approval_for:
-            reasons.append(f"Tool '{request.tool_name}' requires human approval")
-
-            reason_codes.append(DecisionReason.APPROVAL.value)
-
-            return self._result(
-                Decision.REQUIRE_APPROVAL,
-                max(risk.score, 60),
-                "high",
-                reasons,
-                reason_codes,
-                policy,
-                risk.factors,
-                request,
-            )
-
-        # ---------------------------------------------------------
-        # 8. Risk-based BLOCK
+            # ---------------------------------------------------------
+        # 7. Risk-based BLOCK
         # ---------------------------------------------------------
 
         if risk.score >= policy.block_risk_score:
@@ -403,6 +401,26 @@ class DecisionEngine:
                 Decision.BLOCK,
                 risk.score,
                 risk.level.value,
+                reasons,
+                reason_codes,
+                policy,
+                risk.factors,
+                request,
+            )
+
+        # ---------------------------------------------------------
+        # 8. Explicit approval policy
+        # ---------------------------------------------------------
+
+        if request.tool_name in policy.require_approval_for:
+            reasons.append(f"Tool '{request.tool_name}' requires human approval")
+
+            reason_codes.append(DecisionReason.APPROVAL.value)
+
+            return self._result(
+                Decision.REQUIRE_APPROVAL,
+                max(risk.score, 60),
+                "high",
                 reasons,
                 reason_codes,
                 policy,
@@ -429,7 +447,6 @@ class DecisionEngine:
                 risk.factors,
                 request,
             )
-
         # ---------------------------------------------------------
         # 10. Allow
         # ---------------------------------------------------------

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("agentguard.budget")
 
+
 @dataclass
 class BudgetReservation:
     """Réservation de budget atomique."""
@@ -30,6 +31,7 @@ class BudgetReservation:
     trace_id: str
     reconciled: bool = False
     actual_cost: float = 0.0
+
 
 class AtomicBudgetManager:
     """
@@ -78,7 +80,9 @@ class AtomicBudgetManager:
                 self._redis = redis.from_url(redis_url, socket_timeout=2.0)
                 self._redis.ping()
             except Exception as e:
-                logger.warning("[BudgetManager] Redis unavailable, using memory fallback: %s", e)
+                logger.warning(
+                    "[BudgetManager] Redis unavailable, using memory fallback: %s", e
+                )
                 self._redis = None
 
     def _redis_key(self, org_id: str, scope: str = "session") -> str:
@@ -299,6 +303,7 @@ class AtomicBudgetManager:
             },
             "redis_available": self._redis is not None,
         }
+
 
 class BudgetExceededException(Exception):
     """Exception levée quand le budget est dépassé."""

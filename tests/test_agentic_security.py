@@ -1,12 +1,8 @@
 from agentguard.tool_guard import ToolGuard, ToolPolicy, ToolRequest
-from agentguard.trajectory import (
-    TrajectoryAnalyzer,
-    TrajectoryEvent,
-)
+from agentguard.trajectory import TrajectoryAnalyzer, TrajectoryEvent
 
 
 def test_unknown_tool_is_denied():
-
     guard = ToolGuard([])
 
     result = guard.authorize(
@@ -22,7 +18,6 @@ def test_unknown_tool_is_denied():
 
 
 def test_identity_cannot_use_unauthorized_tool():
-
     guard = ToolGuard(
         [
             ToolPolicy(
@@ -46,7 +41,6 @@ def test_identity_cannot_use_unauthorized_tool():
 
 
 def test_malicious_data_cannot_reach_tool():
-
     guard = ToolGuard(
         [
             ToolPolicy(
@@ -72,7 +66,32 @@ def test_malicious_data_cannot_reach_tool():
 
 
 def test_sensitive_external_action_requires_review():
+    guard = ToolGuard(
+        [
+            ToolPolicy(
+                name="send_email",
+                category="email",
+                allowed_identities={"support-agent"},
+                external_side_effect=True,
+                require_approval=True,
+            )
+        ]
+    )
 
+    result = guard.authorize(
+        ToolRequest(
+            tool_name="send_email",
+            identity="support-agent",
+            arguments={"body": "Please review this external email."},
+            taint_level="PUBLIC",
+        )
+    )
+
+    assert result.allowed is False
+    assert result.decision == "require_approval"
+
+
+def test_confidential_data_cannot_be_sent_externally():
     guard = ToolGuard(
         [
             ToolPolicy(
@@ -95,11 +114,10 @@ def test_sensitive_external_action_requires_review():
     )
 
     assert result.allowed is False
-    assert result.decision == "require_approval"
+    assert result.decision == "block"
 
 
 def test_trajectory_detects_exfiltration_pattern():
-
     trajectory = TrajectoryAnalyzer()
 
     trajectory.add(
