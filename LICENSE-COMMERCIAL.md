@@ -41,7 +41,7 @@ for any production or commercial use:
 
 For pricing and commercial licensing:
 
-**contact@cerbereag.site**
+**hello@cerbereag.site**
 
 ---
 
