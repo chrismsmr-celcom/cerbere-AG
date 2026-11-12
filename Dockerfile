@@ -8,7 +8,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Builder — Installation des dépendances Python
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.15-slim AS builder
 
 WORKDIR /build
 
@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime — Image minimale et sécurisée
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 LABEL maintainer="Christopher Dikesa <chris@agentguard.dev>"
 LABEL org.opencontainers.image.title="AgentGuard"
