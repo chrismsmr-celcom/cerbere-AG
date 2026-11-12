@@ -31,7 +31,7 @@ jobs:
 
       # Generate a complete HIGH and CRITICAL vulnerability report.
       - name: Trivy report (HIGH, CRITICAL)
-        uses: aquasecurity/trivy-action@v0.27.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: cerbere:scan
           format: sarif
@@ -50,7 +50,7 @@ jobs:
 
       # Block the pipeline only for fixable CRITICAL vulnerabilities.
       - name: Trivy gate (fixable CRITICAL only)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: cerbere:scan
           format: sarif
@@ -60,7 +60,7 @@ jobs:
           exit-code: "0"
          
       - name: Trivy gate (fixable CRITICAL only)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: cerbere:scan
           format: table
