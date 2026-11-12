@@ -50,7 +50,17 @@ jobs:
 
       # Block the pipeline only for fixable CRITICAL vulnerabilities.
       - name: Trivy gate (fixable CRITICAL only)
-        uses: aquasecurity/trivy-action@v0.27.0
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cerbere:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+         
+      - name: Trivy gate (fixable CRITICAL only)
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: cerbere:scan
           format: table
