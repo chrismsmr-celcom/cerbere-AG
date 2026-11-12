@@ -28,7 +28,7 @@ jobs:
 
       # Rapport complet (HIGH + CRITICAL), non bloquant : visible dans l'onglet Security.
       - name: Trivy report (HIGH, CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.27.0  # ✅ Version corrigée
         with:
           image-ref: cerbere:scan
           format: sarif
@@ -46,7 +46,7 @@ jobs:
 
       # Garde-fou : bloque uniquement les CRITICAL pour lesquelles un correctif existe.
       - name: Trivy gate (fixable CRITICAL only)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.27.0  # ✅ Version corrigée
         with:
           image-ref: cerbere:scan
           format: table
