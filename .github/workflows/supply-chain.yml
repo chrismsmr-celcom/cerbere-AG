@@ -46,7 +46,7 @@ jobs:
 
       # Garde-fou : bloque uniquement les CRITICAL pour lesquelles un correctif existe.
       - name: Trivy gate (fixable CRITICAL only)
-        uses: aquasecurity/trivy-action@0.27.0  # ✅ Version corrigée
+        uses: aquasecurity/trivy-action@v0.27.0  # ✅ CORRIGÉ : v0.27.0 au lieu de 0.27.0
         with:
           image-ref: cerbere:scan
           format: table
