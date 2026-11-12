@@ -21,7 +21,7 @@ jobs:
             echo "Tag ${GITHUB_REF_NAME} != version ${PKG} (agentguard/_version.py)"; exit 1
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
