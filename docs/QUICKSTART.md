@@ -51,7 +51,7 @@ Wrap the functions your agent uses with the decorators. Each call is inspected a
 from agentguard import AgentGuard
 
 guard = AgentGuard(
-    collector_url="http://localhost:8080",   # your collector (see section 3)
+    collector_url="http://localhost:8080",  # your collector (see section 3)
     api_key="ag-your-key",
     agent_id="my-agent",
 )
