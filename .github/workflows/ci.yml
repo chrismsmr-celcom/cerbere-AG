@@ -181,8 +181,9 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
           pip install pytest pytest-cov wrapt
-          pip install opentelemetry cffi cryptography==42.0.0
-
+          pip install opentelemetry-api opentelemetry-sdk cffi cryptography==42.0.0
+          pip install -r requirements.txt
+          
       - name: Run Pytest with coverage
         shell: bash
         run: |
