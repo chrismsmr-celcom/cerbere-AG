@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # création de la release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches package version
+        run: |
+          PKG=$(python3 -c "import re;print(re.search(r'__version__\s*=\s*\"([^\"]+)\"',open('agentguard/_version.py').read()).group(1))")
+          if [ "v${PKG}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} != version ${PKG} (agentguard/_version.py)"; exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate SBOM
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py requirements requirements.txt --of JSON -o sbom.cdx.json
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          awk -v hdr="## [$VER]" 'index($0,hdr)==1{f=1;next} /^## \[/{f=0} /^\[[^]]+\]: /{f=0} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md." > notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" sbom.cdx.json \
+            --title "Cerbere ${GITHUB_REF_NAME}" --notes-file notes.md

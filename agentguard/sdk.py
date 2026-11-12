@@ -22,6 +22,7 @@ from .ids import uuid7
 # Protège seulement la création des threads d'E/S ; partagé entre instances,
 # jamais tenu pendant un appel réseau.
 _BG_LOCK = threading.Lock()
+from ._version import __version__
 from .masking import SpanMasker
 from .models import (
     AgentDisconnectedException,
@@ -43,7 +44,7 @@ from .vault import IncidentVault
 
 logger = structlog.get_logger("agentguard.sdk")
 
-SDK_VERSION = "0.6.2"
+SDK_VERSION = __version__
 
 _ENCODING_CACHE: dict[str, Any] = {}
 

@@ -82,7 +82,7 @@ pip install cerbere-ag
 ```
 
 ```python
-from agentguard import AgentGuard   # the Python module keeps its historical name
+from agentguard import AgentGuard  # the Python module keeps its historical name
 
 guard = AgentGuard(
     collector_url="http://localhost:8080",

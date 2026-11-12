@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, jsonify
 
+from agentguard._version import __version__
 from collector.api.helpers import api_bp
 
 
@@ -39,7 +40,7 @@ def health_check():
         {
             "status": "healthy" if is_healthy else "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "version": "0.2.1",
+            "version": __version__,
             "checks": checks,
         }
     ), status_code

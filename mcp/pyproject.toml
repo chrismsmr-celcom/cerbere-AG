@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "CerbereAG MCP: advisory security server (prompt injection, PII redaction, tool authorization) plus the universal MCP gateway — one guarded door for any agent to any MCP server."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "Apache-2.0"
 authors = [
   { name = "Christopher Dikesa" }
 ]
