@@ -7,9 +7,10 @@ These components are free for all use cases, including commercial use:
 
 agentguard/ — Python SDK (taint tracking, tool guards, LLM guards)
 mcp/ — MCP Server & Gateway (enforce security for any MCP server)
-🔹 No agent limits | 🔹 No feature restrictions | 🔹 No hidden costs
+No agent limits |  No feature restrictions |  No hidden costs
 
- Collector + Dashboard — Source-Available
+# Collector + Dashboard — Source-Available
+
 These components are source-available under LICENSE-COMMERCIAL.md.
 You do NOT need a license for:
 
