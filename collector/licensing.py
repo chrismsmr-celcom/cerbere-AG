@@ -76,7 +76,7 @@ PLAN_ORDER = [COMMUNITY, PRO, TEAM, ENTERPRISE]
 FEATURES: dict[str, str] = {
     "sso_oidc": TEAM,  # en vigueur : bouton SSO d'entreprise (collector/auth/oidc.py)
     "extended_retention": PRO,  # prévu : rétention et export longs des journaux d'audit
-    "compliance_reports": TEAM,  # prévu : rapport de conformité PDF
+    "compliance_reports": TEAM,  # en vigueur : rapport de conformité PDF (collector/compliance_report.py)
     "siem_export": TEAM,  # prévu : export Splunk / Datadog / syslog
     "multi_workspace": TEAM,  # prévu : plusieurs workspaces par instance
 }

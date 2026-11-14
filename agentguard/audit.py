@@ -27,7 +27,7 @@ import os
 import tempfile
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -86,6 +86,9 @@ class AuditEventType(str, Enum):
 
     # Ancrage de la hash-chain
     AUDIT_CHECKPOINT = "audit_checkpoint"
+
+    # Preuves de conformité : générer un rapport est lui-même auditable
+    COMPLIANCE_REPORT_GENERATED = "compliance_report_generated"
 
     # Opérations
     LLM_CALL = "llm_call"
@@ -511,27 +514,48 @@ class ImmutableAuditLog:
 
     def verify_chain(self, limit: int | None = None) -> tuple:
         """
-        Vérifie l'intégrité de toute la chaîne.
+        Vérifie l'intégrité de la chaîne : chaînage, hashs et signatures de checkpoints.
+
+        Attention : avec `limit`, seules les `limit` PREMIÈRES entrées (les plus
+        anciennes) sont lues. Pour couvrir toute la chaîne, y compris les entrées
+        récentes, utiliser `verify_chain_full()`.
+
         Retourne (is_valid: bool, report: dict)
         """
-        entries = self._load_entries(limit=limit)
+        return self._verify_iter(iter(self._load_entries(limit=limit)))
 
-        if not entries:
-            return True, {"status": "empty", "entries_checked": 0}
+    def verify_chain_full(self) -> tuple:
+        """Vérifie TOUTE la chaîne, de la première à la dernière entrée, en flux.
 
-        report = {
-            "entries_checked": 0,
-            "first_entry": entries[0]["event_id"],
-            "last_entry": entries[-1]["event_id"],
-            "violations": [],
-            "signatures_verified": 0,
-            "signatures_failed": 0,
-        }
+        Ne charge pas la table entière en mémoire (curseur côté serveur par lots).
+        Si la lecture s'interrompt en cours de route, l'exception est propagée :
+        une vérification incomplète n'est jamais présentée comme valide.
+        """
+        return self._verify_iter(self._stream_entries())
 
+    def _verify_iter(self, entries) -> tuple:
+        report = None
         prev_hash = "GENESIS"
 
         for i, entry in enumerate(entries):
+            if report is None:
+                report = {
+                    "entries_checked": 0,
+                    "first_entry": entry.get("event_id"),
+                    "last_entry": entry.get("event_id"),
+                    "violations": [],
+                    "signatures_verified": 0,
+                    "signatures_failed": 0,
+                }
             report["entries_checked"] += 1
+            report["last_entry"] = entry.get("event_id")
+
+            # Ligne illisible dans le fichier de secours : preuve de corruption.
+            if "__unreadable__" in entry:
+                report["violations"].append(
+                    {"type": "unreadable_entry", "line": entry["__unreadable__"]}
+                )
+                continue
 
             # Vérifie chaînage
             if entry.get("prev_hash") != prev_hash:
@@ -622,6 +646,9 @@ class ImmutableAuditLog:
                     )
 
             prev_hash = entry.get("entry_hash")
+
+        if report is None:
+            return True, {"status": "empty", "entries_checked": 0}
 
         is_valid = len(report["violations"]) == 0
         report["status"] = "valid" if is_valid else "tampered"
@@ -715,6 +742,182 @@ class ImmutableAuditLog:
                 logger.warning("AuditLog file load failed: %s", e)
 
         return entries
+
+    def _stream_entries(self, batch: int = 5000):
+        """Parcourt toutes les entrées dans l'ordre de la chaîne, sans tout charger."""
+        if self.database_url and PSYCOPG_AVAILABLE:
+            yielded = False
+            conn = None
+            try:
+                conn = psycopg.connect(self.database_url)
+                table_identifier = psycopg.sql.Identifier(self._TABLE)
+                with conn.cursor(
+                    name="audit_stream", row_factory=psycopg.rows.dict_row
+                ) as cur:
+                    cur.itersize = batch
+                    cur.execute(
+                        psycopg.sql.SQL(
+                            "SELECT * FROM {table} ORDER BY seq_no ASC"
+                        ).format(table=table_identifier)
+                    )
+                    for row in cur:
+                        yielded = True
+                        yield dict(row)
+                return
+            except Exception as e:
+                if yielded:
+                    # En cours de route : ne jamais basculer sur le fichier (mélange de sources).
+                    raise
+                logger.warning("AuditLog Postgres stream failed: %s", e)
+            finally:
+                if conn is not None:
+                    conn.close()
+
+        if os.path.exists(self.backup_file):
+            with open(self.backup_file, "r") as f:
+                for line_no, line in enumerate(f, start=1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        yield json.loads(line)
+                    except ValueError:
+                        yield {"__unreadable__": line_no}
+
+    def chain_summary(self) -> dict[str, Any]:
+        """Tête de la chaîne et dernier checkpoint signé (valeurs non sensibles)."""
+        summary: dict[str, Any] = {"head_hash": None, "last_checkpoint": None}
+        if self.database_url and PSYCOPG_AVAILABLE:
+            conn = None
+            try:
+                conn = psycopg.connect(self.database_url)
+                table_identifier = psycopg.sql.Identifier(self._TABLE)
+                with conn.cursor() as cur:
+                    cur.execute(
+                        psycopg.sql.SQL(
+                            "SELECT entry_hash FROM {table} ORDER BY seq_no DESC LIMIT 1"
+                        ).format(table=table_identifier)
+                    )
+                    row = cur.fetchone()
+                    summary["head_hash"] = row[0] if row else None
+                    # Un checkpoint est une entrée ordinaire qui porte une signature.
+                    cur.execute(
+                        psycopg.sql.SQL(
+                            "SELECT timestamp, entry_hash FROM {table} "
+                            "WHERE signature IS NOT NULL ORDER BY seq_no DESC LIMIT 1"
+                        ).format(table=table_identifier)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        summary["last_checkpoint"] = {
+                            "timestamp": row[0],
+                            "entry_hash": row[1],
+                        }
+                return summary
+            except Exception as e:
+                logger.warning("AuditLog chain summary failed: %s", e)
+            finally:
+                if conn is not None:
+                    conn.close()
+        for entry in self._stream_entries():
+            if "__unreadable__" in entry:
+                continue
+            summary["head_hash"] = entry.get("entry_hash")
+            if entry.get("signature"):
+                summary["last_checkpoint"] = {
+                    "timestamp": entry.get("timestamp"),
+                    "entry_hash": entry.get("entry_hash"),
+                }
+        return summary
+
+    def aggregate_org(
+        self,
+        org_id: str,
+        since: float,
+        until: float,
+        actor_event_types: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Compteurs d'une organisation sur [since, until[ (secondes epoch, UTC).
+
+        Retourne : total, by_type, by_risk, by_type_risk, by_day (jour UTC -> type -> n)
+        et by_actor (acteur -> n) limité aux `actor_event_types`. Aucun contenu
+        d'événement (`details`) n'est lu.
+        """
+        actor_types = list(actor_event_types or [])
+        result: dict[str, Any] = {
+            "total": 0,
+            "by_type": {},
+            "by_risk": {},
+            "by_type_risk": {},
+            "by_day": {},
+            "by_actor": {},
+        }
+
+        def add(event_type, risk, day, actor, n=1):
+            risk = risk or "info"
+            result["total"] += n
+            result["by_type"][event_type] = result["by_type"].get(event_type, 0) + n
+            result["by_risk"][risk] = result["by_risk"].get(risk, 0) + n
+            per_risk = result["by_type_risk"].setdefault(event_type, {})
+            per_risk[risk] = per_risk.get(risk, 0) + n
+            per_day = result["by_day"].setdefault(day, {})
+            per_day[event_type] = per_day.get(event_type, 0) + n
+            if event_type in actor_types and actor:
+                result["by_actor"][actor] = result["by_actor"].get(actor, 0) + n
+
+        if self.database_url and PSYCOPG_AVAILABLE:
+            conn = None
+            try:
+                conn = psycopg.connect(self.database_url)
+                table_identifier = psycopg.sql.Identifier(self._TABLE)
+                with conn.cursor() as cur:
+                    cur.execute(
+                        psycopg.sql.SQL("""
+                        SELECT event_type, COALESCE(risk_level, 'info'),
+                               to_char(to_timestamp(timestamp) AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+                               COUNT(*)
+                        FROM {table}
+                        WHERE org_id = %s AND timestamp >= %s AND timestamp < %s
+                        GROUP BY 1, 2, 3
+                        """).format(table=table_identifier),
+                        (org_id, since, until),
+                    )
+                    for event_type, risk, day, n in cur.fetchall():
+                        add(event_type, risk, day, None, n)
+                    if actor_types:
+                        cur.execute(
+                            psycopg.sql.SQL("""
+                            SELECT actor, COUNT(*) FROM {table}
+                            WHERE org_id = %s AND timestamp >= %s AND timestamp < %s
+                              AND event_type = ANY(%s)
+                            GROUP BY actor
+                            """).format(table=table_identifier),
+                            (org_id, since, until, actor_types),
+                        )
+                        for actor, n in cur.fetchall():
+                            result["by_actor"][actor] = n
+                return result
+            except Exception as e:
+                logger.warning("AuditLog aggregate failed: %s", e)
+                return result
+            finally:
+                if conn is not None:
+                    conn.close()
+
+        for entry in self._stream_entries():
+            if entry.get("org_id") != org_id or "__unreadable__" in entry:
+                continue
+            ts = entry.get("timestamp") or 0
+            if not (since <= ts < until):
+                continue
+            day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+            add(
+                entry.get("event_type", "unknown"),
+                entry.get("risk_level"),
+                day,
+                entry.get("actor"),
+            )
+        return result
 
     def get_stats(self) -> dict[str, Any]:
         """Statistiques de l'audit log."""

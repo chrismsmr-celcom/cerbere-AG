@@ -6,6 +6,7 @@ Usage :
     python -m collector.cli list-users
     python -m collector.cli migrate [--status]
     python -m collector.cli license status | install <file|->
+    python -m collector.cli report [--period YYYY-MM] [--org ID] [--format pdf|json] [--out FILE]
 
 Le mot de passe est demandé de façon interactive (jamais en argument, pour
 ne pas finir dans l'historique du shell). Pour l'automatisation, utiliser
@@ -160,6 +161,57 @@ def cmd_license_install(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    import json
+
+    from collector import compliance_report as report
+    from collector import licensing
+    from collector.audit_routes import get_audit_log
+    from collector.auth.users import _db_execute
+
+    if not licensing.has_feature("compliance_reports"):
+        print(
+            "Error: compliance reports are part of the Team and Enterprise plans. "
+            "Install a license with `license install`.",
+            file=sys.stderr,
+        )
+        return 1
+    _init_database()
+
+    org_id = args.org
+    if not org_id:
+        rows = _db_execute("SELECT org_id FROM orgs LIMIT 2", fetchall=True)
+        if len(rows) != 1:
+            print(
+                "Error: several organizations exist, pass --org <org_id>.",
+                file=sys.stderr,
+            )
+            return 1
+        org_id = rows[0][0]
+
+    try:
+        period = report.parse_period(args.period, args.date_from, args.date_to)
+    except report.PeriodError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    audit = get_audit_log()
+    data = report.build_report_data(org_id, period, audit=audit)
+    report.record_generation(audit, org_id, "cli", data)
+
+    out = args.out or f"cerbere-compliance-{data['period']['label']}.{args.format}"
+    if args.format == "json":
+        with open(out, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+    else:
+        with open(out, "wb") as handle:
+            handle.write(report.render_pdf(data))
+    status = data["integrity"]["status"]
+    print(f"Report {data['report_id']} written to {out} (audit chain: {status}).")
+    # Code de sortie distinct pour l'automatisation (cron) : le rapport est écrit, mais l'audit est suspect.
+    return 2 if status == "failed" else 0
+
+
 def cmd_list_users(_args) -> int:
     from collector.auth.users import _db_execute
 
@@ -211,6 +263,19 @@ def build_parser() -> argparse.ArgumentParser:
     q = lic_sub.add_parser("install", help="Verify and install a license key")
     q.add_argument("file", help="File holding the license key, or - for stdin")
     q.set_defaults(func=cmd_license_install)
+
+    p = sub.add_parser(
+        "report", help="Generate the compliance report (Team and Enterprise)"
+    )
+    p.add_argument(
+        "--org", help="Organization id (optional if the instance has only one)"
+    )
+    p.add_argument("--period", help="Calendar month, YYYY-MM (default: previous month)")
+    p.add_argument("--from", dest="date_from", help="Start date YYYY-MM-DD (with --to)")
+    p.add_argument("--to", dest="date_to", help="End date YYYY-MM-DD, inclusive")
+    p.add_argument("--format", choices=["pdf", "json"], default="pdf")
+    p.add_argument("--out", help="Output file")
+    p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("list-users", help="List users")
     p.set_defaults(func=cmd_list_users)

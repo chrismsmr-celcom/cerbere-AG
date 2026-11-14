@@ -7,7 +7,8 @@
 **Open core: the collector exists for everyone, paid plans add what teams and companies need.**
 
 - **Community (free)**: the complete collector and dashboard, all detection layers, human approvals, audit log,
-  API keys, alerts, password sign-in. No agent cap, no data limit, no time limit. This is what gets Cerbere adopted.
+  API keys, alerts, password sign-in. It is free within the limits of `LICENSE-COMMERCIAL.md` (see "Open decision" below).
+  This is what gets Cerbere adopted.
 - **Pro / Team / Enterprise**: a signed license key unlocks extra capabilities and comes with support.
 
 Principles that make this credible to customers and investors:
@@ -27,18 +28,19 @@ Prices are starting hypotheses to test with 3 or 4 prospects, not validated numb
 |---|---|---|---|---|
 | Price | Free | $199/mo ($1,990/yr) | $599/mo ($5,990/yr) | from $2,500/mo (~$30,000/yr), by quote |
 | Full collector + dashboard, detection, approvals, audit log, alerts | ✔ | ✔ | ✔ | ✔ |
-| Agents / data volume | no cap | no cap | no cap | no cap |
+| Agents in production | fewer than 10 *(per `LICENSE-COMMERCIAL.md`, see "Open decision")* | no limit | no limit | no limit |
 | Support | community (GitHub) | email, 72 h | email, 48 h | contractual SLA, dedicated channel |
 | **Company SSO (OIDC)** | – | – | ✔ *available now* | ✔ *available now* |
 | Extended audit retention and export | – | ✔ *planned* | ✔ *planned* | ✔ *planned* |
-| Compliance report (PDF) | – | – | ✔ *planned* | ✔ *planned* |
+| **Compliance report (PDF)** | – | – | ✔ *available now* | ✔ *available now* |
 | SIEM export (Splunk, Datadog, syslog) | – | – | ✔ *planned* | ✔ *planned* |
 | Multiple workspaces | – | – | ✔ *planned* | ✔ *planned* |
 | SAML bridge assistance, custom policies, air-gapped install, DPA, security review | – | – | – | ✔ (services and contract) |
 
-**Rule: only list as available what exists.** Today only company SSO is enforced by the code
-(`FEATURES` in `collector/licensing.py`). The *planned* rows are where Pro and Team earn their price, so build them
-in this order of value per effort: **compliance report → SIEM export → extended retention → multi-workspace**.
+**Rule: only list as available what exists.** Today two Team features are enforced by the code
+(`FEATURES` in `collector/licensing.py`): **company SSO** and the **compliance report**. The *planned* rows are where
+Pro and Team still have to earn their price. Suggested order of value per effort:
+**SIEM export -> extended retention -> multi-workspace**.
 Until retention/export exist, sell Pro honestly as "supported plan".
 
 The hosted cloud keeps its own usage-based plans (Free / Pro / Team / Enterprise) and is unaffected by license keys.
@@ -86,17 +88,37 @@ Trials are your best sales tool: a 30-day Team key lets a prospect try SSO with 
 **Key rotation**: generate a second pair with `--kid k2`, add it to `PUBLIC_KEYS` next to `k1`, sign new licenses with it.
 Existing `k1` licenses keep working.
 
+## Open decision: how free is Community?
+
+Two documents currently say different things, and they must be aligned before you announce anything.
+
+- **`LICENSE-COMMERCIAL.md` (what is published today)**: the collector and dashboard are free for evaluation, personal,
+  educational and research use, for teams with fewer than 10 agents in production, and for startups under $1M ARR
+  during their first year. A commercial license is required beyond that, or to offer Cerbere as a hosted or managed service.
+- **The model you described to me**: the collector exists for everyone without limits, and paid plans add what makes
+  the experience professional (SSO, compliance, integrations, support).
+
+| | **A. Free below a size** (the text today) | **B. Free for everyone, paid for features** |
+|---|---|---|
+| Adoption | good for small teams, a barrier for bigger ones | maximum |
+| Revenue | any organization above the limits must buy, even if it needs no extra feature | only organizations that want the paid features |
+| Story for investors | "fair-source": monetizes growth of usage | classic open core |
+| Enforcement | by contract only (nothing in the code counts agents or revenue) | by license key (already built) |
+
+Either works. Pick one, then make the license text, this table and the pricing page say the same thing.
+What the code enforces today does not depend on the choice: **license keys gate features** (SSO, compliance report),
+never agent counts or revenue.
+
 ## Before you announce this (blocking items)
 
-1. **`LICENSE-COMMERCIAL.md` contradicts this model.** It currently says the collector and dashboard need a commercial
-   license for *any* production use. Community-in-production is only legal once that text is replaced.
-   Have a lawyer draft it (this is not legal advice). Points to give them:
-   - SDK and MCP server stay Apache-2.0.
-   - Collector and dashboard: free use in production and for commercial purposes inside one's own organization (Community).
-   - Not allowed: offering Cerbere to third parties as a hosted or managed service; removing, disabling or circumventing
-     the license-key functionality or using paid features without a license; removing notices.
-   - Paid plans: commercial agreement (term, fees, support, usage audit right, trial terms, liability limits).
-   - Well-known licenses with exactly these restrictions (for example the Elastic License 2.0, or the Business Source License)
+1. **`LICENSE-COMMERCIAL.md` must match the decision above, and be reviewed by a lawyer** (this is not legal advice).
+   Points to raise with them:
+   - It says free below 10 agents and commercial above 10: **exactly 10 agents is not covered**.
+   - "Startup", "ARR" and "first year" are not defined (who counts as affiliated, from which date).
+   - It does not say that **removing, disabling or circumventing the license-key functionality, or using paid features
+     without a license, is not allowed**. The code verifies keys, but only a clause makes bypassing them a breach.
+   - Paid plans need a commercial agreement (term, fees, support, usage audit right, trial terms, liability limits).
+   - Well-known licenses with this kind of restriction (for example the Elastic License 2.0 or the Business Source License)
      can serve as a base, so you do not start from a blank page.
 2. **Naming.** A source-available collector is not "open source" in the OSI sense, and calling it that tends to draw criticism
    from developer communities. Use **Open source** for the SDK and MCP server (true), and **Community edition** for the free collector.

@@ -20,6 +20,7 @@ Découpage de l'ancien api.py monolithique :
 import collector.api.agents
 import collector.api.alert_rules
 import collector.api.approvals
+import collector.api.compliance
 import collector.api.dashboard
 import collector.api.decisions
 import collector.api.health

@@ -4,3 +4,4 @@ pytest-cov>=4.1.0
 pytest-mock>=3.11.0
 pytest-timeout>=2.1.0
 fakeredis>=2.20.0
+pypdf>=4.0.0  # lecture du texte des PDF dans les tests du rapport de conformité

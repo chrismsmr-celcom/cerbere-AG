@@ -14,6 +14,12 @@ they will always be listed under **Changed** or **Removed**.
 - Dependabot for Python, npm (dashboard), Docker and GitHub Actions.
 - `collector/LICENSE.md` and `dashboard/LICENSE.md` stating the license that applies to those directories.
 - `tests/test_version_consistency.py`: the version is checked across `pyproject.toml`, the SDK and `/health`.
+- Self-hosted enterprise readiness: local password sign-in and `python -m collector.cli` (`create-admin`, `set-password`, `list-users`) so an instance needs neither SMTP nor Supabase, an optional PostgreSQL TLS overlay, and `docs/SELF_HOSTING.md`.
+- Company single sign-on (OIDC, authorization code with PKCE) with group-to-role mapping, for the Team and Enterprise plans.
+- Versioned database migrations (`schema_migrations`, `python -m collector.cli migrate`), applied once at startup under a lock.
+- Signed license keys verified offline (Ed25519) for the Community, Pro, Team and Enterprise plans: `collector/licensing.py`, `scripts/cerbere_license.py`, `GET /api/license`, `docs/LICENSING.md`.
+- Compliance report (PDF or JSON) for the Team and Enterprise plans: `GET /api/compliance/report` and `python -m collector.cli report`. It re-verifies the whole audit chain and never reproduces event contents.
+- `ImmutableAuditLog.verify_chain_full()`, `chain_summary()` and `aggregate_org()`: whole-chain verification in streaming, and per-organization counters.
 
 ### Changed
 - The version now has a single source, `agentguard/_version.py`. `/health` reported a hard-coded `0.2.1`; it now reports the real version.
