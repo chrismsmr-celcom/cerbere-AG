@@ -10,7 +10,7 @@ wrapt>=1.15.0
 # CORE - Framework Web & API
 # ----------------------------------------------------------------------------
 flask>=3.0.0,<4.0.0
-werkzeug>=3.0.0,<4.0.0         # generate_password_hash, safe_str_cmp
+werkzeug>=3.1.9,<4.0.0         # generate_password_hash, safe_str_cmp
 itsdangerous>=2.1.2,<3.0.0     # Signature des cookies/session
 flask-cors>=6.0.0,<7.0.0       # CORS pour le dashboard (>=6.0.0 : fix CVE-2024-6866/6844/6839)
 gunicorn>=21.2.0,<23.0.0       # WSGI server (prod only)
