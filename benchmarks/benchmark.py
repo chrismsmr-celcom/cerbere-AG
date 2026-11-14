@@ -175,9 +175,10 @@ class AdversarialBenchmark:
                 )
 
         total_time = time.time() - start
+        prompts_per_sec = len(prompts) / total_time if total_time > 0 else float("inf")
         print(
             f"\n✅ Benchmark completed in {total_time:.2f}s "
-            f"({len(prompts) / total_time:.1f} prompts/sec)"
+            f"({prompts_per_sec:.1f} prompts/sec)"
         )
 
         return self.results
