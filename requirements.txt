@@ -11,7 +11,7 @@ wrapt>=1.15.0
 # ----------------------------------------------------------------------------
 flask>=3.0.0,<4.0.0
 werkzeug>=3.0.0,<4.0.0         # generate_password_hash, safe_str_cmp
-itsdangerous>=2.1.2,<3.0.0     # Signature des cookies/session
+itsdangerous>=2.2.0,<3.0.0     # Signature des cookies/session
 flask-cors>=6.0.0,<7.0.0       # CORS pour le dashboard (>=6.0.0 : fix CVE-2024-6866/6844/6839)
 gunicorn>=21.2.0,<23.0.0       # WSGI server (prod only)
 python-dotenv>=1.0.0,<2.0.0    # Chargement propre de .env
