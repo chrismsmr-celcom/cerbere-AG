@@ -108,10 +108,7 @@ def test_taint_saturation() -> None:
     print(f"   - Temps de décision : {decision_time:.3f}s")
 
     if benign_label.level == TaintLevel.SECRET:
-        print(
-            "   RÉSULTAT : Payload bénin classé SECRET "
-            "(faux positif potentiel)"
-        )
+        print("   RÉSULTAT : Payload bénin classé SECRET (faux positif potentiel)")
     else:
         print("   RÉSULTAT : Payload non classé SECRET")
 
@@ -145,14 +142,8 @@ def test_taint_saturation() -> None:
 
     report_after_clear = tracker.report()
 
-    print(
-        f"   - Needles après clear : "
-        f"{report_after_clear['tracked_needles']}"
-    )
-    print(
-        f"   - Saturation après clear : "
-        f"{report_after_clear['saturated']}"
-    )
+    print(f"   - Needles après clear : {report_after_clear['tracked_needles']}")
+    print(f"   - Saturation après clear : {report_after_clear['saturated']}")
 
     clear_success = (
         report_after_clear["tracked_needles"] == 0
@@ -175,27 +166,17 @@ def test_taint_saturation() -> None:
         print("   Tracker arrivé à saturation")
 
         if report["dropped_needles"] > 0:
-            print(
-                f"   {report['dropped_needles']} needles évincés"
-            )
-            vulnerabilities.append(
-                "Éviction de needles pendant la saturation"
-            )
+            print(f"   {report['dropped_needles']} needles évincés")
+            vulnerabilities.append("Éviction de needles pendant la saturation")
 
     if secret_label.level < TaintLevel.SECRET:
-        vulnerabilities.append(
-            "Secret non détecté après saturation"
-        )
+        vulnerabilities.append("Secret non détecté après saturation")
 
     if benign_label.level == TaintLevel.SECRET:
-        vulnerabilities.append(
-            "Faux positif : payload bénin classé SECRET"
-        )
+        vulnerabilities.append("Faux positif : payload bénin classé SECRET")
 
     if not clear_success:
-        vulnerabilities.append(
-            "Échec de la réinitialisation du tracker"
-        )
+        vulnerabilities.append("Échec de la réinitialisation du tracker")
 
     if not vulnerabilities:
         print("   Aucun problème détecté par ces vérifications")
@@ -205,10 +186,7 @@ def test_taint_saturation() -> None:
         for vulnerability in vulnerabilities:
             print(f"   - {vulnerability}")
 
-    print(
-        "\nRecommandation : évaluer une politique LRU "
-        "avec TTL pour les needles."
-    )
+    print("\nRecommandation : évaluer une politique LRU avec TTL pour les needles.")
 
     print(f"{'=' * 80}")
 
