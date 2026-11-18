@@ -20,7 +20,6 @@ Découpage de l'ancien api.py monolithique :
 import collector.api.agents
 import collector.api.alert_rules
 import collector.api.approvals
-import collector.api.compliance
 import collector.api.dashboard
 import collector.api.decisions
 import collector.api.health
@@ -64,3 +63,8 @@ from collector.api.helpers import (  # noqa: F401
 
 # Compatibilité monkeypatch des tests : collector.api.require_human_auth
 from collector.auth import require_auth, require_human_auth  # noqa: F401
+
+# Fonctions Enterprise Edition (ee/) : rapport de conformité, seulement si ee/ est présent.
+from collector.ee_loader import load_enterprise_module
+
+load_enterprise_module("ee.compliance.api")

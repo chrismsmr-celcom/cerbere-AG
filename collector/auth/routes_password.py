@@ -3,13 +3,13 @@
 import structlog
 from flask import g, redirect, render_template_string, request, url_for
 
+from collector.ee_loader import sso_config
 from collector.extensions import limiter
 
 from .audit_helpers import _audit_login
 from .blueprint import auth_bp
 from .config import PASSWORD_LOGIN_ENABLED
 from .local_password import verify_credentials
-from .oidc import get_config as sso_config
 from .pages import LOGIN_HTML
 from .sessions import _set_human_session
 from .utils import _normalize_email
