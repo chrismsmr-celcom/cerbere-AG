@@ -1,7 +1,5 @@
 """Rapport de conformité (PDF) : preuves de contrôle pour un CISO ou un auditeur.
 
-Cerbere Enterprise Edition : sous licence ee/LICENSE.md (et non Apache-2.0).
-
 Le rapport résume, pour UNE organisation et UNE période :
   - l'activité surveillée (actions des agents, blocages) ;
   - les événements de sécurité, d'accès, de supervision humaine et d'incident ;
@@ -351,7 +349,7 @@ def _integrity(audit, single_tenant: bool) -> dict:
 
 def _controls() -> dict:
     from collector.auth import config as auth_config
-    from collector.ee_loader import sso_config
+    from collector.auth.oidc import get_config as sso_config
 
     sso_active = sso_config() is not None
     lic = licensing.status_dict()

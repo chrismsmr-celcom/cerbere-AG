@@ -18,8 +18,6 @@ Ce package conserve exactement la surface publique de l'ancien module : tout ce 
   routes_*.py             routes Flask (supabase, login, signup, session, clés API)
 """
 
-# Fonctions Enterprise Edition (ee/) : routes SSO, enregistrées seulement si ee/ est présent.
-from collector.ee_loader import load_enterprise_module
 from collector.supabase_auth import (  # noqa: F401
     SUPABASE_ANON_KEY,
     SUPABASE_ENABLED,
@@ -59,7 +57,6 @@ from .identity_resolution import (  # noqa: F401
     _build_user_identity,
     resolve_full_identity,
 )
-from .login_context import login_page_context  # noqa: F401
 from .magic_link import (  # noqa: F401
     _build_magic_link,
     _consume_magic_link,
@@ -105,6 +102,10 @@ from .routes_session import (  # noqa: F401
 from .routes_signup import (  # noqa: F401
     signup,
 )
+from .routes_sso import (  # noqa: F401
+    sso_callback,
+    sso_login,
+)
 from .routes_supabase import (  # noqa: F401
     supabase_public_config,
     supabase_session,
@@ -133,5 +134,3 @@ from .utils import (  # noqa: F401
     hash_key,
     safe_compare,
 )
-
-load_enterprise_module("ee.sso.routes")

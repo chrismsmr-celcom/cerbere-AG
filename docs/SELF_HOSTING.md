@@ -33,8 +33,8 @@ Check health: `curl http://localhost:8080/healthz`.
 from agentguard import AgentGuard
 
 guard = AgentGuard(
-    collector_url="http://localhost:8080",   # your AGENTGUARD_PUBLIC_URL
-    api_key="ag-...",                         # create keys in the dashboard
+    collector_url="http://localhost:8080",  # your AGENTGUARD_PUBLIC_URL
+    api_key="ag-...",  # create keys in the dashboard
     agent_id="my-agent",
 )
 ```

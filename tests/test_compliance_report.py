@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from collector import cli
+from collector import compliance_report as cr
 from tests.compliance_helpers import (
     ACME_TOTAL,
     SECURITY_CRITICAL,
@@ -26,7 +27,6 @@ from tests.compliance_helpers import (
 from tests.licensing_helpers import install
 
 pypdf = pytest.importorskip("pypdf")
-cr = pytest.importorskip("ee.compliance.report")
 
 NOW = datetime(2026, 11, 9, 10, 30, tzinfo=timezone.utc)
 PASSWORD = "correct-horse-battery"
@@ -670,7 +670,7 @@ def test_generating_a_report_is_itself_audited(app, env, monkeypatch):
 
 def test_api_still_answers_when_the_audit_log_is_unavailable(app, env, monkeypatch):
     install(monkeypatch, "team")
-    monkeypatch.setattr("ee.compliance.api.get_audit_log", lambda: None)
+    monkeypatch.setattr("collector.api.compliance.get_audit_log", lambda: None)
     with app.test_client() as c:
         login(c, "alice@acme.example")
         data = c.get("/api/compliance/report?period=2026-10&format=json").get_json()

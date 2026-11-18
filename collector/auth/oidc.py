@@ -1,7 +1,5 @@
 """SSO d'entreprise via OpenID Connect (code d'autorisation + PKCE).
 
-Cerbere Enterprise Edition : sous licence ee/LICENSE.md (et non Apache-2.0).
-
 Fonctionne avec tout fournisseur OIDC : Okta, Microsoft Entra ID, Google
 Workspace, Keycloak, Auth0, Authentik... Indépendant de Supabase : utilisable
 en self-hosted comme en cloud.
@@ -52,29 +50,10 @@ from collector.db import is_postgres, sql_placeholder
 from collector.licensing import has_feature
 from collector.migrations import ensure_migrated
 
+from .users import _db_execute, _user_by_email
+from .utils import _normalize_email
+
 logger = structlog.get_logger("agentguard.auth.oidc")
-
-
-# Imports tardifs vers collector.auth : ce module peut être importé avant le paquet
-# collector.auth, qui charge à son tour les routes SSO (voir collector/auth/__init__.py).
-# Les importer ici, en tête de fichier, créerait un import circulaire.
-def _db_execute(*args, **kwargs):
-    from collector.auth.users import _db_execute as run
-
-    return run(*args, **kwargs)
-
-
-def _user_by_email(email):
-    from collector.auth.users import _user_by_email as lookup
-
-    return lookup(email)
-
-
-def _normalize_email(value):
-    from collector.auth.utils import _normalize_email as normalize
-
-    return normalize(value)
-
 
 ALLOWED_ALGS = [
     "RS256",

@@ -164,19 +164,11 @@ def cmd_license_install(args) -> int:
 def cmd_report(args) -> int:
     import json
 
+    from collector import compliance_report as report
     from collector import licensing
     from collector.audit_routes import get_audit_log
     from collector.auth.users import _db_execute
-    from collector.ee_loader import load_enterprise_module
 
-    report = load_enterprise_module("ee.compliance.report")
-    if report is None:
-        print(
-            "Error: the compliance report is part of the Cerbere Enterprise Edition (ee/), "
-            "which is not present in this installation.",
-            file=sys.stderr,
-        )
-        return 1
     if not licensing.has_feature("compliance_reports"):
         print(
             "Error: compliance reports are part of the Team and Enterprise plans. "

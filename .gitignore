@@ -1,32 +1,70 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-build/
-dist/
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Rust
-target/
-
-# ActRun local run output (example-trace.jsonl is tracked on purpose)
-/runs/
-/runs.jsonl
-
-# Environment and secrets
+# Secrets et config locale — ne doivent JAMAIS être commités
 .env
-.env.*
+*.env
 !.env.example
 
-# Editors and OS
-.idea/
+# Bases de données locales — contiennent potentiellement des données clients
+*.db
+*.sqlite
+*.sqlite3
+
+# Sauvegardes — contiennent des dumps complets (spans + clés API hashées
+# des clients), voir scripts/backup_db.py
+backups/
+
+# Modèles ML entraînés — trop volumineux pour git, et generate_dataset.py /
+# train_detector.py les régénèrent
+*.pt
+*.bin
+prompt_dataset.csv
+test_dataset.csv
+models/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+venv/
+.venv/
+
+# Éditeurs / OS
 .vscode/
+.idea/
 .DS_Store
-Thumbs.db
+
+# Patchs de mise à jour — artefacts de dev, ne doivent pas être versionnés
+*.patch
+*.diff
+
+# Git hooks (installés par scripts/setup-hooks.sh)
+.git/hooks/pre-push
+
+agentguard-model/
+
+# Coverage
+.coverage
+coverage.xml
+
+# Benchmarks générés (en cours de développement)
+benchmarks/corpus_*/
+benchmarks/results/
+
+rapport_*.json
+agentguard-model-onnx/
+
+bandit-local.*
+dashboard/node_modules/
+
+*.bak
+.ruff_cache/
+
+# Certificats / clés : jamais dans le dépôt (générés par installation)
+certs/
+*.key
+*.pem
+
+# Scripts de patch jetables
+patch_agents_py.py
+patch_sdk_py.py
+patch_app_py.py

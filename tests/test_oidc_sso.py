@@ -9,8 +9,6 @@ from urllib.parse import parse_qs, urlparse
 
 import jwt
 import pytest
-
-pytest.importorskip("ee.sso.oidc")
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -96,7 +94,7 @@ class FakeIdP:
 
 @pytest.fixture
 def idp(monkeypatch):
-    from ee.sso import oidc
+    from collector.auth import oidc
 
     f = FakeIdP()
     monkeypatch.setattr(oidc, "_http_get", f.get)
@@ -160,9 +158,9 @@ def _admin(email="admin@acme.example"):
 
 
 def _user(email):
+    from collector.auth.oidc import ensure_oidc_columns
     from collector.auth.users import _db_execute
     from collector.db import sql_placeholder
-    from ee.sso.oidc import ensure_oidc_columns
 
     ensure_oidc_columns()
 

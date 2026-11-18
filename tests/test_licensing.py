@@ -10,13 +10,9 @@ from pathlib import Path
 import pytest
 
 from collector import cli, licensing
-from collector.ee_loader import enterprise_available
 from tests.licensing_helpers import DAY, Issuer, install
 
 ROOT = Path(__file__).resolve().parent.parent
-needs_ee = pytest.mark.skipif(
-    not enterprise_available(), reason="Enterprise Edition (ee/) not present"
-)
 
 
 @pytest.fixture(autouse=True)
@@ -410,7 +406,6 @@ def _sso_button(client):
     return 'href="/auth/sso/login"' in client.get("/login").data.decode()
 
 
-@needs_ee
 def test_sso_is_hidden_and_explained_without_a_license(app_ctx):
     with app_ctx.test_client() as c:
         assert not _sso_button(c)
@@ -419,7 +414,6 @@ def test_sso_is_hidden_and_explained_without_a_license(app_ctx):
         assert b"Team and Enterprise" in r.data
 
 
-@needs_ee
 def test_sso_is_not_part_of_the_pro_plan(app_ctx, monkeypatch):
     install(monkeypatch, "pro")
     with app_ctx.test_client() as c:
@@ -428,21 +422,18 @@ def test_sso_is_not_part_of_the_pro_plan(app_ctx, monkeypatch):
 
 
 @pytest.mark.parametrize("plan", ["team", "enterprise"])
-@needs_ee
 def test_sso_is_available_on_team_and_enterprise(app_ctx, monkeypatch, plan):
     install(monkeypatch, plan)
     with app_ctx.test_client() as c:
         assert _sso_button(c)
 
 
-@needs_ee
 def test_pro_license_with_sso_addon_enables_sso(app_ctx, monkeypatch):
     install(monkeypatch, "pro", features=["sso_oidc"])
     with app_ctx.test_client() as c:
         assert _sso_button(c)
 
 
-@needs_ee
 def test_sso_survives_the_grace_period_then_stops(app_ctx, monkeypatch):
     install(monkeypatch, "team", days=30, issued_days_ago=35)  # grâce
     with app_ctx.test_client() as c:
@@ -453,7 +444,6 @@ def test_sso_survives_the_grace_period_then_stops(app_ctx, monkeypatch):
         assert c.get("/auth/sso/login").status_code == 403
 
 
-@needs_ee
 def test_expired_license_never_locks_people_out(app_ctx, monkeypatch):
     """Mot de passe « désactivé » + SSO non couvert par la licence => le mot de passe reste disponible."""
     import collector.auth.config as cfg
@@ -472,7 +462,6 @@ def test_expired_license_never_locks_people_out(app_ctx, monkeypatch):
         assert r.status_code == 302
 
 
-@needs_ee
 def test_password_can_be_hidden_only_while_sso_works(app_ctx, monkeypatch):
     import collector.auth.config as cfg
     import collector.auth.routes_password as rp
@@ -490,7 +479,6 @@ def test_password_can_be_hidden_only_while_sso_works(app_ctx, monkeypatch):
         assert r.status_code == 503
 
 
-@needs_ee
 def test_license_api_is_admin_only(app_ctx, monkeypatch):
     install(monkeypatch, "team")
     _user("admin@acme.example", "admin")
@@ -511,7 +499,6 @@ def test_license_api_is_admin_only(app_ctx, monkeypatch):
         )
 
 
-@needs_ee
 def test_license_api_refuses_non_admins(app_ctx, monkeypatch):
     install(monkeypatch, "team")
     _user("admin@acme.example", "admin")

@@ -74,9 +74,9 @@ PLAN_ORDER = [COMMUNITY, PRO, TEAM, ENTERPRISE]
 # Seules celles marquées "en vigueur" sont réellement vérifiées dans le code aujourd'hui ;
 # les autres réservent leur place dans la grille tarifaire pour quand elles existeront.
 FEATURES: dict[str, str] = {
-    "sso_oidc": TEAM,  # en vigueur : bouton SSO d'entreprise (ee/sso/)
+    "sso_oidc": TEAM,  # en vigueur : bouton SSO d'entreprise (collector/auth/oidc.py)
     "extended_retention": PRO,  # prévu : rétention et export longs des journaux d'audit
-    "compliance_reports": TEAM,  # en vigueur : rapport de conformité PDF (ee/compliance/)
+    "compliance_reports": TEAM,  # en vigueur : rapport de conformité PDF (collector/compliance_report.py)
     "siem_export": TEAM,  # prévu : export Splunk / Datadog / syslog
     "multi_workspace": TEAM,  # prévu : plusieurs workspaces par instance
 }
