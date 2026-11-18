@@ -56,11 +56,11 @@ jobs:
           files_checked = 0
           violations = []
 
+          EXCLUDED_DIRS = {'.git', '.venv', 'venv', '__pycache__', 'node_modules',
+                 'tests', 'benchmarks', 'agentguard', 'scripts', 'collector', 'ee'}
           for root, dirs, files in os.walk('.'):
-              # ✅ EXCLUSION DES DOSSIERS INTERNES (correction principale)
-              if any(d in root for d in ['.git', '.venv', 'venv', '__pycache__', 'tests', 'benchmarks', 'agentguard', 'scripts', 'collector']):
-                  continue
-
+              dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS] 
+    
               for file in files:
                   if file.endswith('.py'):
                       filepath = os.path.join(root, file)
