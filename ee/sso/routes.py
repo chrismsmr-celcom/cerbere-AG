@@ -1,16 +1,19 @@
-"""Routes SSO OIDC : /auth/sso/login et /auth/sso/callback."""
+"""Routes SSO OIDC : /auth/sso/login et /auth/sso/callback.
+
+Cerbere Enterprise Edition : sous licence ee/LICENSE.md (et non Apache-2.0).
+"""
 
 import os
 
 import structlog
 from flask import current_app, redirect, render_template_string, request, url_for
 
+from collector.auth.audit_helpers import _audit_login
+from collector.auth.blueprint import auth_bp
+from collector.auth.pages import LOGIN_HTML
+from collector.auth.sessions import _set_human_session
 from collector.extensions import limiter
-
-from . import config as auth_config
-from .audit_helpers import _audit_login
-from .blueprint import auth_bp
-from .oidc import (
+from ee.sso.oidc import (
     OidcError,
     authorization_url,
     blocked_by_license,
@@ -21,29 +24,12 @@ from .oidc import (
     resolve_user,
     verify_id_token,
 )
-from .pages import LOGIN_HTML
-from .sessions import _set_human_session
 
 logger = structlog.get_logger("agentguard.auth.sso")
 
 _COOKIE = "ag_oidc"
 _COOKIE_PATH = "/auth/sso"
 _STATE_TTL = 600
-
-
-@auth_bp.app_context_processor
-def _login_page_context():
-    """Variables disponibles dans LOGIN_HTML (méthodes de connexion actives)."""
-    cfg = get_config()
-    return {
-        "sso_enabled": cfg is not None,
-        "sso_name": cfg.button_label if cfg else "",
-        # Anti-verrouillage : le mot de passe ne peut être masqué que tant que le SSO
-        # fonctionne réellement (configuré ET couvert par la licence).
-        "password_enabled": auth_config.PASSWORD_LOGIN_ENABLED or cfg is None,
-        "magic_enabled": auth_config.MAGIC_LINK_ENABLED,
-        "signup_enabled": auth_config.SIGNUP_ENABLED,
-    }
 
 
 def _sso_unavailable():

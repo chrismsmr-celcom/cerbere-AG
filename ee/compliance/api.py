@@ -1,5 +1,7 @@
 """GET /api/compliance/report : rapport de conformité (PDF ou JSON).
 
+Cerbere Enterprise Edition : sous licence ee/LICENSE.md (et non Apache-2.0).
+
 Réservé au rôle auditeur et aux rôles supérieurs (les rôles sont hiérarchiques : admin > developer >
 auditor > viewer), et aux offres Team et Enterprise.
 Paramètres : period=YYYY-MM | from=YYYY-MM-DD&to=YYYY-MM-DD, format=pdf|json.
@@ -10,12 +12,12 @@ import re
 
 from flask import Response, g, jsonify, request
 
-from collector import compliance_report as report
 from collector import licensing
 from collector.api.helpers import api_bp
 from collector.audit_routes import get_audit_log
 from collector.auth.rbac import require_role
 from collector.extensions import limiter
+from ee.compliance import report
 
 
 def _actor() -> str:
