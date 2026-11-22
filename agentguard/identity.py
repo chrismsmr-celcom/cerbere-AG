@@ -50,6 +50,7 @@ class Role(str, Enum):
     DEVELOPER = "developer"
     AUDITOR = "auditor"
     VIEWER = "viewer"
+    AGENT = "agent"  # Machine principal: no human/admin permissions by default.
 
     @classmethod
     def hierarchy(cls) -> dict["Role", int]:
@@ -59,6 +60,7 @@ class Role(str, Enum):
             cls.DEVELOPER: 70,
             cls.AUDITOR: 40,
             cls.VIEWER: 10,
+            cls.AGENT: 0,
         }
 
     def has_permission(self, required: "Role") -> bool:
@@ -308,6 +310,8 @@ PERMISSIONS = {
     Role.VIEWER: {
         "dashboard:view",
     },
+    # Agent credentials authenticate execution, not administration.
+    Role.AGENT: set(),
 }
 
 
