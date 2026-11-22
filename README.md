@@ -2,13 +2,16 @@
 
 <img src="docs/logo.png" alt="Cerbere" width="120" />
 
-# Cerbere
+# Cerbere AG
 
-Cerbere is a self-hosted runtime security layer for AI agents.<br/>
-Every tool call is checked before it executes.<br/>
-No customer data leaves your infra.<br/>
-Open source.<br/>
-Works with MCP, LangChain, CrewAI, Claude Code, Cursor.
+### Multi-Agent Trust Infrastructure
+
+**What an agent may do, and what agents may do together.**
+
+Cerbere provides the trust layer for autonomous agent systems: identity, authority, runtime enforcement and evidence.
+It helps teams define which agent can act, under whose authority, on which tools and data — and build toward safe, accountable work across multiple agents.
+
+Self-hosted. Framework-independent. Built for MCP and existing agent stacks.
 
 <br/>
 
@@ -39,27 +42,50 @@ Dashboard on `http://localhost:8080`. Create your admin account: [Self-hosting](
 
 <br/>
 
-[Quick start](#-quick-start) · [Works with](#-works-with) · [How it works](#-how-it-works) · [Self-hosting](#-self-hosting) · [Benchmark](#-detection-honest-numbers) · [License](#-license)
+[Trust model](#the-trust-model) · [What Cerbere controls](#what-cerbere-controls) · [Quick start](#-quick-start) · [Integrations](#-works-with) · [Architecture](#-how-it-works) · [Self-hosting](#-self-hosting) · [Benchmarks](#-detection-honest-numbers) · [License](#-license)
 
 **Open source** here means the Python SDK and the MCP server (Apache-2.0). The collector and dashboard are source-available: see [License](#-license).
 
 <br/>
 
-## Why Cerbere
+## The trust model
 
-Prompt filtering checks what an agent is *told*. It cannot tell you whether the action the agent is *about to take* is safe.
-An innocent prompt can still produce `update_customer(role="admin")`, an `http_post` carrying your `.env`, or fifty refunds in a loop.
+AI agents are becoming independent actors inside business systems. They call tools, access sensitive data, delegate work and increasingly operate alongside other agents. Securing one prompt or one tool call is not enough: teams need to know **which agent is acting, what authority it has, where that authority came from, and what happened as a result**.
 
-Cerbere enforces policy **at the execution boundary**. Every LLM call and tool call is inspected, scored and decided
-(`ALLOW`, `REQUIRE APPROVAL` or `BLOCK`) before it touches a database, an API or an inbox. Every decision leaves evidence.
+Cerbere is being built as the trust infrastructure beneath those systems. It is not an agent framework or task orchestrator. It does not decide what work your agents should do. It governs identity, permissions and evidence around the work they perform.
 
-| You get | What it means |
+### What an agent may do
+
+Establish a trustworthy boundary around each agent:
+
+- **Identity:** distinguish registered machine identities from human users.
+- **Authority:** apply organization and agent-level access rules instead of trusting a caller-supplied agent name.
+- **Runtime enforcement:** inspect tool calls and allow, block or require human approval before execution.
+- **Data boundaries:** track sensitive information and prevent unsafe outbound use.
+- **Evidence:** record decisions and execution traces so actions can be investigated.
+
+### What agents may do together
+
+When agents work together, trust must extend across the relationship — not stop at each agent's individual API key. Cerbere's target model is explicit, limited and attributable authority between agents:
+
+- **Delegation:** an agent can pass only the authority it actually holds, within narrower scopes.
+- **Boundaries:** delegated authority is tied to a recipient, permitted actions and an expiry.
+- **Revocation:** withdrawing authority must also invalidate dependent delegations.
+- **Lineage:** preserve who delegated what, which agent acted, and which data or decision flowed between them.
+
+These multi-agent delegation capabilities are part of the architecture being built; they are **not yet shipped**. Today, Cerbere provides the existing identity foundation, runtime controls, signed decisions, taint tracking and audit evidence. See the roadmap for the work still ahead.
+
+## What Cerbere controls
+
+| Trust layer | What it means today |
 |---|---|
-| **Self-hosted** | One `docker compose up`. Prompts, tool calls and decisions stay in your PostgreSQL. |
-| **Checked before execution** | Allow, require human approval, or block, per tool call. |
-| **Data-flow aware** | Secrets and PII the agent read are tracked: they cannot leave through an external tool, even base64-encoded. |
-| **Audit-ready** | Hash-chained audit log with signed checkpoints, traces, cost and latency per call. |
-| **No rewrite** | Wrap the functions you already have, or plug in through MCP. |
+| **Identity** | Multi-tenant organization identities and registered agent credentials; human and machine roles are separated in the Phase 1 changes. |
+| **Authorization** | Agent-level policies, tool allowlists, budgets and signed runtime decisions. |
+| **Enforcement** | SDK guards and an MCP gateway that can block or hold tool calls before execution. |
+| **Data protection** | Taint tracking for secrets and PII across guarded tool flows. |
+| **Evidence** | Traces, risk decisions and hash-chained audit records with signed checkpoints. |
+
+The governing principle is simple: **an agent must not gain authority just because another agent called it.** Cross-agent authority needs an explicit, verifiable delegation model.
 
 <br/>
 
@@ -166,7 +192,7 @@ claude mcp add cerbereag \
 
 <br/>
 
-## 🧭 How it works
+## 🧭 Runtime enforcement architecture
 
 <p align="center">
   <img src="docs/architecture.svg" alt="Cerbere architecture: agent, integration points, runtime engine, decision, tools, collector and dashboard" width="100%" />
@@ -218,14 +244,9 @@ Keep a human in charge.
 
 ### Identity and access boundaries
 
-Cerbere distinguishes human users from machine principals:
+Cerbere separates human operators from machine principals. Agent credentials authenticate an agent's runtime identity; they do not automatically grant human administrative privileges. The Phase 1 changes in this pull request enforce that distinction while preserving existing agent API-key formats and runtime SDK flows.
 
-- **Human administrators and developers** manage agent identities and organization-level access.
-- **Agent API keys** resolve to a dedicated `agent` principal, not to a human `developer` role.
-- An agent credential cannot create users, enumerate peer agents, create agents, or revoke agents by default.
-- Agent credentials remain usable for their runtime SDK flows; the existing API-key format is unchanged.
-
-This is the identity and authorization foundation. **Agent-to-agent delegation is not shipped yet**: scoped delegation, delegation tokens, hierarchical revocation, and cross-agent data lineage remain future work.
+This is the first layer of the trust model, not the complete multi-agent delegation system. Scoped delegation, delegation tokens, hierarchical revocation and cross-agent data lineage are still under development.
 
 <details>
 <summary><b>Detailed code map</b> (module by module)</summary>
@@ -420,7 +441,7 @@ Do not rely on it as the sole security control for critical infrastructure.
 
 <div align="center">
 
-**Observe. Detect. Enforce.**
+**Identity. Authority. Evidence.**
 
 Copyright © 2026 Christopher Dikesa
 
