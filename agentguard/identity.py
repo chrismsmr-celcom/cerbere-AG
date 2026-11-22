@@ -4,11 +4,14 @@ AgentGuard Identity Engine — Multi-tenant RBAC.
 Hiérarchie :
   Tenant (entreprise) → Org (département) → {User, Agent} → Session
 
-Rôles RBAC :
-  - admin      : tout gérer
-  - developer  : créer agents, voir traces
-  - auditor    : read-only sur audit + traces
-  - viewer     : dashboard uniquement
+Rôles RBAC humains :
+  - admin      : administration du tenant
+  - developer  : gestion des agents et accès opérationnel
+  - auditor    : lecture audit + traces
+  - viewer     : lecture limitée du dashboard
+
+Principal machine :
+  - agent      : identité d'exécution, sans privilège administratif par défaut
 
 Format clé API agent :
   ag_{tenant_short}_{org_short}_{agent_short}_{random32}
