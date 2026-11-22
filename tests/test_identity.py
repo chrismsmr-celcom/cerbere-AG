@@ -343,7 +343,7 @@ class TestMeEndpoint:
 
 class TestRBACWithAgentKey:
     def test_agent_key_cannot_create_user(self, client_with_identity):
-        """Une clé agent (role=developer) ne peut pas créer de user."""
+        """An agent credential cannot create a human user."""
         client, ctx = client_with_identity
 
         # Crée un agent
@@ -360,7 +360,7 @@ class TestRBACWithAgentKey:
             json={"email": "bob@test.com", "role": "viewer"},
             headers={"X-API-Key": agent_key, "Content-Type": "application/json"},
         )
-        # developer n'a pas user:create → 403
+        # Machine principals have no human-user management permission.
         assert resp.status_code == 403
 
     def test_agent_key_cannot_manage_or_list_agents(self, client_with_identity):
