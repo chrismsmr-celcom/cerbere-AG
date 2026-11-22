@@ -342,6 +342,8 @@ def create_user():
 
     try:
         role = Role(role_str)
+        if role == Role.AGENT:
+            raise ValueError("agent is not a human user role")
     except ValueError:
         return jsonify(
             {
