@@ -363,28 +363,47 @@ class TestRBACWithAgentKey:
         # developer n'a pas user:create → 403
         assert resp.status_code == 403
 
-    def test_agent_key_can_list_agents(self, client_with_identity):
-        """Une clé agent (role=developer) peut lister les agents."""
+    def test_agent_key_cannot_manage_or_list_agents(self, client_with_identity):
+        """An agent credential cannot create, revoke, or enumerate peer agents."""
         client, ctx = client_with_identity
 
-        # Crée 2 agents
-        resp1 = client.post(
+        created = client.post(
             "/api/identity/agents",
             json={"name": "Bot1", "org_id": ctx["org_id"]},
             headers=_admin_headers(),
         )
-        client.post(
+        assert created.status_code == 201
+        agent_id = created.json["agent_id"]
+        agent_key = created.json["api_key"]
+        headers = {"X-API-Key": agent_key}
+
+        assert client.get("/api/identity/agents", headers=headers).status_code == 403
+        assert client.post(
             "/api/identity/agents",
             json={"name": "Bot2", "org_id": ctx["org_id"]},
+            headers=headers,
+        ).status_code == 403
+        assert client.delete(
+            f"/api/identity/agents/{agent_id}", headers=headers
+        ).status_code == 403
+
+    def test_agent_key_resolves_to_agent_role(self, client_with_identity):
+        """Agent credentials resolve to a machine role, never Developer."""
+        client, ctx = client_with_identity
+        created = client.post(
+            "/api/identity/agents",
+            json={"name": "Bot", "org_id": ctx["org_id"]},
             headers=_admin_headers(),
         )
-        agent_key = resp1.json["api_key"]
+        assert created.status_code == 201
 
-        # L'agent peut lister (role=developer a traces:view_own_org)
-        resp = client.get("/api/identity/agents", headers={"X-API-Key": agent_key})
-        # Note : list_agents requiert admin/developer/auditor
-        assert resp.status_code == 200
-        assert resp.json["count"] == 2
+        response = client.get(
+            "/api/identity/me",
+            headers={"X-API-Key": created.json["api_key"]},
+        )
+        assert response.status_code == 200
+        assert response.json["identity_type"] == "agent"
+        assert response.json["role"] == "agent"
 
 
 # ═══════════════════════════════════════════════════════════════
