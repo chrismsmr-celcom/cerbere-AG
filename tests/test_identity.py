@@ -449,6 +449,16 @@ class TestUserCreation:
         )
         assert resp2.status_code == 409
 
+    def test_create_user_rejects_machine_role(self, client_with_identity):
+        client, ctx = client_with_identity
+        response = client.post(
+            "/api/identity/users",
+            json={"email": "agent-role@test.com", "role": "agent", "org_id": ctx["org_id"]},
+            headers=_admin_headers(),
+        )
+        assert response.status_code == 400
+        assert "agent" not in response.json["valid_roles"]
+
     def test_create_user_invalid_role(self, client_with_identity):
         client, ctx = client_with_identity
         resp = client.post(
