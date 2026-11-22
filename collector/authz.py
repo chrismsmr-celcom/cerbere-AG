@@ -147,6 +147,9 @@ def _get_role_permissions():
             Action.AGENT_READ,
             Action.METRICS_READ,
         },
+        # Agent credentials are principals for runtime execution only.
+        # Administrative and dashboard permissions require a human role.
+        Role.AGENT: set(),
     }
 
 
