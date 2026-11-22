@@ -348,7 +348,7 @@ def create_user():
         return jsonify(
             {
                 "error": "invalid role",
-                "valid_roles": [r.value for r in Role],
+                "valid_roles": [r.value for r in Role if r != Role.AGENT],
             }
         ), 400
 
