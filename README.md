@@ -216,6 +216,17 @@ Keep a human in charge.
 </tr>
 </table>
 
+### Identity and access boundaries
+
+Cerbere distinguishes human users from machine principals:
+
+- **Human administrators and developers** manage agent identities and organization-level access.
+- **Agent API keys** resolve to a dedicated `agent` principal, not to a human `developer` role.
+- An agent credential cannot create users, enumerate peer agents, create agents, or revoke agents by default.
+- Agent credentials remain usable for their runtime SDK flows; the existing API-key format is unchanged.
+
+This is the identity and authorization foundation. **Agent-to-agent delegation is not shipped yet**: scoped delegation, delegation tokens, hierarchical revocation, and cross-agent data lineage remain future work.
+
 <details>
 <summary><b>Detailed code map</b> (module by module)</summary>
 <br/>
@@ -366,7 +377,7 @@ Without Docker: `pip install -r requirements.txt && gunicorn wsgi:app --bind 0.0
 |---|---|
 | ✅ Shipped | Three-layer detection · taint tracking · runtime risk and trajectory analysis · human approval queue · signed decisions · multi-tenant collector · MCP server and gateway · company SSO (OIDC) · public benchmark |
 | 🔨 Next | HTTP gateway for agents whose code cannot be changed · "Why was this blocked?" view · documentation site |
-| 🔭 Later | OpenTelemetry export · judge router across models · CLI · fine-grained RBAC (today: `admin`/`developer` can approve, reject and disconnect agents; `auditor`/`viewer` are read-only) |
+| 🔭 Later | OpenTelemetry export · judge router across models · CLI · scoped agent-to-agent delegation · hierarchical revocation · cross-agent data lineage · finer-grained human RBAC |
 
 Roadmap items are subject to change.
 

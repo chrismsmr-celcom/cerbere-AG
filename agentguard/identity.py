@@ -4,11 +4,14 @@ AgentGuard Identity Engine — Multi-tenant RBAC.
 Hiérarchie :
   Tenant (entreprise) → Org (département) → {User, Agent} → Session
 
-Rôles RBAC :
-  - admin      : tout gérer
-  - developer  : créer agents, voir traces
-  - auditor    : read-only sur audit + traces
-  - viewer     : dashboard uniquement
+Rôles RBAC humains :
+  - admin      : administration du tenant
+  - developer  : gestion des agents et accès opérationnel
+  - auditor    : lecture audit + traces
+  - viewer     : lecture limitée du dashboard
+
+Principal machine :
+  - agent      : identité d'exécution, sans privilège administratif par défaut
 
 Format clé API agent :
   ag_{tenant_short}_{org_short}_{agent_short}_{random32}
@@ -50,6 +53,7 @@ class Role(str, Enum):
     DEVELOPER = "developer"
     AUDITOR = "auditor"
     VIEWER = "viewer"
+    AGENT = "agent"  # Machine principal: no human/admin permissions by default.
 
     @classmethod
     def hierarchy(cls) -> dict["Role", int]:
@@ -59,6 +63,7 @@ class Role(str, Enum):
             cls.DEVELOPER: 70,
             cls.AUDITOR: 40,
             cls.VIEWER: 10,
+            cls.AGENT: 0,
         }
 
     def has_permission(self, required: "Role") -> bool:
@@ -308,6 +313,8 @@ PERMISSIONS = {
     Role.VIEWER: {
         "dashboard:view",
     },
+    # Agent credentials authenticate execution, not administration.
+    Role.AGENT: set(),
 }
 
 

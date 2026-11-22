@@ -123,7 +123,7 @@ def resolve_full_identity():
                 tenant_id=agent_info["tenant_id"],
                 org_id=agent_info["org_id"],
                 subject_id=agent_info["agent_id"],
-                role=Role.DEVELOPER,
+                role=Role.AGENT,
                 agent_name=agent_info.get("agent_name"),
             )
 
