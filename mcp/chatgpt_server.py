@@ -8,10 +8,9 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp_server import calculate_token_cost, check_prompt_security, redact_pii
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-
-from mcp_server import calculate_token_cost, check_prompt_security, redact_pii
 
 allowed_hosts = [
     item.strip()
