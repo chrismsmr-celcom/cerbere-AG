@@ -118,11 +118,11 @@ class TestAuthorizationMatrix:
         # Create machine agent
         resp = client.post(
             "/api/identity/agents",
-            json={"name": "Dev Agent", "org_id": ctx["org_id"]},
+            json={"name": "Agent", "org_id": ctx["org_id"]},
             headers=_admin_headers(ctx["api_key"]),
         )
         assert resp.status_code == 201
-        dev_key = resp.json["api_key"]
+        agent_key = resp.json["api_key"]
 
         # Create Org B in same tenant
         resp = client.post(
@@ -149,7 +149,7 @@ class TestAuthorizationMatrix:
         # Create machine agent
         resp = client.post(
             "/api/identity/agents",
-            json={"name": "Dev Agent", "org_id": ctx["org_id"]},
+            json={"name": "Agent", "org_id": ctx["org_id"]},
             headers=_admin_headers(ctx["api_key"]),
         )
         assert resp.status_code == 201
