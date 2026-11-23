@@ -11,7 +11,7 @@ généré), pas estimée à l'avance — un premier essai de ce script comptait
 des combinaisons qui produisaient en réalité le même texte (un template
 anglais ignore la variable française, la faire varier ne change rien).
 
-Lancer : python generate_dataset.py
+Lancer : python scripts/generate_detector_dataset.py
 """
 
 import csv

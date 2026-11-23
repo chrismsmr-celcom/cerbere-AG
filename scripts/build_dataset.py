@@ -14,7 +14,7 @@ prêt pour le fine-tuning, au format exact du juge cascade
 Les 4 verdicts : ATTACK / DIDACTIC / AMBIGUOUS / BENIGN.
 
 Usage :
-    python build_dataset.py --repo /chemin/vers/cerbere-AG --out ./data
+    python scripts/build_dataset.py --repo /chemin/vers/cerbere-AG --out ./data
 
 Le script lit, dans cet ordre (tout ce qui existe est utilisé) :
     benchmarks/adversarial_corpus.json   (168 prompts, 8 catégories)

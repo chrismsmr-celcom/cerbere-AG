@@ -7,7 +7,7 @@
 **Open core: the collector exists for everyone, paid plans add what teams and companies need.**
 
 - **Community (free)**: the complete collector and dashboard, all detection layers, human approvals, audit log,
-  API keys, alerts, password sign-in. It is free within the limits of `LICENSE-COMMERCIAL.md` (see "Open decision" below).
+  API keys, alerts, password sign-in. It is Apache-2.0, with no limit on agents, users or revenue.
   This is what gets Cerbere adopted.
 - **Pro / Team / Enterprise**: a signed license key unlocks extra capabilities and comes with support.
 
@@ -28,7 +28,7 @@ Prices are starting hypotheses to test with 3 or 4 prospects, not validated numb
 |---|---|---|---|---|
 | Price | Free | $199/mo ($1,990/yr) | $599/mo ($5,990/yr) | from $2,500/mo (~$30,000/yr), by quote |
 | Full collector + dashboard, detection, approvals, audit log, alerts | ✔ | ✔ | ✔ | ✔ |
-| Agents in production | fewer than 10 *(per `LICENSE-COMMERCIAL.md`, see "Open decision")* | no limit | no limit | no limit |
+| Agents in production | no limit | no limit | no limit | no limit |
 | Support | community (GitHub) | email, 72 h | email, 48 h | contractual SLA, dedicated channel |
 | **Company SSO (OIDC)** | – | – | ✔ *available now* | ✔ *available now* |
 | Extended audit retention and export | – | ✔ *planned* | ✔ *planned* | ✔ *planned* |
@@ -54,8 +54,8 @@ The hosted cloud keeps its own usage-based plans (Free / Pro / Team / Enterprise
   → **community** (paid features off). Basic security and password sign-in are never switched off.
 - Anti-lockout: password sign-in can only be hidden while SSO is genuinely working. If the SSO license lapses,
   the password form returns by itself.
-- What it does **not** do: stop a customer who edits the source code. The collector is source-available, so
-  enforcement of the paid features ultimately rests on the contract (see the legal section). That is normal for open core
+- What it does **not** do: stop someone who edits the source code. The paid features live in `ee/`, which is source-available
+  under `ee/LICENSE.md`; enforcement ultimately rests on that license and on the contract. That is normal for open core
   and is why the value of paid plans should be support, updates and compliance, not just a lock.
 
 ## Operating it (the publisher's checklist)
@@ -88,42 +88,33 @@ Trials are your best sales tool: a 30-day Team key lets a prospect try SSO with 
 **Key rotation**: generate a second pair with `--kid k2`, add it to `PUBLIC_KEYS` next to `k1`, sign new licenses with it.
 Existing `k1` licenses keep working.
 
-## Open decision: how free is Community?
+## Licensing model (decided)
 
-Two documents currently say different things, and they must be aligned before you announce anything.
-
-- **`LICENSE-COMMERCIAL.md` (what is published today)**: the collector and dashboard are free for evaluation, personal,
-  educational and research use, for teams with fewer than 10 agents in production, and for startups under $1M ARR
-  during their first year. A commercial license is required beyond that, or to offer Cerbere as a hosted or managed service.
-- **The model you described to me**: the collector exists for everyone without limits, and paid plans add what makes
-  the experience professional (SSO, compliance, integrations, support).
-
-| | **A. Free below a size** (the text today) | **B. Free for everyone, paid for features** |
-|---|---|---|
-| Adoption | good for small teams, a barrier for bigger ones | maximum |
-| Revenue | any organization above the limits must buy, even if it needs no extra feature | only organizations that want the paid features |
-| Story for investors | "fair-source": monetizes growth of usage | classic open core |
-| Enforcement | by contract only (nothing in the code counts agents or revenue) | by license key (already built) |
-
-Either works. Pick one, then make the license text, this table and the pricing page say the same thing.
-What the code enforces today does not depend on the choice: **license keys gate features** (SSO, compliance report),
-never agent counts or revenue.
+- **Everything in the repository is Apache-2.0 except `ee/`**: SDK, MCP server and gateway, collector, dashboard.
+  `ee/` (company SSO, compliance report, and later SIEM export) is source-available under `ee/LICENSE.md`.
+- **Community = the core, with no limits.** It runs without `ee/` and without a license key (`tests/test_open_core.py` checks it).
+- **License keys gate features that live in `ee/`**, never agent counts or revenue.
+- **Hosting caveat.** Apache-2.0 lets anyone run the core as a hosted service. Your protection is the value of `ee/`,
+  support and updates, speed of development, and the trademark: the Apache License grants no right to use the
+  Cerbere name (section 6). Consider registering it.
 
 ## Before you announce this (blocking items)
 
-1. **`LICENSE-COMMERCIAL.md` must match the decision above, and be reviewed by a lawyer** (this is not legal advice).
+1. **`ee/LICENSE.md` must be reviewed by a lawyer** (this is not legal advice; the file carries a review banner at the top).
    Points to raise with them:
-   - It says free below 10 agents and commercial above 10: **exactly 10 agents is not covered**.
-   - "Startup", "ARR" and "first year" are not defined (who counts as affiliated, from which date).
-   - It does not say that **removing, disabling or circumventing the license-key functionality, or using paid features
-     without a license, is not allowed**. The code verifies keys, but only a clause makes bypassing them a breach.
+   - What exactly counts as "production use", and what counts as circumventing or disabling the license-key check
+     (the code verifies keys, but only a clause makes bypassing them a breach).
    - Paid plans need a commercial agreement (term, fees, support, usage audit right, trial terms, liability limits).
    - Well-known licenses with this kind of restriction (for example the Elastic License 2.0 or the Business Source License)
      can serve as a base, so you do not start from a blank page.
-2. **Naming.** A source-available collector is not "open source" in the OSI sense, and calling it that tends to draw criticism
-   from developer communities. Use **Open source** for the SDK and MCP server (true), and **Community edition** for the free collector.
-3. **Pricing page honesty.** Show planned features as "coming soon" with no date promises.
-4. **Billing without Stripe.** Self-hosted licenses are annual and invoiced by bank transfer; issue the key on payment.
+2. **Relicensing the collector and dashboard.** Versions already distributed under the former source-available terms keep
+   those terms for the people who received them; Apache-2.0 applies from the first release that ships this change.
+   Every contributor whose code is in `collector/` or `dashboard/` must agree to the change: check the git history for
+   authors other than yourself and get their written consent before tagging that release.
+3. **Naming.** Use **open source** for the Apache-2.0 core and **source-available** only for `ee/`. Calling `ee/` open source
+   draws criticism from developer communities.
+4. **Pricing page honesty.** Show planned features as "coming soon" with no date promises.
+5. **Billing without Stripe.** Self-hosted licenses are annual and invoiced by bank transfer; issue the key on payment.
    For the cloud and small plans, plan a merchant of record such as Paddle or Lemon Squeezy.
 
 ## Not built yet

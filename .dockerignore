@@ -59,7 +59,9 @@ benchmarks/
 tests/
 demo/
 examples/
-generate_dataset.py
+scripts/generate_detector_dataset.py
+scripts/build_dataset.py
+bench/
 
 # ── Déchets & fichiers morts ───────────────────────────────────────────────
 *.bak
