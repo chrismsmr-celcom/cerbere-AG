@@ -16,8 +16,8 @@ Self-hosted. Framework-independent. Built for MCP and existing agent stacks.
 <br/>
 
 ![Self-Hosted](https://img.shields.io/badge/Self--Hosted-yes-e8845a?style=flat-square)
-![Open Source](https://img.shields.io/badge/Open%20Source-SDK%20%26%20MCP-4c9a6a?style=flat-square)
-[![Apache-2.0](https://img.shields.io/badge/Apache--2.0-SDK%20%26%20MCP-4c9a6a?style=flat-square)](LICENSE)
+![Open Source](https://img.shields.io/badge/Open%20Source-core-4c9a6a?style=flat-square)
+[![Apache-2.0](https://img.shields.io/badge/Apache--2.0-core-4c9a6a?style=flat-square)](LICENSE)
 ![MCP Ready](https://img.shields.io/badge/MCP-Ready-0b0b0c?style=flat-square)
 [![PyPI](https://img.shields.io/pypi/v/cerbere-ag?style=flat-square&color=e8845a&label=pypi)](https://pypi.org/project/cerbere-ag/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/chrismsmr-celcom/cerbere-AG/ci.yml?style=flat-square&label=tests)](https://github.com/chrismsmr-celcom/cerbere-AG/actions/workflows/ci.yml)
@@ -44,7 +44,7 @@ Dashboard on `http://localhost:8080`. Create your admin account: [Self-hosting](
 
 [Trust model](#the-trust-model) · [What Cerbere controls](#what-cerbere-controls) · [Quick start](#-quick-start) · [Integrations](#-works-with) · [Architecture](#-how-it-works) · [Self-hosting](#-self-hosting) · [Benchmarks](#-detection-honest-numbers) · [License](#-license)
 
-**Open source** here means the Python SDK and the MCP server (Apache-2.0). The collector and dashboard are source-available: see [License](#-license).
+**Open source (Apache-2.0):** the SDK, the MCP server, the collector and the dashboard. Only the `ee/` directory (company SSO, compliance report) is under a separate enterprise license: see [License](#-license).
 
 <br/>
 
@@ -406,7 +406,7 @@ Roadmap items are subject to change.
 
 ## 🤝 Contributing
 
-Contributions are welcome for permitted non-commercial development. Read [CONTRIBUTING.md](CONTRIBUTING.md), [AUTHORS.md](AUTHORS.md) and [NOTICE.md](NOTICE.md), then:
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), then:
 
 ```bash
 git checkout -b feature/my-feature
@@ -419,14 +419,16 @@ and open a Pull Request. To report a vulnerability, see [SECURITY.md](SECURITY.m
 
 ## 📜 License
 
-Cerbere uses an **open-core** model.
+Cerbere uses an **open-core** model. Everything is Apache-2.0 except one directory.
 
 | Component | Paths | License |
 |---|---|---|
-| SDK and MCP server | `agentguard/`, `agentguard_sdk.py`, `mcp/` | **Apache 2.0**: free for commercial and non-commercial use ([LICENSE](LICENSE)) |
-| Collector, dashboard and multi-tenant platform | `collector/`, `dashboard/` | **Source-available**, under the terms of [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) |
+| Core: SDK, MCP server and gateway, collector, dashboard | everything outside `ee/` | **Apache 2.0**: free for commercial and non-commercial use ([LICENSE](LICENSE)) |
+| Enterprise Edition: company SSO (OIDC), compliance report | `ee/` | Source-available under [ee/LICENSE.md](ee/LICENSE.md): you may read, modify and evaluate it; production use requires a Team or Enterprise subscription |
 
-Commercial licensing: **hello@cerbereag.site**
+The core runs fully without `ee/` and without a license key. Paid plans and how license keys work are described in [docs/LICENSING.md](docs/LICENSING.md).
+
+Enterprise plans and commercial questions: **hello@cerbereag.site**
 
 If you reference Cerbere in research or documentation, please credit *Cerbere / AgentGuard, created by Christopher Dikesa*.
 

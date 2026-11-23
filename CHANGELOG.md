@@ -20,10 +20,14 @@ they will always be listed under **Changed** or **Removed**.
 - Signed license keys verified offline (Ed25519) for the Community, Pro, Team and Enterprise plans: `collector/licensing.py`, `scripts/cerbere_license.py`, `GET /api/license`, `docs/LICENSING.md`.
 - Compliance report (PDF or JSON) for the Team and Enterprise plans: `GET /api/compliance/report` and `python -m collector.cli report`. It re-verifies the whole audit chain and never reproduces event contents.
 - `ImmutableAuditLog.verify_chain_full()`, `chain_summary()` and `aggregate_org()`: whole-chain verification in streaming, and per-organization counters.
+- `GOVERNANCE.md` and `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1).
+- `tests/test_license_consistency.py`: the license texts, the README and the file layout must agree with the Apache-2.0 + `ee/` model.
 
 ### Changed
 - The version now has a single source, `agentguard/_version.py`. `/health` reported a hard-coded `0.2.1`; it now reports the real version.
 - `mcp/pyproject.toml` declared `MIT` while the README and `LICENSE` state Apache-2.0 for the MCP server. It now declares `Apache-2.0`.
+- **License.** The collector and dashboard are now documented as Apache-2.0, like the SDK and the MCP server. Only `ee/` keeps its own license (`ee/LICENSE.md`). `LICENSE-COMMERCIAL.md` and the per-directory `LICENSE.md` files that pointed to it are removed; `README.md`, `NOTICE.md`, `CONTRIBUTING.md` and `docs/LICENSING.md` are updated to match.
+- Repository root tidied: latency benchmarks moved to `benchmarks/latency/`, dataset scripts to `scripts/`, the Garak profile to `benchmarks/garak/`, and the stray `scale.json` result to `bench/results/`.
 
 ## [0.6.2]
 

@@ -244,10 +244,9 @@ class TestMultiTenantIsolation:
         assert resp.status_code == 403, (
             f"BOLA not enforced: got {resp.status_code}, expected 403"
         )
-        assert (
-            "access denied" in resp.json.get("error", "").lower()
-            or "denied" in resp.json.get("error", "").lower()
-        )
+        # The route-level role guard rejects machine credentials before
+        # the tenant authorization kernel is reached.
+        assert resp.json.get("error", "").lower() == "forbidden"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -378,14 +377,20 @@ class TestRBACWithAgentKey:
         headers = {"X-API-Key": agent_key}
 
         assert client.get("/api/identity/agents", headers=headers).status_code == 403
-        assert client.post(
-            "/api/identity/agents",
-            json={"name": "Bot2", "org_id": ctx["org_id"]},
-            headers=headers,
-        ).status_code == 403
-        assert client.delete(
-            f"/api/identity/agents/{agent_id}", headers=headers
-        ).status_code == 403
+        assert (
+            client.post(
+                "/api/identity/agents",
+                json={"name": "Bot2", "org_id": ctx["org_id"]},
+                headers=headers,
+            ).status_code
+            == 403
+        )
+        assert (
+            client.delete(
+                f"/api/identity/agents/{agent_id}", headers=headers
+            ).status_code
+            == 403
+        )
 
     def test_agent_key_resolves_to_agent_role(self, client_with_identity):
         """Agent credentials resolve to a machine role, never Developer."""
@@ -453,7 +458,11 @@ class TestUserCreation:
         client, ctx = client_with_identity
         response = client.post(
             "/api/identity/users",
-            json={"email": "agent-role@test.com", "role": "agent", "org_id": ctx["org_id"]},
+            json={
+                "email": "agent-role@test.com",
+                "role": "agent",
+                "org_id": ctx["org_id"],
+            },
             headers=_admin_headers(),
         )
         assert response.status_code == 400

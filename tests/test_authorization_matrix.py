@@ -1,5 +1,5 @@
 """
-Authorization matrix tests — validates SYSTEM / Tenant Admin / Developer isolation.
+Authorization matrix tests — validates SYSTEM / Tenant Admin / machine-agent isolation.
 
 This is the fundamental security matrix of AgentGuard:
 
@@ -9,9 +9,9 @@ This is the fundamental security matrix of AgentGuard:
     Tenant A Admin       → Tenant A      → Org A1    → ALLOW
     Tenant A Admin       → Tenant A      → Org A2    → ALLOW
     Tenant A Admin       → Tenant B      → Any       → DENY (403)
-    Org A1 Developer     → Tenant A      → Org A1    → ALLOW
-    Org A1 Developer     → Tenant A      → Org A2    → DENY (403)
-    Org A1 Developer     → Tenant B      → Any       → DENY (403)
+    Org A1 Agent         → Tenant A      → Org A1    → DENY (403)
+    Org A1 Agent         → Tenant A      → Org A2    → DENY (403)
+    Org A1 Agent         → Tenant B      → Any       → DENY (403)
 """
 
 import os
@@ -109,20 +109,20 @@ class TestAuthorizationMatrix:
         )
         assert resp.status_code == 201
 
-    def test_developer_cannot_create_agent_in_other_org_same_tenant(
+    def test_agent_cannot_create_agent_in_other_org_same_tenant(
         self, client_with_identity
     ):
-        """Developer A → Org B (same tenant) = DENY (403)."""
+        """Machine agent credentials cannot create agents in another org."""
         client, ctx = client_with_identity
 
-        # Create developer agent
+        # Create machine agent
         resp = client.post(
             "/api/identity/agents",
-            json={"name": "Dev Agent", "org_id": ctx["org_id"]},
+            json={"name": "Agent", "org_id": ctx["org_id"]},
             headers=_admin_headers(ctx["api_key"]),
         )
         assert resp.status_code == 201
-        dev_key = resp.json["api_key"]
+        agent_key = resp.json["api_key"]
 
         # Create Org B in same tenant
         resp = client.post(
@@ -133,23 +133,23 @@ class TestAuthorizationMatrix:
         assert resp.status_code == 201
         org_b = resp.json["org_id"]
 
-        # Developer cannot create agent in Org B
+        # Machine agent cannot create another agent in Org B
         resp = client.post(
             "/api/identity/agents",
             json={"name": "Spy Agent", "org_id": org_b},
-            headers=_admin_headers(dev_key),
+            headers=_admin_headers(agent_key),
         )
         assert resp.status_code == 403
-        assert "denied" in resp.json.get("error", "").lower()
+        assert resp.json.get("error", "").lower() == "forbidden"
 
-    def test_developer_cannot_create_agent_in_other_tenant(self, client_with_identity):
-        """Developer A → Tenant B = DENY (403)."""
+    def test_agent_cannot_create_agent_in_other_tenant(self, client_with_identity):
+        """Machine agent credentials cannot create agents in another tenant."""
         client, ctx = client_with_identity
 
-        # Create developer agent
+        # Create machine agent
         resp = client.post(
             "/api/identity/agents",
-            json={"name": "Dev Agent", "org_id": ctx["org_id"]},
+            json={"name": "Agent", "org_id": ctx["org_id"]},
             headers=_admin_headers(ctx["api_key"]),
         )
         assert resp.status_code == 201
@@ -171,17 +171,17 @@ class TestAuthorizationMatrix:
         )
         spy_org = resp.json["org_id"]
 
-        # Developer cannot create agent in spy_org (different tenant)
+        # Machine agent cannot create an agent in spy_org (different tenant)
         resp = client.post(
             "/api/identity/agents",
             json={"name": "Spy Agent", "org_id": spy_org},
             headers=_admin_headers(dev_key),
         )
         assert resp.status_code == 403
-        assert "denied" in resp.json.get("error", "").lower()
+        assert resp.json.get("error", "").lower() == "forbidden"
 
-    def test_developer_cannot_create_user(self, client_with_identity):
-        """Developer → user:create = DENY (permission missing)."""
+    def test_agent_cannot_create_user(self, client_with_identity):
+        """Machine agent credentials cannot create human users."""
         client, ctx = client_with_identity
 
         resp = client.post(
@@ -198,8 +198,8 @@ class TestAuthorizationMatrix:
         )
         assert resp.status_code == 403
 
-    def test_developer_can_list_agents_in_own_org(self, client_with_identity):
-        """Developer → agent:list in own org = ALLOW."""
+    def test_agent_cannot_list_agents_in_own_org(self, client_with_identity):
+        """Machine agent credentials cannot enumerate peer agents."""
         client, ctx = client_with_identity
 
         # Create 2 agents in ctx["org_id"]
@@ -215,10 +215,9 @@ class TestAuthorizationMatrix:
         )
         dev_key = resp1.json["api_key"]
 
-        # Developer can list their own org's agents
+        # Machine agent cannot list its org's agents
         resp = client.get("/api/identity/agents", headers=_admin_headers(dev_key))
-        assert resp.status_code == 200
-        assert resp.json["count"] == 2
+        assert resp.status_code == 403
 
 
 class TestInputValidation:

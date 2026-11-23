@@ -62,9 +62,11 @@ Homepage = "https://app.cerbereag.site"
 Repository = "https://github.com/chrismsmr-celcom/cerbere-AG"
 
 [tool.setuptools.packages.find]
-# ⚠️ CORRECTIF MAJEUR : ne packager QUE les composants Apache 2.0.
-# - "collector*" est sous licence COMMERCIALE : ne doit jamais figurer
-#   dans le wheel PyPI (conflit de licence avec license = "Apache-2.0").
+# Le wheel PyPI ne contient que le SDK.
+# - "collector*" (Apache 2.0, comme le reste du cœur) est livré par Docker / self-host,
+#   pas par le wheel du SDK : un client pip n'a pas besoin d'embarquer un serveur Flask.
+# - "ee/" (licence Enterprise, voir ee/LICENSE.md) ne doit JAMAIS figurer dans un wheel
+#   (tests/test_open_core.py le vérifie).
 # - "mcp*" est publié séparément comme "cerbere-ag-mcp" (mcp/pyproject.toml) :
 #   l'inclure ici créerait deux distributions du même code.
 # - "tools*" : scripts de dev/dashboard, rien à faire dans le SDK.

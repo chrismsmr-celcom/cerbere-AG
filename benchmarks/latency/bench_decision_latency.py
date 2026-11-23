@@ -1,6 +1,6 @@
 """Mesure L2 : latence complète de la décision de sécurité Cerbère.
 
-Sépare la mesure en couches conformément à bench/methodology.md :
+Sépare la mesure en couches conformément à benchmarks/METHODOLOGY.md :
   L2 — appel de l'outil protégé à corps NO-OP : tout le temps mesuré
        provient du SDK (décision + mise en file du span), rien de l'outil.
        . chaud (snapshot frais)
@@ -15,11 +15,18 @@ AGENTGUARD_DECIDE_ATTR (mesure encore plus pure, sans mise en file).
 Exporte les résultats BRUTS par appel (CSV) + agrégats (JSON).
 
 Usage (collecteur RÉEL obligatoire) :
-    AGENTGUARD_COLLECTOR_URL=http://127.0.0.1:8000 BENCH_N=200 python bench_decision_latency.py
-    python bench_decision_latency.py discover   # liste les callables de l'instance
+    AGENTGUARD_COLLECTOR_URL=http://127.0.0.1:8000 BENCH_N=200 python benchmarks/latency/bench_decision_latency.py
+    python benchmarks/latency/bench_decision_latency.py discover   # liste les callables de l'instance
 """
 
 from __future__ import annotations
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(
+    0, str(_Path(__file__).resolve().parents[2])
+)  # repo root: `agentguard` sans pip install -e
 
 import csv
 import inspect

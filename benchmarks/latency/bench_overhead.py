@@ -5,9 +5,9 @@ Lance un faux collector local qui attend --delay-ms avant chaque réponse (laten
 réseau simulée), puis appelle un outil gardé --calls fois dans chaque mode avec le
 VRAI SDK. Hors réseau (aucun appel externe), reproductible.
 
-    python bench_overhead.py                      # 300 ms simulés, 40 appels
-    python bench_overhead.py --delay-ms 2500      # ta connexion depuis la RDC
-    python bench_overhead.py --delay-ms 80        # un cloud proche
+    python benchmarks/latency/bench_overhead.py                      # 300 ms simulés, 40 appels
+    python benchmarks/latency/bench_overhead.py --delay-ms 2500      # ta connexion depuis la RDC
+    python benchmarks/latency/bench_overhead.py --delay-ms 80        # un cloud proche
 
 Notes :
   * Le SDK envoie les spans par GRAPPES (liste JSON) — on compte les SPANS reçus,
@@ -18,6 +18,14 @@ Notes :
     ici. En vrai déploiement avec une telle latence, le mode retombe en enforce
     (fail-safe voulu) — vise un collector à < 2 s de latence.
 """
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(
+    0, str(_Path(__file__).resolve().parents[2])
+)  # repo root: `agentguard` sans pip install -e
+
 
 import argparse
 import json
