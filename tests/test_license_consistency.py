@@ -52,7 +52,7 @@ def test_only_ee_has_its_own_license():
         str(p.relative_to(ROOT))
         for p in ROOT.rglob("LICENSE*")
         if p.is_file()
-        and not {".git", "node_modules", "ee", ".venv"} & set(p.relative_to(ROOT).parts)
+        and not {".git", "node_modules", "ee", ".venv", "venv", ".tox", "__pycache__"} & set(p.relative_to(ROOT).parts)
     ]
     assert license_files == ["LICENSE"], license_files
 
