@@ -32,6 +32,7 @@ dependencies = [
     "tiktoken>=0.7.0,<1.0.0",
     "pydantic>=2.7.0,<3.0.0",
     "argon2-cffi>=23.1.0,<24.0.0",
+    "opentelemetry-api>=1.23.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -69,7 +70,7 @@ Repository = "https://github.com/chrismsmr-celcom/cerbere-AG"
 #   (tests/test_open_core.py le vérifie).
 # - "mcp*" est publié séparément comme "cerbere-ag-mcp" (mcp/pyproject.toml) :
 #   l'inclure ici créerait deux distributions du même code.
-# - "tools*" : scripts de dev/dashboard, rien à faire dans le SDK.
+# - "tools*" : scripts de dev/dashboard, rien à faire dans le wheel du SDK.
 include = ["agentguard*", "policy*"]
 
 [tool.ruff.lint]

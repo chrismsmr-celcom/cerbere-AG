@@ -144,15 +144,24 @@ Everything else (TLS to PostgreSQL, SSO with OIDC, licensing, alerts) is covered
 
 ## 4. MCP server
 
-For agents built on Claude, Cursor or any MCP-capable client, no SDK wiring is needed.
+CerbereAG provides a hosted Streamable HTTP endpoint for MCP clients.
 
-Hosted instance:
+### Hosted public tools (ChatGPT, Claude, etc.)
 
-```bash
-claude mcp add cerbereag --transport sse https://app.cerbereag.site/mcp/sse
-```
+After the hosted MCP service is deployed:
 
-Or run it locally against your own collector:
+- Endpoint: `https://cerbere-ag-mcp.onrender.com/mcp`
+- Transport: Streamable HTTP
+- Authentication: none; this public endpoint exposes only non-tenant-scoped utilities.
+- Tools: `check_prompt_security`, `redact_pii`, `calculate_token_cost`.
+
+In ChatGPT, add a custom connector using the endpoint above and select **No authentication**. Do not use the legacy `/mcp/sse` URL.
+
+The hosted public endpoint deliberately does not expose `get_audit_trail`, tenant data, API-key administration, or privileged tool execution. Those require tenant-scoped authentication and are not part of this public surface.
+
+### Local MCP server (stdio)
+
+For a local client connected to your own collector:
 
 ```bash
 pip install cerbere-ag-mcp
@@ -173,7 +182,7 @@ pip install cerbere-ag-mcp
 }
 ```
 
-Restart the client. The agent can then call `check_prompt_security`, `authorize_tool_call`, `redact_pii`, `get_audit_trail` and `calculate_token_cost`. See [README_MCP.md](../README_MCP.md) for the full list.
+Restart the client. The local stdio server includes additional tools such as `authorize_tool_call` and `get_audit_trail`; keep its API key private. See [README_MCP.md](../README_MCP.md) for the full list.
 
 ---
 

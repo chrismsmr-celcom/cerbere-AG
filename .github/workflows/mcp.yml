@@ -29,10 +29,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install package + dev deps
+      - name: Install SDK + MCP package + dev deps
         run: |
           python -m pip install --upgrade pip
-          pip install "./mcp[gateway-http,yaml,dev]"
+          pip install -e ".[dev]"
+          pip install --no-deps "./mcp[gateway-http,yaml,dev]"
+          pip install "mcp>=1.28,<2.0.0" "uvicorn>=0.30.0" "starlette>=0.37.0" "pyyaml>=6.0" "pytest>=8.0"
 
       - name: Gateway unit tests
         run: |
