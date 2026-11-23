@@ -144,18 +144,19 @@ Everything else (TLS to PostgreSQL, SSO with OIDC, licensing, alerts) is covered
 
 ## 4. MCP server
 
-CerbereAG provides a hosted Streamable HTTP endpoint for MCP clients.
+Cerbere AG provides a hosted Streamable HTTP endpoint for MCP clients.
 
 ### Hosted public tools (ChatGPT, Claude, etc.)
 
-After the hosted MCP service is deployed:
+After the custom domain is verified and TLS is active:
 
-- Endpoint: `https://cerbere-ag-mcp.onrender.com/mcp`
+- Endpoint: `https://mcp.cerbereag.site/mcp`
+- Render fallback: `https://cerbere-ag-mcp.onrender.com/mcp`
 - Transport: Streamable HTTP
 - Authentication: none; this public endpoint exposes only non-tenant-scoped utilities.
 - Tools: `check_prompt_security`, `redact_pii`, `calculate_token_cost`.
 
-In ChatGPT, add a custom connector using the endpoint above and select **No authentication**. Do not use the legacy `/mcp/sse` URL.
+In ChatGPT, add a custom connector using the custom endpoint above and select **No authentication**. Do not use the legacy `/mcp/sse` URL.
 
 The hosted public endpoint deliberately does not expose `get_audit_trail`, tenant data, API-key administration, or privileged tool execution. Those require tenant-scoped authentication and are not part of this public surface.
 
