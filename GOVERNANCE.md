@@ -32,8 +32,8 @@ and adopters know what to expect.
 
 - Versions follow [Semantic Versioning](https://semver.org/). While the major version is 0, minor releases may contain
   breaking changes; they are always listed under **Changed** or **Removed** in [CHANGELOG.md](CHANGELOG.md).
-- Each release is tagged and published on GitHub with an SBOM. The SDK (`sdk-v*`) and the MCP server (`mcp-v*`) are released
-  independently.
+- The root release workflow runs only for `v*` tags and attaches an SBOM to the corresponding GitHub Release.
+- The SDK (`sdk-v*`) and MCP server (`mcp-v*`) use separate GitHub Release-triggered workflows to publish to PyPI. Those package-publishing workflows do not generate or attach SBOMs; their releases are independent of the root `v*` release process.
 
 ## Security
 
