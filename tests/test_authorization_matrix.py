@@ -137,7 +137,7 @@ class TestAuthorizationMatrix:
         resp = client.post(
             "/api/identity/agents",
             json={"name": "Spy Agent", "org_id": org_b},
-            headers=_admin_headers(dev_key),
+            headers=_admin_headers(agent_key),
         )
         assert resp.status_code == 403
         assert resp.json.get("error", "").lower() == "forbidden"
