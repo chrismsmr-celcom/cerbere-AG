@@ -31,6 +31,14 @@ server = FastMCP(
         "This public endpoint does not expose tenant data, audit logs, or "
         "privileged execution tools."
     ),
+    host="0.0.0.0",
+    streamable_http_path="/mcp",
+    json_response=True,
+    stateless_http=True,
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=allowed_hosts,
+        allowed_origins=[],
+    ),
 )
 
 # Keep this public surface intentionally narrow. Do not register get_audit_trail
@@ -39,16 +47,9 @@ server.tool()(check_prompt_security)
 server.tool()(redact_pii)
 server.tool()(calculate_token_cost)
 
-app = server.streamable_http_app(
-    streamable_http_path="/mcp",
-    json_response=True,
-    stateless_http=True,
-    host="0.0.0.0",
-    transport_security=TransportSecuritySettings(
-        allowed_hosts=allowed_hosts,
-        allowed_origins=[],
-    ),
-)
+# In MCP Python SDK 1.x, transport options are configured on FastMCP's
+# constructor; streamable_http_app() itself takes no keyword arguments.
+app = server.streamable_http_app()
 
 
 async def health(_request):
