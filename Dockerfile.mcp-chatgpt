@@ -1,0 +1,21 @@
+# Dedicated public MCP endpoint for safe, non-tenant-scoped utilities.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN useradd --create-home --uid 10001 appuser
+
+COPY mcp/pyproject.toml mcp/README.md ./mcp/
+COPY mcp/mcp_server.py mcp/chatgpt_server.py mcp/gateway_server.py mcp/gateway_config.py mcp/gateway_inspection.py ./mcp/
+
+RUN pip install --no-cache-dir "./mcp[gateway-http]" \
+    && rm -rf /root/.cache/pip
+
+USER appuser
+
+EXPOSE 10000
+
+CMD ["sh", "-c", "uvicorn chatgpt_server:app --host 0.0.0.0 --port ${PORT:-10000}"]
