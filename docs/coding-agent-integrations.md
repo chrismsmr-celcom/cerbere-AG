@@ -36,7 +36,8 @@ and conformance tests.
 - Install the Cerbere SDK in the same Python environment used by the hook (`pip install -e .` from a source checkout, or the published package after the hook command is released).
 - Set AGENTGUARD_COLLECTOR_URL.
 - Set AGENTGUARD_API_KEY to an agent-scoped key.
-- Set AGENTGUARD_AGENT_ID to the registered agent identity.\n- If signed server decisions are enabled, configure `AGENTGUARD_PUBLIC_KEY` and install the `signing` extra.
+- Set AGENTGUARD_AGENT_ID to the registered agent identity.
+- If signed server decisions are enabled, configure `AGENTGUARD_PUBLIC_KEY` and install the `signing` extra.
 - Configure the hook with a blocking timeout appropriate for your collector
   and approval workflow.
 
