@@ -36,8 +36,8 @@ from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
 
 from agentguard.result_inspection import inspect_mcp_content
-from agentguard.tool_contracts import DataClass, DataOrigin
 from agentguard.sdk import AgentGuard
+from agentguard.tool_contracts import DataClass, DataOrigin
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
 current_identity: contextvars.ContextVar[dict[str, Any] | None] = (
@@ -340,10 +340,13 @@ class CerbereGateway:
                         tenant_id=str(identity.get("tenant_id", "default")),
                         org_id=str(identity.get("org_id", "default")),
                     )
-                    for index, _value in enumerate(inspector.taints.matching_values(args))
+                    for index, _value in enumerate(
+                        inspector.taints.matching_values(args)
+                    )
                 ]
                 decision = config.tool_contracts.authorize(
-                    name, origins,
+                    name,
+                    origins,
                     tenant_id=str(identity.get("tenant_id", "default")),
                     org_id=str(identity.get("org_id", "default")),
                     destination=label,
