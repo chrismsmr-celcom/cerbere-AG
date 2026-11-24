@@ -35,9 +35,11 @@ def _object(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         try:
             parsed = json.loads(value)
-        except (TypeError, ValueError):
-            return {"raw_input": value}
-        return parsed if isinstance(parsed, dict) else {"value": parsed}
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Hook tool_input is not valid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Hook tool_input JSON must be an object")
+        return parsed
     if value is None:
         return {}
     return {"value": value}
@@ -139,11 +141,15 @@ def _authorize(event: NormalizedHookEvent) -> None:
     from agentguard import AgentGuard
 
     api_key = os.getenv("AGENTGUARD_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("AGENTGUARD_API_KEY is required; refusing unverified execution")
+    collector_url = os.getenv("AGENTGUARD_COLLECTOR_URL", "").strip()
+    if not api_key or not collector_url:
+        raise RuntimeError(
+            "AGENTGUARD_API_KEY and AGENTGUARD_COLLECTOR_URL are required; "
+            "refusing unverified execution"
+        )
 
     guard = AgentGuard(
-        collector_url=os.getenv("AGENTGUARD_COLLECTOR_URL"),
+        collector_url=collector_url,
         api_key=api_key,
         agent_id=os.getenv("AGENTGUARD_AGENT_ID") or "coding-agent",
         fail_open=False,
