@@ -20,9 +20,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
 from gateway_config import ConfigError, load_config
 from gateway_inspection import ResponseInspector, TaintRegistry
-from agentguard.tool_contracts import DataClass, DataOrigin
 
-from agentguard.tool_contracts import DataOrigin
+from agentguard.tool_contracts import DataClass, DataOrigin
 
 # ---------------------------------------------------------------- config
 
@@ -249,13 +248,21 @@ def test_invalid_tool_contract_config_fails_closed():
 
 
 def test_http_identity_preserves_tenant_and_org_scope():
-    cfg = _load({
-        "transport": "http",
-        "http": {"api_keys": {"scoped-key": {
-            "agent_id": "agent-a", "tenant_id": "tenant-a", "org_id": "org-a"
-        }}},
-        "servers": [{"label": "web", "command": ["x"], "allowed_tools": ["*"]}],
-    })
+    cfg = _load(
+        {
+            "transport": "http",
+            "http": {
+                "api_keys": {
+                    "scoped-key": {
+                        "agent_id": "agent-a",
+                        "tenant_id": "tenant-a",
+                        "org_id": "org-a",
+                    }
+                }
+            },
+            "servers": [{"label": "web", "command": ["x"], "allowed_tools": ["*"]}],
+        }
+    )
     identity = cfg.key_identity("scoped-key")
     assert identity["tenant_id"] == "tenant-a"
     assert identity["org_id"] == "org-a"
@@ -263,18 +270,28 @@ def test_http_identity_preserves_tenant_and_org_scope():
 
 def test_tool_contract_rejects_cross_tenant_provenance():
     raw = json.loads(json.dumps(MINIMAL))
-    raw["tool_contracts"] = [{
-        "tool_pattern": "fs__write_file",
-        "accepts": ["PUBLIC", "INTERNAL"],
-        "allowed_destinations": ["fs"],
-    }]
+    raw["tool_contracts"] = [
+        {
+            "tool_pattern": "fs__write_file",
+            "accepts": ["PUBLIC", "INTERNAL"],
+            "allowed_destinations": ["fs"],
+        }
+    ]
     cfg = _load(raw)
     origin = DataOrigin(
-        data_id="source-1", source_agent_id="agent-a", source_tool="read_file",
-        classification=DataClass.INTERNAL, tenant_id="tenant-other", org_id="o1"
+        data_id="source-1",
+        source_agent_id="agent-a",
+        source_tool="read_file",
+        classification=DataClass.INTERNAL,
+        tenant_id="tenant-other",
+        org_id="o1",
     )
     decision = cfg.tool_contracts.authorize(
-        "fs__write_file", [origin], tenant_id="tenant-current", org_id="o1", destination="fs"
+        "fs__write_file",
+        [origin],
+        tenant_id="tenant-current",
+        org_id="o1",
+        destination="fs",
     )
     assert not decision.allowed
     assert "Cross-tenant" in decision.reason
