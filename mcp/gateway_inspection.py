@@ -69,6 +69,19 @@ class TaintRegistry:
         if len(self._taints) > self._max:
             self._taints.pop(0)
 
+    def matching_values(self, arguments: dict) -> list[str]:
+        """Return all registered sensitive values found in an argument payload."""
+        if not self._taints:
+            return []
+        try:
+            blob = json.dumps(arguments, ensure_ascii=False, default=str)
+        except Exception:
+            blob = str(arguments)
+        return [
+            taint for taint in self._taints
+            if any(form in blob for form in _encodings(taint))
+        ]
+
     def find_in_arguments(self, arguments: dict) -> str | None:
         """Retourne le premier taint présent dans les arguments, sinon None.
 
