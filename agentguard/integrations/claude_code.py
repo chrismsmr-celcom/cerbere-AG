@@ -28,7 +28,7 @@ def _category(tool_name: str) -> str:
 
 
 def _decision_client() -> tuple[str, dict[str, str], Any]:
-    collector = os.getenv("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080").rstrip("/")
+    collector = os.getenv(\n        "AGENTGUARD_COLLECTOR_URL", "http://localhost:8080"\n    ).rstrip("/")
     api_key = os.getenv("AGENTGUARD_API_KEY", "").strip()
     agent_id = os.getenv("AGENTGUARD_AGENT_ID", "claude-code").strip()
     if not api_key:
