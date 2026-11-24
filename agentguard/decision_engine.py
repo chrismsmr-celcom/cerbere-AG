@@ -377,8 +377,8 @@ class DecisionEngine:
                 arguments_text = str(tool_arguments)
 
             dangerous_command = re.compile(
-                r"\\b(?:rm\\s+-rf|sudo|chmod\\s+777|mkfs|dd\\s+if=|"
-                r"wget[^|]*\\|.*sh|curl[^|]*\\|.*sh)\\b",
+                r"\b(?:rm\s+-rf|sudo|chmod\s+777|mkfs|dd\s+if=|"
+                r"wget[^|]*\|.*sh|curl[^|]*\|.*sh)\b",
                 re.IGNORECASE,
             )
             if dangerous_command.search(arguments_text):
