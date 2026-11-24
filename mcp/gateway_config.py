@@ -45,6 +45,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from agentguard.tool_contracts import DataClass, ToolContract, ToolContractRegistry
+
 
 class ConfigError(Exception):
     """Erreur de configuration : la gateway refuse de démarrer."""
@@ -80,6 +82,7 @@ class GatewayConfig:
     redact_secrets: bool = True
     servers: list[ServerSpec] = field(default_factory=list)
     workers: int = 4
+    tool_contracts: ToolContractRegistry = field(default_factory=lambda: ToolContractRegistry(strict=False))
 
     def server(self, label: str) -> ServerSpec:
         for s in self.servers:
@@ -185,6 +188,30 @@ def load_config(path: str | None = None) -> GatewayConfig:
 
     inspection = raw.get("response_inspection", {}) or {}
 
+    # Contracts are opt-in per tool and enforced before upstream forwarding.
+    contract_registry = ToolContractRegistry(strict=False)
+    contracts = raw.get("tool_contracts", [])
+    if not isinstance(contracts, list):
+        raise ConfigError("'tool_contracts' must be a list")
+    for index, entry in enumerate(contracts):
+        if not isinstance(entry, dict) or not isinstance(entry.get("tool_pattern"), str):
+            raise ConfigError(f"tool_contracts[{index}] requires a tool_pattern")
+        try:
+            accepts = tuple(DataClass[str(item).upper()] for item in entry.get("accepts", ["PUBLIC", "INTERNAL"]))
+            emits = DataClass[str(entry.get("emits", "INTERNAL")).upper()]
+        except KeyError as exc:
+            raise ConfigError(f"tool_contracts[{index}] has an unknown data classification") from exc
+        destinations = entry.get("allowed_destinations", [])
+        if not isinstance(destinations, list) or any(not isinstance(item, str) for item in destinations):
+            raise ConfigError(f"tool_contracts[{index}].allowed_destinations must be a list of strings")
+        contract_registry.register(ToolContract(
+            tool_pattern=entry["tool_pattern"], accepts=accepts, emits=emits,
+            allowed_destinations=tuple(destinations),
+            requires_provenance=bool(entry.get("requires_provenance", False)),
+            description=str(entry.get("description", "")),
+        ))
+
+
     return GatewayConfig(
         agent_id=str(raw.get("agent_id", "cerbere_gateway")),
         collector_url=str(
@@ -203,4 +230,5 @@ def load_config(path: str | None = None) -> GatewayConfig:
         redact_secrets=bool(inspection.get("redact_secrets", True)),
         servers=servers,
         workers=int(raw.get("workers", 4)),
+        tool_contracts=contract_registry,
     )
