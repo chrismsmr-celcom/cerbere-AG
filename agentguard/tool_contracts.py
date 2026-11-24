@@ -1,10 +1,10 @@
 """Tool contracts and data provenance authorization built on data labels."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import IntEnum
 from fnmatch import fnmatch
-from typing import Iterable
 
 
 class DataClass(IntEnum):

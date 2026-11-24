@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from enum import Enum
-from typing import Any, Iterable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

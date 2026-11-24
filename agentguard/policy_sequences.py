@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from agentguard.event_contract import AgentEvent, EventKind
 
