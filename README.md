@@ -182,7 +182,7 @@ The layers run in order of cost. Clean traffic should not need the deeper checks
 
 Cerbere tracks sensitive values observed through guarded flows. If a secret is later passed to a protected external tool — including common encoded representations — the outbound action can be blocked.
 
-See [taint tracking](docs/TAINT_TRACKING.md) and the [benchmark methodology](benchmarks/METHODOLOGY.md) for implementation details and evaluation limits.
+See [taint tracking implementation](agentguard/taint.py) and the [benchmark methodology](benchmarks/METHODOLOGY.md) for implementation details and evaluation limits.
 
 ## Beyond coding agents
 
