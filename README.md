@@ -4,12 +4,13 @@
 
 # Cerbere AG
 
-### Multi-Agent Trust Infrastructure
+### Runtime Security for Autonomous AI Agents
 
-**What an agent may do, and what agents may do together.**
+**Control what each agent can do before its actions reach tools, systems and data.**
 
-Cerbere provides the trust layer for autonomous agent systems: identity, authority, runtime enforcement and evidence.
-It helps teams define which agent can act, under whose authority, on which tools and data — and build toward safe, accountable work across multiple agents.
+Cerbere is a self-hosted runtime security and observability layer for autonomous agents. It evaluates tool actions, enforces policies, tracks sensitive data and records evidence.
+
+We are starting with **coding agents** — where terminal, filesystem, Git and MCP access create a direct operational attack surface — while keeping the same security layer available for business agents, workflow agents and custom agent systems.
 
 Self-hosted. Framework-independent. Built for MCP and existing agent stacks.
 
@@ -148,6 +149,24 @@ See [Works with](#-works-with) for Claude Code and Cursor.
 
 <br/>
 
+## Coding agents
+
+Coding agents are our first focused integration surface because they can read source files, run commands, modify repositories and use tools with access to credentials or production systems.
+
+| Agent / surface | Native coverage | Status |
+|---|---|---|
+| Claude Code | `PreToolUse` for matched tool calls | Experimental |
+| Cursor | `preToolUse`, `beforeShellExecution`, `beforeMCPExecution` | Experimental |
+| MCP Gateway | Tool calls and inspected tool results routed through the gateway | Available |
+| Codex | Native lifecycle adapter | Planned |
+
+The native hooks delegate to the existing AgentGuard SDK and policy engine; they do not introduce a second security engine. Tool names and arguments are checked before the host executes the action.
+
+**Coverage boundary:** a hook only controls events the host emits and the configured hook receives. MCP integration alone does not intercept direct shell or filesystem operations. Hooks are not an OS sandbox and should be combined with least-privilege permissions and system-level isolation.
+
+- [Native coding-agent setup](docs/coding-agent-integrations.md)
+- [MCP server and gateway setup](mcp/README.md)
+
 ## 🔗 Works with
 
 | Framework / client | How it connects | Start here |
@@ -155,8 +174,8 @@ See [Works with](#-works-with) for Claude Code and Cursor.
 | **MCP** | MCP server (agent checks its own calls) or MCP gateway (proxy that enforces in front of any MCP server) | [`mcp/README.md`](mcp/README.md) · [`README_MCP.md`](README_MCP.md) |
 | **LangChain / LangGraph** | `guard_llm_call` around the model call | [`examples/langchain_example.py`](examples/langchain_example.py) |
 | **CrewAI** | `guard_tool_call` around each tool, tool allowlist as policy | [`examples/crewai_example.py`](examples/crewai_example.py) (follows the documented CrewAI API, not run in CI) |
-| **Claude Code** | MCP | snippet below |
-| **Cursor** | MCP | snippet below |
+| **Claude Code** | Native PreToolUse hook + MCP | [Hook setup](docs/coding-agent-integrations.md) · snippet below |
+| **Cursor** | Native tool, shell and MCP hooks + MCP | [Hook setup](docs/coding-agent-integrations.md) · snippet below |
 | **OpenAI, Anthropic, DeepSeek SDKs** | Decorators around your call | [`examples/example_agent.py`](examples/example_agent.py) |
 
 Cerbere sits at the execution boundary, so the underlying model does not need to change.
