@@ -27,9 +27,9 @@ def _category(tool_name: str) -> str:
 
 
 def _decision_client() -> tuple[str, dict[str, str], Any]:
-    collector = os.getenv(
-        "AGENTGUARD_COLLECTOR_URL", "http://localhost:8080"
-    ).rstrip("/")
+    collector = os.getenv("AGENTGUARD_COLLECTOR_URL", "http://localhost:8080").rstrip(
+        "/"
+    )
     api_key = os.getenv("AGENTGUARD_API_KEY", "").strip()
     agent_id = os.getenv("AGENTGUARD_AGENT_ID", "claude-code").strip()
     if not api_key:
@@ -47,9 +47,7 @@ def _decision_client() -> tuple[str, dict[str, str], Any]:
     return collector, headers, (agent_id, verifier)
 
 
-def evaluate_pre_tool_use(
-    payload: dict, *, timeout: float = 5.0
-) -> tuple[bool, str]:
+def evaluate_pre_tool_use(payload: dict, *, timeout: float = 5.0) -> tuple[bool, str]:
     """Ask the collector for a signed decision bound to this exact tool call."""
     tool_name = str(payload.get("tool_name") or "").strip()
     arguments = payload.get("tool_input") or {}
@@ -111,8 +109,7 @@ def main() -> int:
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
-                    "Cerbere enforcement unavailable: "
-                    f"{type(exc).__name__}"
+                    f"Cerbere enforcement unavailable: {type(exc).__name__}"
                 ),
             }
         }
