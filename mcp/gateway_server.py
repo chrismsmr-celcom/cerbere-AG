@@ -35,6 +35,7 @@ except ImportError:  # SDK plus ancien : l'approbation remonte comme SecurityExc
 from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
 
+from agentguard.result_inspection import inspect_mcp_content
 from agentguard.sdk import AgentGuard
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
@@ -350,6 +351,16 @@ class CerbereGateway:
             # 5. Forward vers l'amont, puis inspection de la réponse
             result = await up.session.call_tool(tool, args)
             content = inspector.inspect_content(list(result.content))
+            # Inspect untrusted tool output before returning it to the agent.
+            # High-confidence prompt injection is fail-closed; secret-like values are redacted.
+            content, result_findings = inspect_mcp_content(
+                content, block_on_injection=True
+            )
+            if result_findings:
+                categories = sorted({finding.category for finding in result_findings})
+                sys.stderr.write(
+                    f"[cerbere-ag-gateway] result inspection {name}: {', '.join(categories)}\n"
+                )
 
             # 6. Budget par serveur : charge heuristique (arguments + réponse)
             if spec.budget is not None:
