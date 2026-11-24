@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
 from gateway_config import ConfigError, load_config
 from gateway_inspection import ResponseInspector, TaintRegistry
+from agentguard.tool_contracts import DataClass, DataOrigin
 
 # ---------------------------------------------------------------- config
 
@@ -222,7 +223,7 @@ def test_tool_contract_blocks_observed_secret_provenance():
     matches = inspector.taints.matching_values({"content": secret})
     assert matches == [secret]
     origins = [
-        __import__("agentguard.tool_contracts", fromlist=["DataOrigin"]).DataOrigin(
+        DataOrigin(
             data_id="taint:0",
             source_agent_id="agent-a",
             source_tool="previous_mcp_result",
