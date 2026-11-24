@@ -27,12 +27,12 @@ jobs:
       - name: Check for ruff errors
         id: check
         run: |
-          if python -m ruff check .; then
+          if python -m ruff check . && python -m ruff format --check .; then
             echo "has_errors=false" >> $GITHUB_OUTPUT
-            echo "✅ No ruff errors found"
+            echo "✅ Ruff lint and formatting checks passed"
           else
             echo "has_errors=true" >> $GITHUB_OUTPUT
-            echo "❌ Ruff errors detected, fix job will run"
+            echo "❌ Ruff lint or formatting errors detected, fix job will run"
           fi
 
   ruff-fix:
@@ -61,6 +61,9 @@ jobs:
 
       - name: Apply unsafe fixes
         run: python -m ruff check . --fix --unsafe-fixes
+
+      - name: Format Python files
+        run: python -m ruff format .
 
       - name: Commit and push changes
         uses: stefanzweifel/git-auto-commit-action@v5
