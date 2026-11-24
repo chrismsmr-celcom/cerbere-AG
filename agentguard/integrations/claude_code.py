@@ -16,7 +16,6 @@ from typing import Any
 import requests
 
 
-
 def _category(tool_name: str) -> str:
     name = tool_name.lower()
     if name in {"read", "glob", "grep", "ls"}:
