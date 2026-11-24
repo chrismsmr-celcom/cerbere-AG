@@ -56,7 +56,7 @@ Coding agents are our first focused integration surface because their tools can 
 | Claude Code | Connect through Cerbere's MCP server or place the MCP gateway in front of MCP tools | Available through MCP |
 | Cursor | Connect through Cerbere's MCP server or gateway | Available through MCP |
 | Other MCP-compatible coding agents | Use the MCP server or gateway where the client supports MCP | Available, client-dependent |
-| Native lifecycle hooks | Agent-specific hooks for command, file, prompt and tool-result events | In development |
+| Claude Code native hook | Signed `PreToolUse` decision adapter | Experimental |\n| Other native lifecycle hooks | Codex, Cursor and broader Claude Code event coverage | In development |
 
 **Important distinction:** MCP integration does not automatically intercept every native action an agent can perform. For example, connecting an MCP server does not by itself mediate a coding agent's direct shell or filesystem operations. Native hooks and other enforcement adapters are needed for those surfaces. We will document each agent's actual event coverage as it is implemented and tested.
 
