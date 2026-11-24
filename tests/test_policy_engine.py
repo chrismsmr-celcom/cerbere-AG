@@ -115,3 +115,16 @@ class TestToolPolicy:
             budget_remaining=-1.0,
         )
         assert result.passed is False
+
+
+@pytest.mark.parametrize("tool_name", ["Bash", "Shell", "terminal"])
+def test_native_coding_agent_shell_tools_block_dangerous_commands(engine, tool_name):
+    result = engine.check_tool_policy(
+        tool_name,
+        {"command": "rm -rf /"},
+        budget_remaining=10.0,
+    )
+
+    assert result.passed is False
+    assert result.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+    assert "Dangerous command pattern" in result.details
