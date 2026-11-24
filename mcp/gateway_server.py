@@ -356,7 +356,7 @@ class CerbereGateway:
             content, result_findings = inspect_mcp_content(content, block_on_injection=True)
             if result_findings:
                 categories = sorted({finding.category for finding in result_findings})
-                sys.stderr.write(f"[cerbere-ag-gateway] result inspection {name}: {', '.join(categories)}\\n")
+                sys.stderr.write(f"[cerbere-ag-gateway] result inspection {name}: {', '.join(categories)}\n")
 
             # 6. Budget par serveur : charge heuristique (arguments + réponse)
             if spec.budget is not None:
