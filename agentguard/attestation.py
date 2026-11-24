@@ -1,4 +1,5 @@
 """Portable signed evidence bundles using canonical JSON and optional Ed25519."""
+
 from __future__ import annotations
 
 import hashlib
@@ -13,15 +14,27 @@ def canonical_bytes(payload: dict[str, Any]) -> bytes:
 
 
 def build_attestation(
-    events: list[dict[str, Any]], *, subject: str, created_at: float,
+    events: list[dict[str, Any]],
+    *,
+    subject: str,
+    created_at: float,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     body = {
-        "schema_version": "1.0", "subject": subject, "created_at": created_at,
-        "event_count": len(events), "events": events, "metadata": metadata or {},
+        "schema_version": "1.0",
+        "subject": subject,
+        "created_at": created_at,
+        "event_count": len(events),
+        "events": events,
+        "metadata": metadata or {},
     }
     digest = hashlib.sha256(canonical_bytes(body)).hexdigest()
-    return {"payload": body, "sha256": digest, "signature": None, "signature_algorithm": None}
+    return {
+        "payload": body,
+        "sha256": digest,
+        "signature": None,
+        "signature_algorithm": None,
+    }
 
 
 def sign_attestation(bundle: dict[str, Any], private_key: bytes) -> dict[str, Any]:
@@ -31,7 +44,9 @@ def sign_attestation(bundle: dict[str, Any], private_key: bytes) -> dict[str, An
     except ImportError as exc:
         raise RuntimeError("Install cryptography to sign attestations") from exc
     payload = bundle.get("payload")
-    if not isinstance(payload, dict) or hashlib.sha256(canonical_bytes(payload)).hexdigest() != bundle.get("sha256"):
+    if not isinstance(payload, dict) or hashlib.sha256(
+        canonical_bytes(payload)
+    ).hexdigest() != bundle.get("sha256"):
         raise ValueError("Attestation digest mismatch")
     key = Ed25519PrivateKey.from_private_bytes(private_key)
     signed = dict(bundle)
@@ -46,7 +61,10 @@ def verify_attestation(bundle: dict[str, Any], public_key: bytes) -> bool:
 
         payload = bundle["payload"]
         digest = hashlib.sha256(canonical_bytes(payload)).hexdigest()
-        if digest != bundle.get("sha256") or bundle.get("signature_algorithm") != "Ed25519":
+        if (
+            digest != bundle.get("sha256")
+            or bundle.get("signature_algorithm") != "Ed25519"
+        ):
             return False
         Ed25519PublicKey.from_public_bytes(public_key).verify(
             bytes.fromhex(bundle["signature"]), bytes.fromhex(digest)

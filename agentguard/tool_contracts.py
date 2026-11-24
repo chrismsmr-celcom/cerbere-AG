@@ -1,4 +1,5 @@
 """Tool contracts and data provenance authorization built on data labels."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -52,33 +53,65 @@ class ToolContractRegistry:
         self._contracts: list[ToolContract] = []
 
     def register(self, contract: ToolContract) -> None:
-        self._contracts = [item for item in self._contracts if item.tool_pattern != contract.tool_pattern]
+        self._contracts = [
+            item
+            for item in self._contracts
+            if item.tool_pattern != contract.tool_pattern
+        ]
         self._contracts.append(contract)
 
     def resolve(self, tool_name: str) -> ToolContract | None:
-        matches = [item for item in self._contracts if fnmatch(tool_name, item.tool_pattern)]
-        return max(matches, key=lambda item: len(item.tool_pattern)) if matches else None
+        matches = [
+            item for item in self._contracts if fnmatch(tool_name, item.tool_pattern)
+        ]
+        return (
+            max(matches, key=lambda item: len(item.tool_pattern)) if matches else None
+        )
 
-    def authorize(self, tool_name: str, origins: Iterable[DataOrigin], *,
-                  tenant_id: str, org_id: str, destination: str | None = None) -> ContractDecision:
+    def authorize(
+        self,
+        tool_name: str,
+        origins: Iterable[DataOrigin],
+        *,
+        tenant_id: str,
+        org_id: str,
+        destination: str | None = None,
+    ) -> ContractDecision:
         contract = self.resolve(tool_name)
         if contract is None:
-            return ContractDecision(not self.strict, "No contract registered" if self.strict else "Legacy permissive mode")
+            return ContractDecision(
+                not self.strict,
+                "No contract registered" if self.strict else "Legacy permissive mode",
+            )
         items = list(origins)
         if contract.requires_provenance and not items:
             return ContractDecision(False, "Data provenance is required but missing")
         for origin in items:
             if origin.tenant_id != tenant_id or origin.org_id != org_id:
-                return ContractDecision(False, "Cross-tenant or cross-org data flow denied")
+                return ContractDecision(
+                    False, "Cross-tenant or cross-org data flow denied"
+                )
             if origin.classification in (DataClass.MALICIOUS, DataClass.SECRET):
-                return ContractDecision(False, f"{origin.classification.name} data cannot be passed to this tool")
+                return ContractDecision(
+                    False,
+                    f"{origin.classification.name} data cannot be passed to this tool",
+                )
             if origin.classification not in contract.accepts:
                 if origin.classification == DataClass.CONFIDENTIAL:
-                    return ContractDecision(False, "Confidential data requires explicit approval", True)
-                return ContractDecision(False, f"{origin.classification.name} data is not accepted")
+                    return ContractDecision(
+                        False, "Confidential data requires explicit approval", True
+                    )
+                return ContractDecision(
+                    False, f"{origin.classification.name} data is not accepted"
+                )
         if destination and (
             not contract.allowed_destinations
-            or not any(fnmatch(destination, pattern) for pattern in contract.allowed_destinations)
+            or not any(
+                fnmatch(destination, pattern)
+                for pattern in contract.allowed_destinations
+            )
         ):
-            return ContractDecision(False, f"Destination '{destination}' is outside the tool contract")
+            return ContractDecision(
+                False, f"Destination '{destination}' is outside the tool contract"
+            )
         return ContractDecision(True, "Tool contract satisfied")

@@ -1,4 +1,5 @@
 """Bounded multi-step policy detection over canonical agent events."""
+
 from __future__ import annotations
 
 from collections import defaultdict, deque
@@ -35,14 +36,17 @@ class SequencePolicyEngine:
         key = (event.tenant_id, event.agent_id, event.session_id or "")
         queue = self._events[key]
         queue.append(event)
-        cutoff = event.timestamp - max((rule.window_seconds for rule in self.rules), default=0)
+        cutoff = event.timestamp - max(
+            (rule.window_seconds for rule in self.rules), default=0
+        )
         max_events = max((rule.max_events for rule in self.rules), default=64)
         while queue and (queue[0].timestamp < cutoff or len(queue) > max_events):
             queue.popleft()
         matches = []
         for rule in self.rules:
             candidates = [
-                item for item in queue
+                item
+                for item in queue
                 if item.timestamp >= event.timestamp - rule.window_seconds
                 and (rule.predicate is None or rule.predicate(item))
             ]
@@ -53,10 +57,16 @@ class SequencePolicyEngine:
                     selected.append(candidate)
                     cursor += 1
             if cursor == len(rule.kinds):
-                matches.append(SequenceMatch(
-                    rule.rule_id, event.agent_id, tuple(item.event_id for item in selected)
-                ))
+                matches.append(
+                    SequenceMatch(
+                        rule.rule_id,
+                        event.agent_id,
+                        tuple(item.event_id for item in selected),
+                    )
+                )
                 matched = {item.event_id for item in selected}
-                self._events[key] = deque(item for item in queue if item.event_id not in matched)
+                self._events[key] = deque(
+                    item for item in queue if item.event_id not in matched
+                )
                 queue = self._events[key]
         return matches

@@ -13,8 +13,12 @@ def test_registry_distinguishes_business_workflow_and_framework_coverage():
 
 def test_event_timestamp_is_generated():
     event = AgentEvent(
-        kind=EventKind.TOOL_PRE, tenant_id="t", org_id="o", agent_id="a",
-        integration_id="sdk", surface="python",
+        kind=EventKind.TOOL_PRE,
+        tenant_id="t",
+        org_id="o",
+        agent_id="a",
+        integration_id="sdk",
+        surface="python",
     )
     assert event.timestamp > 0
 

@@ -1,4 +1,5 @@
 """Canonical, versioned event contract shared by all agent integration surfaces."""
+
 from __future__ import annotations
 
 import time
@@ -52,16 +53,27 @@ class AgentEvent(BaseModel):
 
     def policy_context(self) -> dict[str, Any]:
         return {
-            "tenant_id": self.tenant_id, "org_id": self.org_id, "agent_id": self.agent_id,
-            "session_id": self.session_id, "parent_agent_id": self.parent_agent_id,
-            "surface": self.surface, "integration_id": self.integration_id,
-            "event_kind": self.kind.value, "data_labels": list(self.data_labels),
-            "provenance": list(self.provenance), "metadata": dict(self.metadata),
+            "tenant_id": self.tenant_id,
+            "org_id": self.org_id,
+            "agent_id": self.agent_id,
+            "session_id": self.session_id,
+            "parent_agent_id": self.parent_agent_id,
+            "surface": self.surface,
+            "integration_id": self.integration_id,
+            "event_kind": self.kind.value,
+            "data_labels": list(self.data_labels),
+            "provenance": list(self.provenance),
+            "metadata": dict(self.metadata),
         }
 
 
-def normalize_event(payload: dict[str, Any], *, integration_id: str, surface: str,
-                    defaults: dict[str, Any] | None = None) -> AgentEvent:
+def normalize_event(
+    payload: dict[str, Any],
+    *,
+    integration_id: str,
+    surface: str,
+    defaults: dict[str, Any] | None = None,
+) -> AgentEvent:
     """Strict adapter boundary: explicit identity defaults, no silent identity guessing."""
     values = {**(defaults or {}), **payload}
     values.setdefault("integration_id", integration_id)
@@ -71,13 +83,17 @@ def normalize_event(payload: dict[str, Any], *, integration_id: str, surface: st
 
 def decision_fingerprint(decision: Any) -> tuple[str, str, tuple[str, ...]]:
     """Stable comparable decision tuple for cross-surface conformance tests."""
-    action = getattr(getattr(decision, "action", None), "value", None) or getattr(decision, "action", "deny")
+    action = getattr(getattr(decision, "action", None), "value", None) or getattr(
+        decision, "action", "deny"
+    )
     reason = str(getattr(decision, "reason", "") or "")
     rules = tuple(sorted(getattr(decision, "matched_rules", []) or []))
     return str(action).lower(), reason, rules
 
 
-def assert_decision_conformance(decisions: Iterable[Any]) -> tuple[str, str, tuple[str, ...]]:
+def assert_decision_conformance(
+    decisions: Iterable[Any],
+) -> tuple[str, str, tuple[str, ...]]:
     """Raise when adapters backed by the same evaluator produce divergent outcomes."""
     fingerprints = [decision_fingerprint(item) for item in decisions]
     if not fingerprints:
