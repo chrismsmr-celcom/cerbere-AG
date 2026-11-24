@@ -182,3 +182,58 @@ def test_http_identity_accepts_bearer_header():
     key, identity = resolve_http_identity(cfg, {"authorization": "Bearer known-key"})
     assert key == "known-key"
     assert identity["agent_id"] == "agent-a"
+
+
+def test_tool_contracts_load_and_enforce_destination():
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["tool_contracts"] = [{
+        "tool_pattern": "fs__write_file",
+        "accepts": ["PUBLIC", "INTERNAL"],
+        "allowed_destinations": ["fs"],
+        "requires_provenance": False,
+    }]
+    cfg = _load(raw)
+    decision = cfg.tool_contracts.authorize(
+        "fs__write_file", [], tenant_id="t1", org_id="o1", destination="fs"
+    )
+    assert decision.allowed
+    denied = cfg.tool_contracts.authorize(
+        "fs__write_file", [], tenant_id="t1", org_id="o1", destination="web"
+    )
+    assert not denied.allowed
+
+
+def test_tool_contract_blocks_observed_secret_provenance():
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["tool_contracts"] = [{
+        "tool_pattern": "fs__write_file",
+        "accepts": ["PUBLIC", "INTERNAL"],
+        "allowed_destinations": ["fs"],
+        "requires_provenance": False,
+    }]
+    cfg = _load(raw)
+    inspector = ResponseInspector()
+    secret = "sk-proj-abcdefghijklmnopqrstuvwxyz123456"
+    inspector.taints.register(secret)
+    matches = inspector.taints.matching_values({"content": secret})
+    assert matches == [secret]
+    origins = [
+        __import__("agentguard.tool_contracts", fromlist=["DataOrigin"]).DataOrigin(
+            data_id="taint:0", source_agent_id="agent-a",
+            source_tool="previous_mcp_result",
+            classification=__import__("agentguard.tool_contracts", fromlist=["DataClass"]).DataClass.SECRET,
+            tenant_id="t1", org_id="o1",
+        )
+    ]
+    decision = cfg.tool_contracts.authorize(
+        "fs__write_file", origins, tenant_id="t1", org_id="o1", destination="fs"
+    )
+    assert not decision.allowed
+    assert "SECRET" in decision.reason
+
+
+def test_invalid_tool_contract_config_fails_closed():
+    raw = json.loads(json.dumps(MINIMAL))
+    raw["tool_contracts"] = [{"tool_pattern": "fs__write_file", "accepts": ["UNKNOWN"]}]
+    with pytest.raises(ConfigError):
+        _load(raw)
