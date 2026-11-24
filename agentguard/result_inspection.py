@@ -1,8 +1,10 @@
 """Post-tool inspection primitives. Detection is deterministic and dependency-free."""
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from typing import Any
+
 
 @dataclass(frozen=True)
 class InspectionFinding:
@@ -10,13 +12,14 @@ class InspectionFinding:
     evidence: str
     confidence: str = "high"
 
+
 @dataclass
 class ResultInspection:
     safe: bool
     findings: list[InspectionFinding] = field(default_factory=list)
     redacted_text: str = ""
 
-# High-signal instruction-hijack patterns; this is a guardrail, not a semantic proof.
+
 _INJECTION_PATTERNS = (
     re.compile(r"(?is)\bignore (?:all |any |the )?(?:previous|prior|above|earlier) instructions\b"),
     re.compile(r"(?is)\b(system|developer) prompt\s*[:=]"),
@@ -30,14 +33,16 @@ _SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----"),
 )
 
+
 def inspect_result(value: Any, *, block_on_injection: bool = True) -> ResultInspection:
     """Inspect recursively serialized tool output before it is reintroduced to an agent."""
     import json
+
     try:
         text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         text = str(value)
-    findings: list[InspectionFinding] = []
+    findings = []
     for pattern in _INJECTION_PATTERNS:
         if pattern.search(text):
             findings.append(InspectionFinding("prompt_injection", pattern.pattern[:100]))
@@ -46,12 +51,15 @@ def inspect_result(value: Any, *, block_on_injection: bool = True) -> ResultInsp
         if pattern.search(redacted):
             findings.append(InspectionFinding("secret_exposure", "secret-like material"))
             redacted = pattern.sub("[REDACTED_SECRET]", redacted)
-    malicious = any(f.category == "prompt_injection" for f in findings)
-    return ResultInspection(safe=not (block_on_injection and malicious), findings=findings, redacted_text=redacted)
+    malicious = any(item.category == "prompt_injection" for item in findings)
+    return ResultInspection(
+        safe=not (block_on_injection and malicious), findings=findings, redacted_text=redacted
+    )
+
 
 def inspect_mcp_content(content: list[Any], *, block_on_injection: bool = True) -> tuple[list[Any], list[InspectionFinding]]:
     """Redact secret-like values and fail closed on high-confidence injection text."""
-    all_findings: list[InspectionFinding] = []
+    all_findings = []
     for item in content:
         value = getattr(item, "text", None)
         if not isinstance(value, str):

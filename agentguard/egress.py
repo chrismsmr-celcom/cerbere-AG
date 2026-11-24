@@ -1,15 +1,18 @@
 """Destination policy primitives; not an OS firewall or network sandbox."""
 from __future__ import annotations
+
+import ipaddress
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from urllib.parse import urlsplit
-import ipaddress
+
 
 @dataclass(frozen=True)
 class EgressDecision:
     allowed: bool
     normalized_host: str | None
     reason: str
+
 
 def normalize_destination(destination: str) -> str:
     raw = destination.strip()
@@ -35,15 +38,16 @@ def normalize_destination(destination: str) -> str:
         raise ValueError("Single-label destinations are forbidden")
     return host
 
+
 def evaluate_egress(destination: str, allowlist: tuple[str, ...] = (),
                     denylist: tuple[str, ...] = (), *, default_allow: bool = False) -> EgressDecision:
     try:
         host = normalize_destination(destination)
     except ValueError as exc:
         return EgressDecision(False, None, str(exc))
-    if any(fnmatch(host, p.lower()) for p in denylist):
+    if any(fnmatch(host, pattern.lower()) for pattern in denylist):
         return EgressDecision(False, host, "Destination matches denylist")
-    allowed = any(fnmatch(host, p.lower()) for p in allowlist)
+    allowed = any(fnmatch(host, pattern.lower()) for pattern in allowlist)
     if allowlist:
         return EgressDecision(allowed, host, "Destination allowlisted" if allowed else "Destination not allowlisted")
     return EgressDecision(default_allow, host, "Default allow" if default_allow else "No allowlist configured (fail-closed)")

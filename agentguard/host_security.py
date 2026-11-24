@@ -1,10 +1,12 @@
 """Host command and artifact policy primitives; actual isolation requires an OS sandbox backend."""
 from __future__ import annotations
+
 import hashlib
 import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
+
 
 @dataclass(frozen=True)
 class HostDecision:
@@ -12,10 +14,13 @@ class HostDecision:
     reason: str
     subject: str
 
+
 @dataclass(frozen=True)
 class HostSecurityPolicy:
     allowed_executables: tuple[str, ...] = ()
-    denied_command_patterns: tuple[str, ...] = (r"\brm\s+-rf\s+/", r"\bcurl\b.*\|\s*(?:sh|bash)", r"\bmkfs\b")
+    denied_command_patterns: tuple[str, ...] = (
+        r"\brm\s+-rf\s+/", r"\bcurl\b.*\|\s*(?:sh|bash)", r"\bmkfs\b"
+    )
     allowed_artifact_sha256: tuple[str, ...] = ()
     require_artifact_hash: bool = True
 

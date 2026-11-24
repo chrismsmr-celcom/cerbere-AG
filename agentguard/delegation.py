@@ -1,8 +1,10 @@
 """Least-privilege parent/child agent delegation with expiry and revocation."""
 from __future__ import annotations
-from dataclasses import dataclass
+
 import time
+from dataclasses import dataclass
 from threading import RLock
+
 
 @dataclass(frozen=True)
 class Delegation:
@@ -15,8 +17,10 @@ class Delegation:
     created_at: float
     revoked_at: float | None = None
 
+
 class DelegationRegistry:
     """In-memory reference implementation. Production deployments must persist and share state."""
+
     def __init__(self):
         self._items: dict[str, Delegation] = {}
         self._lock = RLock()
@@ -49,8 +53,10 @@ class DelegationRegistry:
         now = time.time() if now is None else now
         with self._lock:
             item = self._items.get(delegation_id)
-            return bool(item and item.revoked_at is None and item.expires_at > now
-                        and item.tenant_id == tenant_id
-                        and item.parent_agent_id == parent_agent_id
-                        and item.child_agent_id == child_agent_id
-                        and any(scope == s or (s.endswith(".*") and scope.startswith(s[:-1])) for s in item.scopes))
+            return bool(
+                item and item.revoked_at is None and item.expires_at > now
+                and item.tenant_id == tenant_id
+                and item.parent_agent_id == parent_agent_id
+                and item.child_agent_id == child_agent_id
+                and any(scope == s or (s.endswith(".*") and scope.startswith(s[:-1])) for s in item.scopes)
+            )

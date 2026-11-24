@@ -32,11 +32,10 @@ try:
 except ImportError:  # SDK plus ancien : l'approbation remonte comme SecurityException
     ApprovalRequiredException = SecurityException
 
+from agentguard.result_inspection import inspect_mcp_content
+from agentguard.sdk import AgentGuard
 from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
-from agentguard.result_inspection import inspect_mcp_content
-
-from agentguard.sdk import AgentGuard
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
 current_identity: contextvars.ContextVar[dict[str, Any] | None] = (
