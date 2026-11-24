@@ -1,4 +1,3 @@
-import time
 from agentguard.event_contract import AgentEvent, EventKind
 from agentguard.egress import evaluate_egress
 from agentguard.integrations.registry import list_integrations

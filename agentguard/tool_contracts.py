@@ -1,6 +1,6 @@
 """Tool contracts and data provenance authorization built on data labels."""
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from fnmatch import fnmatch
 from typing import Iterable
@@ -65,6 +65,8 @@ class ToolContractRegistry:
                 return ContractDecision(False, "Cross-tenant or cross-org data flow denied")
             if origin.classification == DataClass.MALICIOUS:
                 return ContractDecision(False, "Malicious data cannot enter a tool")
+            if origin.classification == DataClass.SECRET:
+                return ContractDecision(False, "Secret data cannot be passed to this tool")
             if origin.classification not in contract.accepts:
                 if origin.classification == DataClass.CONFIDENTIAL:
                     return ContractDecision(False, "Confidential data requires explicit approval", True)

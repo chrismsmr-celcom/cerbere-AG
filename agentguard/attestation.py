@@ -38,5 +38,5 @@ def verify_attestation(bundle: dict[str, Any], public_key: bytes) -> bool:
             return False
         Ed25519PublicKey.from_public_bytes(public_key).verify(bytes.fromhex(bundle["signature"]), bytes.fromhex(digest))
         return True
-    except (ImportError, KeyError, ValueError, TypeError):
+    except Exception:
         return False

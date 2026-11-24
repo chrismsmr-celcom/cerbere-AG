@@ -36,9 +36,13 @@ class HostSecurityPolicy:
         target = Path(path)
         if not target.is_file():
             return HostDecision(False, "Artifact is not a regular file", path)
-        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        digest = hashlib.sha256()
+        with target.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        fingerprint = digest.hexdigest()
         if self.require_artifact_hash and not self.allowed_artifact_sha256:
-            return HostDecision(False, "No artifact hashes configured (fail-closed)", digest)
-        if self.allowed_artifact_sha256 and digest not in self.allowed_artifact_sha256:
-            return HostDecision(False, "Artifact SHA-256 is not allowlisted", digest)
-        return HostDecision(True, "Artifact hash verified", digest)
+            return HostDecision(False, "No artifact hashes configured (fail-closed)", fingerprint)
+        if self.allowed_artifact_sha256 and fingerprint not in self.allowed_artifact_sha256:
+            return HostDecision(False, "Artifact SHA-256 is not allowlisted", fingerprint)
+        return HostDecision(True, "Artifact hash verified", fingerprint)

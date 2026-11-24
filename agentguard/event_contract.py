@@ -2,8 +2,8 @@
 from __future__ import annotations
 import time
 from enum import Enum
-from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Iterable
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from agentguard.ids import uuid7
 
 class EventKind(str, Enum):
@@ -36,6 +36,13 @@ class AgentEvent(BaseModel):
     provenance: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("schema_version")
+    @classmethod
+    def supported_version(cls, value: str) -> str:
+        if value != "1.0":
+            raise ValueError(f"Unsupported event schema version: {value}")
+        return value
+
     def policy_context(self) -> dict[str, Any]:
         return {"tenant_id": self.tenant_id, "org_id": self.org_id,
                 "agent_id": self.agent_id, "session_id": self.session_id,
@@ -58,3 +65,12 @@ def decision_fingerprint(decision: Any) -> tuple[str, str, tuple[str, ...]]:
     reason = str(getattr(decision, "reason", "") or "")
     rules = tuple(sorted(getattr(decision, "matched_rules", []) or []))
     return str(action).lower(), reason, rules
+
+def assert_decision_conformance(decisions: Iterable[Any]) -> tuple[str, str, tuple[str, ...]]:
+    """Raise when adapters backed by the same evaluator produce divergent outcomes."""
+    fingerprints = [decision_fingerprint(item) for item in decisions]
+    if not fingerprints:
+        raise ValueError("At least one decision is required")
+    if any(item != fingerprints[0] for item in fingerprints[1:]):
+        raise AssertionError(f"Cross-surface decision mismatch: {fingerprints!r}")
+    return fingerprints[0]
