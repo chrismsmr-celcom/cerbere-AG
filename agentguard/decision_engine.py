@@ -21,9 +21,9 @@ The LLM is never the final authority.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
