@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "mcp"))
 
 from gateway_config import ConfigError, load_config
 from gateway_inspection import ResponseInspector, TaintRegistry
-from agentguard.tool_contracts import DataClass, DataOrigin
+
+from agentguard.tool_contracts import DataOrigin
 
 # ---------------------------------------------------------------- config
 
