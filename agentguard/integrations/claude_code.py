@@ -15,7 +15,6 @@ from typing import Any
 
 import requests
 
-from .registry import normalize_event
 
 
 def _category(tool_name: str) -> str:
@@ -54,21 +53,6 @@ def evaluate_pre_tool_use(payload: dict, *, timeout: float = 5.0) -> tuple[bool,
     if not tool_name or not isinstance(arguments, dict):
         return False, "Malformed Claude Code hook payload"
 
-    agent_id = os.getenv("AGENTGUARD_AGENT_ID", "claude-code").strip()
-    session_id = str(payload.get("session_id") or "")
-    event = normalize_event(
-        integration="claude-code",
-        event_type="tool.pre",
-        agent_id=agent_id,
-        session_id=session_id,
-        tool_name=tool_name,
-        arguments=arguments,
-        metadata={
-            "hook_event_name": payload.get("hook_event_name", "PreToolUse"),
-            "cwd": payload.get("cwd"),
-            "tool_use_id": payload.get("tool_use_id"),
-        },
-    )
     collector, headers, auth = _decision_client()
     bound_agent_id, verifier = auth
     nonce = uuid.uuid4().hex
