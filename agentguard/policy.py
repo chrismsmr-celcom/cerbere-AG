@@ -936,7 +936,7 @@ class PolicyEngine:
                             action=SecurityAction.REVIEW,
                         )
 
-        if tool_name == "execute_command":
+        if tool_name.lower() in {"execute_command", "bash", "shell", "terminal"}:
             check = self._check_command(params)
             if not check.passed:
                 return check

@@ -89,7 +89,9 @@ def test_authorization_failure_denies_cursor_tool():
     response, allowed = run_hook(
         {"hook_event_name": "preToolUse", "tool_name": "Write", "tool_input": {}},
         "cursor",
-        authorize=lambda event: (_ for _ in ()).throw(RuntimeError("collector unavailable")),
+        authorize=lambda event: (_ for _ in ()).throw(
+            RuntimeError("collector unavailable")
+        ),
     )
     assert allowed is False
     assert response["permission"] == "deny"
