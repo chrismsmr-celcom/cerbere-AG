@@ -89,3 +89,27 @@ def test_decide_registered_tool_is_allowed(client, monkeypatch):
     assert r.status_code == 200, body
     assert body.get("action") == "ALLOW", body
     assert "risk_score" in body and "signature" in body, body
+
+
+def test_decide_blocks_dangerous_native_shell_arguments(client, monkeypatch):
+    from collector.api.helpers import decision_engine
+
+    monkeypatch.setattr(
+        decision_engine.policies["default"], "allowed_tools", {"Bash"}
+    )
+    response = client.post(
+        "/api/decide",
+        json={
+            "tool_name": "Bash",
+            "tool_category": "execute",
+            "params": {"command": "rm -rf /"},
+            "nonce": "native-hook-test",
+        },
+        headers=hdr(),
+    )
+
+    body = response.get_json() or {}
+    assert response.status_code == 200, body
+    assert body.get("action") == "BLOCK", body
+    assert "Dangerous shell command pattern" in body.get("reason", ""), body
+    assert body.get("signature"), body
