@@ -73,7 +73,7 @@ Coding agents are our first focused integration surface because their tools can 
 
 Cerbere ships an MCP server and a gateway. The server exposes security utilities an agent can call. The gateway is the enforcement component: it sits between an MCP client and upstream MCP servers and evaluates tool calls before forwarding them.
 
-See the [MCP package guide](mcp/README.md) for installation, configuration and transport options.
+See the [MCP package guide](mcp/README.md) for installation, configuration and transport options. The experimental Claude Code native hook is documented in [Coding-agent integrations](docs/CODING_AGENT_INTEGRATIONS.md).
 
 For Claude Code, a local MCP server can be added with:
 
@@ -231,8 +231,8 @@ Full report: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 | Status | Work |
 |---|---|
 | Shipped | Python SDK · runtime policy enforcement · MCP server and gateway · identity foundation · taint tracking · approval queue · signed decisions · multi-tenant collector · dashboard · audit evidence |
-| In progress | Coding-agent integration registry · native lifecycle adapters · agent-specific event normalization and coverage tests |
-| Next | Claude Code native hook adapter · Codex integration · Cursor native integration · tool-result inspection across supported adapters · integration conformance tests |
+| Shipped (experimental) | Integration registry · normalized event contract · Claude Code `PreToolUse` hook with signed-decision verification |\n| In progress | Broader Claude Code lifecycle coverage · agent-specific event normalization and coverage tests |
+| Next | Codex native adapter · Cursor native adapter · tool-result inspection across supported adapters · integration conformance tests |
 | Later | Broader agent coverage · richer agent identity and scoped delegation · cross-agent data lineage · expanded policy simulation and evidence export |
 
 Roadmap items are subject to change. An item is not considered supported until its integration and enforcement behavior are documented and tested.
