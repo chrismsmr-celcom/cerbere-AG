@@ -103,6 +103,10 @@ green.
   operations outside the hooked tool path require separate system controls.
 - Human approval is not yet bridged into Claude Code's native approval UX;
   decisions other than signed `ALLOW` are denied.
+- The first shell inspection rules cover known-dangerous patterns (for
+  example `rm -rf`, `sudo`, `chmod 777`, `mkfs`, `dd` and download-to-shell
+  pipes). This is a starter ruleset, not comprehensive command analysis. Keep
+  tool allowlists and OS-level sandboxing in place.
 - Validate against the Claude Code version and settings mode used by your
   environment before production rollout.
 
