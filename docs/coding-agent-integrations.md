@@ -4,6 +4,19 @@ Cerbere can be called from native coding-agent hooks. The hook adapter does not
 contain its own detection or policy engine: it normalizes the host event and
 asks the existing AgentGuard SDK to authorize the action before the host runs it.
 
+## Integration registry
+
+The supported surfaces and event coverage are queryable from the SDK:
+
+~~~python
+from agentguard.integrations import list_integrations
+
+for item in list_integrations(kind="coding_agent"):
+    print(item["id"], item["status"], item["events"])
+~~~
+
+The registry is intentionally conservative: Claude Code and Cursor native hooks are experimental; Codex remains planned. MCP gateway coverage is listed separately because it only sees traffic routed through that gateway.
+
 ## Current first-pass support
 
 | Host | Pre-execution event | Coverage in this adapter |
@@ -20,10 +33,10 @@ and conformance tests.
 
 ## Requirements
 
-- Install the Cerbere SDK in the same Python environment used by the hook.
+- Install the Cerbere SDK in the same Python environment used by the hook (`pip install -e .` from a source checkout, or the published package after the hook command is released).
 - Set AGENTGUARD_COLLECTOR_URL.
 - Set AGENTGUARD_API_KEY to an agent-scoped key.
-- Set AGENTGUARD_AGENT_ID to the registered agent identity.
+- Set AGENTGUARD_AGENT_ID to the registered agent identity.\n- If signed server decisions are enabled, configure `AGENTGUARD_PUBLIC_KEY` and install the `signing` extra.
 - Configure the hook with a blocking timeout appropriate for your collector
   and approval workflow.
 
