@@ -186,3 +186,40 @@ def test_result_is_auditable():
     assert payload["audit"]["tool_name"] == "search"
     assert "factors" in payload
     assert "reasons" in payload
+
+
+def test_native_shell_command_arguments_are_inspected():
+    from agentguard.decision_engine import Decision, DecisionEngine, DecisionRequest
+
+    engine = DecisionEngine()
+    result = engine.evaluate(
+        DecisionRequest(
+            agent_id="claude-agent",
+            tool_name="Bash",
+            tool_category="execute",
+            identity_trusted=True,
+            tool_registered=True,
+            metadata={"tool_arguments": {"command": "rm -rf /"}},
+        )
+    )
+
+    assert result.decision == Decision.BLOCK
+    assert "Dangerous shell command pattern" in result.reasons
+
+
+def test_safe_native_shell_command_is_not_blocked_by_argument_inspector():
+    from agentguard.decision_engine import Decision, DecisionEngine, DecisionRequest
+
+    engine = DecisionEngine()
+    result = engine.evaluate(
+        DecisionRequest(
+            agent_id="claude-agent",
+            tool_name="Bash",
+            tool_category="execute",
+            identity_trusted=True,
+            tool_registered=True,
+            metadata={"tool_arguments": {"command": "pwd"}},
+        )
+    )
+
+    assert result.decision == Decision.ALLOW
