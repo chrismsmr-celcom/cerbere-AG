@@ -72,7 +72,7 @@ def decide():
     }
 
     requested_policy = data.get("policy")
-    metadata = {"org_id": g.org_id, "source": "api_decide"}
+    metadata = {\n        "org_id": g.org_id,\n        "source": "api_decide",\n        "tool_arguments": params,\n    }
     if requested_policy:
         metadata["policy"] = str(requested_policy)
 
