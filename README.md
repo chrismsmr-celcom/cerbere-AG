@@ -141,9 +141,11 @@ guard = AgentGuard(
     agent_id="my-agent",
 )
 
+
 @guard.guard_tool_call("send_email")
 def send_email(to, subject, body):
     return email_service.send(to, subject, body)
+
 
 try:
     send_email(
