@@ -94,9 +94,7 @@ def test_decide_registered_tool_is_allowed(client, monkeypatch):
 def test_decide_blocks_dangerous_native_shell_arguments(client, monkeypatch):
     from collector.api.helpers import decision_engine
 
-    monkeypatch.setattr(
-        decision_engine.policies["default"], "allowed_tools", {"Bash"}
-    )
+    monkeypatch.setattr(decision_engine.policies["default"], "allowed_tools", {"Bash"})
     response = client.post(
         "/api/decide",
         json={
