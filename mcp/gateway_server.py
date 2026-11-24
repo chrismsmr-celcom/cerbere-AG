@@ -337,8 +337,8 @@ class CerbereGateway:
                         source_agent_id=str(identity["agent_id"]),
                         source_tool="previous_mcp_result",
                         classification=DataClass.SECRET,
-                        tenant_id=str(identity.get("tenant_id", "default")),
-                        org_id=str(identity.get("org_id", "default")),
+                        tenant_id=str(identity["tenant_id"]),
+                        org_id=str(identity["org_id"]),
                     )
                     for index, _value in enumerate(
                         inspector.taints.matching_values(args)
@@ -347,8 +347,8 @@ class CerbereGateway:
                 decision = config.tool_contracts.authorize(
                     name,
                     origins,
-                    tenant_id=str(identity.get("tenant_id", "default")),
-                    org_id=str(identity.get("org_id", "default")),
+                    tenant_id=str(identity["tenant_id"]),
+                    org_id=str(identity["org_id"]),
                     destination=label,
                 )
                 if not decision.allowed:
