@@ -151,6 +151,29 @@ Règles de validation (fail-closed au démarrage) :
 - `transport: "http"` exige `http.api_keys` (chaque clé = une identité) ;
 - aucun serveur défini ⇒ la gateway refuse de démarrer.
 
+
+### Tool Contracts (opt-in, enforced before forwarding)
+
+Add `tool_contracts` to `gateway.json` to constrain the data classes accepted by a tool and the upstream destinations it may reach. Contracts are matched against the exposed name (`<label>__<tool>`, glob patterns supported). Unmatched tools retain the existing gateway policy; matched tools are checked before AgentGuard authorization and before any upstream call.
+
+```json
+"tool_contracts": [
+  {
+    "tool_pattern": "web__*",
+    "accepts": ["PUBLIC", "INTERNAL"],
+    "allowed_destinations": ["web"],
+    "requires_provenance": false,
+    "description": "Only public/internal data may leave through the web upstream"
+  }
+]
+```
+
+- `accepts`: `PUBLIC`, `INTERNAL`, `CONFIDENTIAL`, `SECRET`, `UNTRUSTED`, `MALICIOUS`.
+- `allowed_destinations`: upstream labels allowed for the matched tool; an empty list denies any destination.
+- `requires_provenance`: when true, the gateway denies calls with no observed provenance records.
+- Secret values detected in previous MCP results are tracked and treated as `SECRET` when found again in tool arguments. Cross-tenant/org provenance is denied.
+- This is an opt-in contract enforcement layer, not complete information-flow tracking: ordinary unlabelled values are not automatically classified as confidential.
+
 ## Lancer la gateway
 
 ```bash
