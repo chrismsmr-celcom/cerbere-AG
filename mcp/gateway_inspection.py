@@ -78,7 +78,8 @@ class TaintRegistry:
         except Exception:
             blob = str(arguments)
         return [
-            taint for taint in self._taints
+            taint
+            for taint in self._taints
             if any(form in blob for form in _encodings(taint))
         ]
 

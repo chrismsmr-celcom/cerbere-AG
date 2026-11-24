@@ -82,7 +82,9 @@ class GatewayConfig:
     redact_secrets: bool = True
     servers: list[ServerSpec] = field(default_factory=list)
     workers: int = 4
-    tool_contracts: ToolContractRegistry = field(default_factory=lambda: ToolContractRegistry(strict=False))
+    tool_contracts: ToolContractRegistry = field(
+        default_factory=lambda: ToolContractRegistry(strict=False)
+    )
 
     def server(self, label: str) -> ServerSpec:
         for s in self.servers:
@@ -194,23 +196,37 @@ def load_config(path: str | None = None) -> GatewayConfig:
     if not isinstance(contracts, list):
         raise ConfigError("'tool_contracts' must be a list")
     for index, entry in enumerate(contracts):
-        if not isinstance(entry, dict) or not isinstance(entry.get("tool_pattern"), str):
+        if not isinstance(entry, dict) or not isinstance(
+            entry.get("tool_pattern"), str
+        ):
             raise ConfigError(f"tool_contracts[{index}] requires a tool_pattern")
         try:
-            accepts = tuple(DataClass[str(item).upper()] for item in entry.get("accepts", ["PUBLIC", "INTERNAL"]))
+            accepts = tuple(
+                DataClass[str(item).upper()]
+                for item in entry.get("accepts", ["PUBLIC", "INTERNAL"])
+            )
             emits = DataClass[str(entry.get("emits", "INTERNAL")).upper()]
         except KeyError as exc:
-            raise ConfigError(f"tool_contracts[{index}] has an unknown data classification") from exc
+            raise ConfigError(
+                f"tool_contracts[{index}] has an unknown data classification"
+            ) from exc
         destinations = entry.get("allowed_destinations", [])
-        if not isinstance(destinations, list) or any(not isinstance(item, str) for item in destinations):
-            raise ConfigError(f"tool_contracts[{index}].allowed_destinations must be a list of strings")
-        contract_registry.register(ToolContract(
-            tool_pattern=entry["tool_pattern"], accepts=accepts, emits=emits,
-            allowed_destinations=tuple(destinations),
-            requires_provenance=bool(entry.get("requires_provenance", False)),
-            description=str(entry.get("description", "")),
-        ))
-
+        if not isinstance(destinations, list) or any(
+            not isinstance(item, str) for item in destinations
+        ):
+            raise ConfigError(
+                f"tool_contracts[{index}].allowed_destinations must be a list of strings"
+            )
+        contract_registry.register(
+            ToolContract(
+                tool_pattern=entry["tool_pattern"],
+                accepts=accepts,
+                emits=emits,
+                allowed_destinations=tuple(destinations),
+                requires_provenance=bool(entry.get("requires_provenance", False)),
+                description=str(entry.get("description", "")),
+            )
+        )
 
     return GatewayConfig(
         agent_id=str(raw.get("agent_id", "cerbere_gateway")),
