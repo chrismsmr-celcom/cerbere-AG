@@ -37,6 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 signing = ["cryptography>=50.0.0,<51.0.0"]
+integrations = ["cryptography>=50.0.0,<51.0.0"]
 pii = ["presidio-analyzer>=2.2.350,<3.0.0", "presidio-anonymizer>=2.2.350,<3.0.0"]
 redis = ["redis>=5.0.0,<9.0.0"]
 
@@ -57,6 +58,9 @@ dev = [
     "Werkzeug",
     "mcp>=1.28,<2",
 ]
+
+[project.scripts]
+cerbere-ag-claude-code = "agentguard.integrations.claude_code:main"
 
 [project.urls]
 Homepage = "https://app.cerbereag.site"
