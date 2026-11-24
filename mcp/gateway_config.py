@@ -200,7 +200,11 @@ def load_config(path: str | None = None) -> GatewayConfig:
     if not isinstance(contracts, list):
         raise ConfigError("'tool_contracts' must be a list")
     for index, entry in enumerate(contracts):
-        if not isinstance(entry, dict) or not isinstance(entry.get("tool_pattern"), str) or not entry.get("tool_pattern").strip():
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("tool_pattern"), str)
+            or not entry.get("tool_pattern").strip()
+        ):
             raise ConfigError(f"tool_contracts[{index}] requires a tool_pattern")
         if not isinstance(entry.get("accepts", ["PUBLIC", "INTERNAL"]), list):
             raise ConfigError(f"tool_contracts[{index}].accepts must be a list")
