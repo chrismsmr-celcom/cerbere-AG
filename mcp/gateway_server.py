@@ -36,6 +36,7 @@ from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
 
 from agentguard.result_inspection import inspect_mcp_content
+from agentguard.tool_contracts import DataClass, DataOrigin
 from agentguard.sdk import AgentGuard
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
@@ -327,6 +328,33 @@ class CerbereGateway:
                         "Blocked by CerbereAG: sensitive taint reaches external sink"
                     )
 
+            # 3b. Enforce configured data contracts before forwarding upstream.
+            if config.tool_contracts.resolve(name) is not None:
+                identity = _identity()
+                origins = [
+                    DataOrigin(
+                        data_id=f"taint:{index}",
+                        source_agent_id=str(identity["agent_id"]),
+                        source_tool="previous_mcp_result",
+                        classification=DataClass.SECRET,
+                        tenant_id=str(identity.get("tenant_id", "default")),
+                        org_id=str(identity.get("org_id", "default")),
+                    )
+                    for index, _value in enumerate(inspector.taints.matching_values(args))
+                ]
+                decision = config.tool_contracts.authorize(
+                    name, origins,
+                    tenant_id=str(identity.get("tenant_id", "default")),
+                    org_id=str(identity.get("org_id", "default")),
+                    destination=label,
+                )
+                if not decision.allowed:
+                    sys.stderr.write(
+                        f"[cerbere-ag-gateway] BLOCKED {name}: tool contract: {decision.reason}\\n"
+                    )
+                    raise RuntimeError(
+                        f"Blocked by CerbereAG: tool contract: {decision.reason}"
+                    )
             # 4. Enforcement AgentGuard avant tout forward — fail-closed
             try:
                 # run_in_executor ne propage pas automatiquement les ContextVars.
