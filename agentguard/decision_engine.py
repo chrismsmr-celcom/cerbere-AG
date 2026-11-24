@@ -367,9 +367,8 @@ class DecisionEngine:
         # ---------------------------------------------------------
 
         tool_arguments = request.metadata.get("tool_arguments")
-        if (
-            request.tool_category.lower() in {"shell", "execute"}
-            and isinstance(tool_arguments, dict)
+        if request.tool_category.lower() in {"shell", "execute"} and isinstance(
+            tool_arguments, dict
         ):
             try:
                 arguments_text = json.dumps(tool_arguments, default=str)
