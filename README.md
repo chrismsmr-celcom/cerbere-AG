@@ -415,8 +415,8 @@ Without Docker: `pip install -r requirements.txt && gunicorn wsgi:app --bind 0.0
 
 | Status | Item |
 |---|---|
-| ✅ Shipped | Three-layer detection · taint tracking · runtime risk and trajectory analysis · human approval queue · signed decisions · multi-tenant collector · MCP server and gateway · company SSO (OIDC) · public benchmark |
-| 🔨 Next | HTTP gateway for agents whose code cannot be changed · "Why was this blocked?" view · documentation site |
+| ✅ Shipped | Three-layer detection · taint tracking · runtime risk and trajectory analysis · human approval queue · signed decisions · multi-tenant collector · MCP server and gateway · Claude Code and Cursor native hook adapters (first pass) · company SSO (OIDC) · public benchmark |
+| 🔨 Next | Integration registry and event conformance tests · post-tool result inspection · Codex native adapter · "Why was this blocked?" view · documentation site |
 | 🔭 Later | OpenTelemetry export · judge router across models · CLI · scoped agent-to-agent delegation · hierarchical revocation · cross-agent data lineage · finer-grained human RBAC |
 
 Roadmap items are subject to change.
