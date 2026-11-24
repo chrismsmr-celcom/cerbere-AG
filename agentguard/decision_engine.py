@@ -22,6 +22,8 @@ The LLM is never the final authority.
 from __future__ import annotations
 
 from collections.abc import Iterable
+import json
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -359,6 +361,37 @@ class DecisionEngine:
                 {"taint_risk": 100.0},
                 request,
             )
+
+        # ---------------------------------------------------------
+        # 5b. Native shell argument inspection
+        # ---------------------------------------------------------
+
+        tool_arguments = request.metadata.get("tool_arguments")
+        if (
+            request.tool_category.lower() in {"shell", "execute"}
+            and isinstance(tool_arguments, dict)
+        ):
+            try:
+                arguments_text = json.dumps(tool_arguments, default=str)
+            except (TypeError, ValueError):
+                arguments_text = str(tool_arguments)
+
+            dangerous_command = re.compile(
+                r"\\b(?:rm\\s+-rf|sudo|chmod\\s+777|mkfs|dd\\s+if=|"
+                r"wget[^|]*\\|.*sh|curl[^|]*\\|.*sh)\\b",
+                re.IGNORECASE,
+            )
+            if dangerous_command.search(arguments_text):
+                return self._result(
+                    Decision.BLOCK,
+                    100,
+                    "critical",
+                    ["Dangerous shell command pattern"],
+                    [DecisionReason.DETECTION.value],
+                    policy,
+                    {"command_risk": 100.0},
+                    request,
+                )
 
         # ---------------------------------------------------------
         # 6. Risk calculation
