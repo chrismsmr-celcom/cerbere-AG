@@ -5,9 +5,7 @@ from agentguard.integrations import (
 
 
 def test_registry_reports_native_coding_agent_coverage():
-    integrations = {
-        item["id"]: item for item in list_integrations(kind="coding_agent")
-    }
+    integrations = {item["id"]: item for item in list_integrations(kind="coding_agent")}
 
     assert integrations["claude-code"]["status"] == "experimental"
     assert integrations["claude-code"]["enforcement"] == ("tool.pre",)
