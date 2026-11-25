@@ -75,7 +75,6 @@ def test_runtime_does_not_accept_unvalidated_model_constructed_event():
         runtime.emit(event)
 
 
-
 def test_sequence_state_is_isolated_between_orgs():
     runtime = AgentEventRuntime(
         sequence_rules=[

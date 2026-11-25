@@ -1,4 +1,4 @@
-""""Bounded multi-step policy detection over canonical agent events."""
+""" "Bounded multi-step policy detection over canonical agent events."""
 
 from __future__ import annotations
 
@@ -30,7 +30,9 @@ class SequencePolicyEngine:
 
     def __init__(self, rules: list[SequenceRule]):
         self.rules = tuple(rules)
-        self._events: dict[tuple[str, str, str, str], deque[AgentEvent]] = defaultdict(deque)
+        self._events: dict[tuple[str, str, str, str], deque[AgentEvent]] = defaultdict(
+            deque
+        )
 
     def ingest(self, event: AgentEvent) -> list[SequenceMatch]:
         # Org is a security boundary too: events from two orgs in the same
