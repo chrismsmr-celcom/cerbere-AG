@@ -140,6 +140,8 @@ class GuardPool:
             policies=policies,
             max_budget=budget,
             block_on_high=True,
+            integration_id="mcp-gateway",
+            surface="mcp",
         )
 
     def get(self, identity: dict[str, Any]) -> AgentGuard:
