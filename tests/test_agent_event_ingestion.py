@@ -101,7 +101,7 @@ def test_canonical_event_ingestion_persists_value_free_provenance(app, monkeypat
     with app.test_request_context("/api/events", method="POST", json=payload):
         g.tenant_id = "tenant-trusted"
         g.org_id = "org-trusted"
-        response, status = events.receive_agent_event()
+        _response, status = events.receive_agent_event()
 
     assert status == 202
     row, _ = _db_run(
