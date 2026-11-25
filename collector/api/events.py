@@ -85,6 +85,24 @@ def receive_agent_event():
                     received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )"""
             )
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS agent_data_provenance (
+                    event_id TEXT NOT NULL,
+                    data_id TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    org_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    parent_data_ids JSONB NOT NULL,
+                    classification TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    transformation TEXT NOT NULL,
+                    content_sha256 TEXT,
+                    occurred_at DOUBLE PRECISION NOT NULL,
+                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (event_id, data_id)
+                )"""
+            )
         else:
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS agent_event_envelopes (
@@ -97,6 +115,24 @@ def receive_agent_event():
                     occurred_at REAL NOT NULL,
                     payload TEXT NOT NULL,
                     received_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )"""
+            )
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS agent_data_provenance (
+                    event_id TEXT NOT NULL,
+                    data_id TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    org_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    parent_data_ids TEXT NOT NULL,
+                    classification TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    transformation TEXT NOT NULL,
+                    content_sha256 TEXT,
+                    occurred_at REAL NOT NULL,
+                    received_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (event_id, data_id)
                 )"""
             )
         cur.execute(
@@ -117,6 +153,32 @@ def receive_agent_event():
             ),
         )
         inserted = cur.rowcount == 1
+
+        # Persist only value-free lineage metadata. Tenant/org/agent/session
+        # scope is taken from the authenticated event, never from record input.
+        for record in event.provenance_records:
+            cur.execute(
+                f"""INSERT INTO agent_data_provenance (
+                    event_id, data_id, tenant_id, org_id, agent_id, session_id,
+                    parent_data_ids, classification, source, transformation,
+                    content_sha256, occurred_at
+                ) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
+                ON CONFLICT (event_id, data_id) DO NOTHING""",
+                (
+                    event.event_id,
+                    record.data_id,
+                    event.tenant_id,
+                    event.org_id,
+                    event.agent_id,
+                    session_id,
+                    json.dumps(record.parent_data_ids),
+                    record.classification,
+                    record.source,
+                    record.transformation,
+                    record.content_sha256,
+                    event.timestamp,
+                ),
+            )
         conn.commit()
     except Exception:
         conn.rollback()
