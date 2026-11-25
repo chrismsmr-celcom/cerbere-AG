@@ -502,6 +502,53 @@ class AgentGuard:
 
         return headers
 
+    def _emit_agent_event(
+        self,
+        kind: str,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        result: Any = None,
+        metadata: dict[str, Any] | None = None,
+        fail_closed: bool = False,
+    ) -> bool:
+        """Send a surface-neutral event to the authenticated collector boundary."""
+        if not self.api_key:
+            return not fail_closed
+        payload = {
+            "event_id": uuid7(),
+            "kind": kind,
+            "timestamp": time.time(),
+            "session_id": self.trace_id,
+            "integration_id": "python-sdk",
+            "surface": "python",
+            "tool_name": tool_name,
+            "arguments": arguments or {},
+            "result": result,
+            "metadata": metadata or {},
+        }
+        try:
+            response = requests.post(
+                f"{self.collector_url}/api/events",
+                json=payload,
+                headers=self._headers(),
+                timeout=self.collector_timeout,
+            )
+            response.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.warning(
+                "canonical_agent_event_delivery_failed",
+                event_kind=kind,
+                tool_name=tool_name,
+                error=str(exc),
+            )
+            if fail_closed:
+                raise SecurityException(
+                    "AgentGuard DENY: canonical event persistence unavailable"
+                ) from exc
+            return False
+
     # ==========================================================
     # MODE D'EXÉCUTION (contrôlé SaaS)
     # ==========================================================
@@ -1713,6 +1760,21 @@ class AgentGuard:
         ):
             self._consume_approval(approval_id, tool_name, params)
 
+        # Canonical pre-execution event. Strict deployments can require persistence.
+        self._emit_agent_event(
+            "tool.pre",
+            tool_name=tool_name,
+            arguments=params,
+            metadata={
+                "decision": policy_decision.action,
+                "decision_source": policy_decision.source,
+                "risk_score": runtime_decision.risk_score,
+                "taint_level": taint_level,
+            },
+            fail_closed=os.getenv("AGENTGUARD_EVENTS_FAIL_CLOSED", "false").lower()
+            == "true",
+        )
+
         # 9. Exécuter l'outil après les contrôles applicables.
         try:
             result = func(**params)
@@ -1753,6 +1815,14 @@ class AgentGuard:
             )
 
             raise
+
+        self._emit_agent_event(
+            "tool.result",
+            tool_name=tool_name,
+            arguments={},
+            result=str(result)[:2000],
+            metadata={"status": "completed"},
+        )
 
         # 10. Inspect the result before returning it to the agent context.
         inspection = self.security_engine.inspect_tool_result(result)
