@@ -22,6 +22,23 @@ class EventKind(str, Enum):
     NETWORK_EGRESS = "network.egress"
 
 
+class ProvenanceRecord(BaseModel):
+    """Value-free lineage metadata attached to a canonical event.
+
+    The record describes where a data item came from and which earlier data
+    items contributed to it. Raw values must never be stored here.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    data_id: str = Field(min_length=1, max_length=128)
+    parent_data_ids: list[str] = Field(default_factory=list, max_length=64)
+    classification: str = Field(default="INTERNAL", pattern="^(PUBLIC|INTERNAL|CONFIDENTIAL|SECRET|UNTRUSTED|MALICIOUS)$")
+    source: str = Field(min_length=1, max_length=256)
+    transformation: str = Field(default="identity", min_length=1, max_length=128)
+    content_sha256: str | None = Field(default=None, pattern="^[a-fA-F0-9]{64}$")
+
+
 class AgentEvent(BaseModel):
     """Surface-neutral event. Adapters map host payloads into this model before policy evaluation."""
 
@@ -42,6 +59,7 @@ class AgentEvent(BaseModel):
     result: Any = None
     data_labels: list[str] = Field(default_factory=list)
     provenance: list[str] = Field(default_factory=list)
+    provenance_records: list[ProvenanceRecord] = Field(default_factory=list, max_length=128)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("schema_version")
