@@ -518,7 +518,11 @@ class AgentGuard:
     ) -> bool:
         """Send a surface-neutral event to the authenticated collector boundary."""
         if not self.api_key:
-            return not fail_closed
+            if fail_closed:
+                raise SecurityException(
+                    "AgentGuard DENY: API key required for canonical event persistence"
+                )
+            return False
         payload = {
             "event_id": uuid7(),
             "kind": kind,
@@ -527,7 +531,7 @@ class AgentGuard:
             "integration_id": self.integration_id,
             "surface": self.surface,
             "tool_name": tool_name,
-            "arguments": arguments or {},
+            "arguments": self._masker.mask_payload(arguments or {}),
             "result": result,
             "metadata": metadata or {},
         }
@@ -1824,7 +1828,11 @@ class AgentGuard:
             "tool.result",
             tool_name=tool_name,
             arguments={},
-            result=str(result)[:2000],
+            result={
+                "sha256": hashlib.sha256(str(result).encode("utf-8")).hexdigest(),
+                "length": len(str(result)),
+                "type": type(result).__name__,
+            },
             metadata={"status": "completed"},
         )
 
