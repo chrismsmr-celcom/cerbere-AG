@@ -1532,10 +1532,12 @@ class AgentGuard:
         )
         requires_approval = policy_decision.requires_approval
         shadow_observation = policy_decision.shadow_observation
-        if shadow_observation is not None:
-            # Keep the legacy span vocabulary stable; the engine itself uses DENY.
-            if shadow_observation.get("would_have_action") == "DENY":
-                shadow_observation["would_have_action"] = "BLOCK"
+        if (
+            shadow_observation is not None
+            and shadow_observation.get("would_have_action") == "DENY"
+        ):
+            # Keep legacy span vocabulary stable; the engine itself uses DENY.
+            shadow_observation["would_have_action"] = "BLOCK"
 
         if shadow_observation is not None:
             logger.warning(
