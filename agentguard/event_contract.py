@@ -75,9 +75,11 @@ def normalize_event(
     defaults: dict[str, Any] | None = None,
 ) -> AgentEvent:
     """Strict adapter boundary: explicit identity defaults, no silent identity guessing."""
-    values = {**(defaults or {}), **payload}
-    values.setdefault("integration_id", integration_id)
-    values.setdefault("surface", surface)
+    # Authenticated adapter context is authoritative; event payloads cannot
+    # override tenant/org/agent identity supplied by the trusted boundary.
+    values = {**payload, **(defaults or {})}
+    values["integration_id"] = integration_id
+    values["surface"] = surface
     return AgentEvent.model_validate(values)
 
 
