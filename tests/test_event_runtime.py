@@ -72,3 +72,30 @@ def test_runtime_does_not_accept_unvalidated_model_constructed_event():
     runtime = AgentEventRuntime()
     with pytest.raises(Exception):
         runtime.emit(event)
+
+
+
+def test_sequence_state_is_isolated_between_orgs():
+    runtime = AgentEventRuntime(
+        sequence_rules=[
+            SequenceRule(
+                "read_then_send",
+                (EventKind.TOOL_PRE, EventKind.TOOL_PRE),
+                window_seconds=30,
+                predicate=lambda event: event.tool_name in {"db.read", "email.send"},
+            )
+        ]
+    )
+    runtime.emit(_event(EventKind.TOOL_PRE, "db.read", 100.0))
+    other_org = AgentEvent(
+        kind=EventKind.TOOL_PRE,
+        timestamp=101.0,
+        tenant_id="tenant-1",
+        org_id="org-2",
+        agent_id="agent-1",
+        session_id="session-1",
+        integration_id="test",
+        surface="unit",
+        tool_name="email.send",
+    )
+    assert runtime.emit(other_org).sequence_matches == ()
