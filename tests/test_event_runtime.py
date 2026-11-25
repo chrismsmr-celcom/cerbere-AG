@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from agentguard.event_contract import AgentEvent, EventKind
 from agentguard.event_runtime import AgentEventRuntime
@@ -70,7 +71,7 @@ def test_runtime_does_not_accept_unvalidated_model_constructed_event():
         metadata={},
     )
     runtime = AgentEventRuntime()
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         runtime.emit(event)
 
 
