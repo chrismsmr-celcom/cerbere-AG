@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from agentguard.event_contract import AgentEvent, EventKind
+from agentguard.event_contract import AgentEvent
 from agentguard.policy_sequences import SequenceMatch, SequencePolicyEngine, SequenceRule
 
 
@@ -53,16 +53,3 @@ class AgentEventRuntime:
             raise RuntimeError("Canonical event persistence is unavailable")
         matches = self._sequences.ingest(canonical)
         return EventResult(canonical, tuple(matches))
-
-
-def default_exfiltration_rules() -> list[SequenceRule]:
-    """Conservative read-then-external-call correlation rules."""
-    return [
-        SequenceRule(
-            rule_id="read_then_external_tool",
-            kinds=(EventKind.TOOL_PRE, EventKind.TOOL_PRE),
-            window_seconds=300,
-            max_events=64,
-            predicate=lambda event: event.kind == EventKind.TOOL_PRE,
-        )
-    ]
