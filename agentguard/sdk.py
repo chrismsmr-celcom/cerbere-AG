@@ -1467,94 +1467,33 @@ class AgentGuard:
 
                 raise SecurityException("AgentGuard DENY: invalid server decision")
 
-        # 4. Déterminer les décisions locales avant leur application.
-        runtime_action = str(getattr(runtime_decision, "action", "ALLOW")).upper()
-
-        requires_approval = (
-            (not check.passed and bool(check.metadata.get("requires_approval")))
-            or runtime_action == "REQUIRE_APPROVAL"
-            or signed_action == "REQUIRE_APPROVAL"
+        # 4. Toutes les primitives convergent vers le même évaluateur.
+        policy_decision = self.security_engine.decide_tool(
+            policy_check=check,
+            runtime_decision=runtime_decision,
+            signed_action=signed_action,
+            shadow_mode=self.shadow_mode,
+            block_on_high=self.block_on_high,
         )
+        requires_approval = policy_decision.requires_approval
+        shadow_observation = policy_decision.shadow_observation
 
-        # 5. Shadow Mode : calculer la décision hypothétique.
-        # Une exigence d'approbation signée reste appliquée.
-        shadow_observation = None
-
-        if self.shadow_mode and signed_action != "REQUIRE_APPROVAL":
-            would_action = "ALLOW"
-            reasons: list[str] = []
-
-            if not runtime_decision.allowed and runtime_action != "REQUIRE_APPROVAL":
-                would_action = "BLOCK"
-                reasons.extend(runtime_decision.reasons[:5])
-
-            elif requires_approval:
-                would_action = "REQUIRE_APPROVAL"
-
-                if check.details:
-                    reasons.append(str(check.details))
-
-                reasons.extend(runtime_decision.reasons[:5])
-
-            elif (
-                not check.passed
-                and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
-                and self.block_on_high
-            ):
-                would_action = "BLOCK"
-
-                if check.details:
-                    reasons.append(str(check.details))
-
-            shadow_observation = {
-                "enabled": True,
-                "would_have_action": would_action,
-                "would_have_blocked": would_action == "BLOCK",
-                "would_have_required_approval": (would_action == "REQUIRE_APPROVAL"),
-                "reasons": [reason for reason in reasons if reason][:5],
-            }
-
-            if would_action != "ALLOW":
-                logger.warning(
-                    "agentguard_shadow_decision",
-                    agent_id=self.agent_id,
-                    tool_name=tool_name,
-                    **shadow_observation,
-                )
-
-        # 6. Refus runtime : appliquer uniquement hors Shadow Mode.
-        if (
-            shadow_observation is None
-            and not runtime_decision.allowed
-            and runtime_action != "REQUIRE_APPROVAL"
-        ):
-            reason = (
-                runtime_decision.reasons[0]
-                if runtime_decision.reasons
-                else "runtime policy denied the action"
+        if shadow_observation is not None:
+            logger.warning(
+                "agentguard_shadow_decision",
+                agent_id=self.agent_id,
+                tool_name=tool_name,
+                **shadow_observation,
             )
 
+        # 5. Application du résultat canonique, hors mode shadow.
+        if policy_decision.action == "DENY":
+            reason = policy_decision.reason or "security policy denied the action"
             record_block(
-                "runtime_deny",
-                f"[RUNTIME DENY] {reason}",
+                f"{policy_decision.source}_deny",
+                f"[{policy_decision.source.upper()} DENY] {reason}",
             )
-
             raise SecurityException(f"AgentGuard DENY: {reason}")
-
-        # 7. Refus de politique : appliquer uniquement hors Shadow Mode.
-        if (
-            shadow_observation is None
-            and not check.passed
-            and not requires_approval
-            and check.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
-            and self.block_on_high
-        ):
-            record_block(
-                "policy_block",
-                f"[POLICY] {check.details}",
-            )
-
-            raise SecurityException(f"AgentGuard BLOCK: {check.details}")
 
         # 8. Approbation humaine.
         # Une exigence d'approbation reste obligatoire,
