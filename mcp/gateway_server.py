@@ -359,9 +359,7 @@ class CerbereGateway:
                     sys.stderr.write(
                         f"[cerbere-ag-gateway] BLOCKED {name}: {outcome.reason}\\n"
                     )
-                    raise RuntimeError(
-                        f"Blocked by CerbereAG: {outcome.reason}"
-                    )
+                    raise RuntimeError(f"Blocked by CerbereAG: {outcome.reason}")
             # 4. Enforcement AgentGuard avant tout forward — fail-closed
             try:
                 # run_in_executor ne propage pas automatiquement les ContextVars.

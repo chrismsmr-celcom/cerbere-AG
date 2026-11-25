@@ -63,7 +63,9 @@ class PolicyDecisionEngine:
         if signed == "DENY":
             return PolicyDecision("DENY", "DENY", False, "Signed server DENY", "signed")
         if signed and signed not in {"ALLOW", "REQUIRE_APPROVAL"}:
-            return PolicyDecision("DENY", "DENY", False, "Invalid signed action", "signed")
+            return PolicyDecision(
+                "DENY", "DENY", False, "Invalid signed action", "signed"
+            )
 
         if contract_decision is not None and not contract_decision.allowed:
             return PolicyDecision(
@@ -71,9 +73,11 @@ class PolicyDecisionEngine:
             )
 
         requires_approval = bool(
-            (policy_check is not None
-             and not getattr(policy_check, "passed", True)
-             and getattr(policy_check, "metadata", {}).get("requires_approval"))
+            (
+                policy_check is not None
+                and not getattr(policy_check, "passed", True)
+                and getattr(policy_check, "metadata", {}).get("requires_approval")
+            )
             or runtime_action == "REQUIRE_APPROVAL"
             or signed == "REQUIRE_APPROVAL"
             or (contract_decision is not None and contract_decision.requires_approval)
@@ -93,7 +97,7 @@ class PolicyDecisionEngine:
             policy_check is not None
             and not getattr(policy_check, "passed", True)
             and getattr(policy_check, "risk_level", None) is not None
-            and getattr(getattr(policy_check, "risk_level"), "value", "") in {"high", "critical"}
+            and getattr(policy_check.risk_level, "value", "") in {"high", "critical"}
             and block_on_high
             and not requires_approval
         ):
@@ -103,8 +107,8 @@ class PolicyDecisionEngine:
             if details:
                 reasons.append(details)
 
-        would_action = "DENY" if denied else (
-            "REQUIRE_APPROVAL" if requires_approval else "ALLOW"
+        would_action = (
+            "DENY" if denied else ("REQUIRE_APPROVAL" if requires_approval else "ALLOW")
         )
         reason = "; ".join(item for item in reasons if item) or (
             "Human approval required" if requires_approval else "Policy allowed"
@@ -125,8 +129,8 @@ class PolicyDecisionEngine:
                 effective, would_action, requires_approval, reason, source, observation
             )
 
-        action = "REQUIRE_APPROVAL" if requires_approval else (
-            "DENY" if denied else "ALLOW"
+        action = (
+            "REQUIRE_APPROVAL" if requires_approval else ("DENY" if denied else "ALLOW")
         )
         return PolicyDecision(action, would_action, requires_approval, reason, source)
 

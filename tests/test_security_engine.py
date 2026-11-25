@@ -74,15 +74,12 @@ def test_security_engine_egress_defaults_to_deny():
     assert allowed.allowed
 
 
-
 def test_policy_decision_engine_returns_one_canonical_outcome():
     from agentguard.models import RiskLevel, RuntimeRiskDecision, SecurityCheck
     from agentguard.security_engine import SecurityEngine
 
     engine = SecurityEngine()
-    blocked = SecurityCheck(
-        "tool_policy", False, RiskLevel.HIGH, "dangerous write"
-    )
+    blocked = SecurityCheck("tool_policy", False, RiskLevel.HIGH, "dangerous write")
     runtime = RuntimeRiskDecision("ALLOW", 0.0, RiskLevel.LOW)
     decision = engine.decide_tool(
         policy_check=blocked,
@@ -94,7 +91,10 @@ def test_policy_decision_engine_returns_one_canonical_outcome():
     assert decision.source == "policy"
 
     approval = SecurityCheck(
-        "dlp", False, RiskLevel.HIGH, "external recipient",
+        "dlp",
+        False,
+        RiskLevel.HIGH,
+        "external recipient",
         metadata={"requires_approval": True},
     )
     decision = engine.decide_tool(policy_check=approval)
