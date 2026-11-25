@@ -35,8 +35,8 @@ except ImportError:  # SDK plus ancien : l'approbation remonte comme SecurityExc
 from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
 
-from agentguard.security_engine import SecurityEngine
 from agentguard.sdk import AgentGuard
+from agentguard.security_engine import SecurityEngine
 from agentguard.tool_contracts import DataClass, DataOrigin
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
