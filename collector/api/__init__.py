@@ -22,6 +22,7 @@ import collector.api.alert_rules
 import collector.api.approvals
 import collector.api.dashboard
 import collector.api.decisions
+import collector.api.events
 import collector.api.health
 import collector.api.incidents
 import collector.api.insights
