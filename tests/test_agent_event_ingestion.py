@@ -2,7 +2,7 @@ from flask import g
 
 
 def test_canonical_event_ingestion_uses_authenticated_identity(app, monkeypatch):
-    import collector.api.events as events
+    from collector.api import events
 
     monkeypatch.setattr(events, "_reject_if_agent_disconnected", lambda: None)
     monkeypatch.setattr(events, "_request_agent_id", lambda: "agent-authenticated")
@@ -40,7 +40,7 @@ def test_canonical_event_ingestion_uses_authenticated_identity(app, monkeypatch)
 
 
 def test_canonical_event_ingestion_is_idempotent(app, monkeypatch):
-    import collector.api.events as events
+    from collector.api import events
 
     monkeypatch.setattr(events, "_reject_if_agent_disconnected", lambda: None)
     monkeypatch.setattr(events, "_request_agent_id", lambda: "agent-1")
