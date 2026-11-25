@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 
 from flask import current_app, g, jsonify, request
 
@@ -12,6 +11,7 @@ from collector.api.helpers import (
     _reject_if_agent_disconnected,
     _request_agent_id,
     _sqlite_connect,
+    _db_run,
     api_bp,
 )
 from collector.db import get_db, is_postgres, redact_pii, sql_placeholder
@@ -33,7 +33,14 @@ def receive_agent_event():
         return jsonify({"error": "Payload too large"}), 413
 
     org_id = getattr(g, "org_id", None)
-    tenant_id = getattr(g, "tenant_id", None) or org_id
+    tenant_id = getattr(g, "tenant_id", None)
+    if org_id and not tenant_id:
+        row, _ = _db_run(
+            "SELECT tenant_id FROM orgs WHERE org_id = ?",
+            (org_id,),
+            fetch="one",
+        )
+        tenant_id = row[0] if row else None
     agent_id = _request_agent_id()
     if not org_id or not tenant_id or not agent_id:
         return jsonify({"error": "Authenticated tenant, org and agent identity required"}), 403
