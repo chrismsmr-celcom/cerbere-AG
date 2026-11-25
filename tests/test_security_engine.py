@@ -134,14 +134,16 @@ def test_policy_decision_engine_contract_denial_is_authoritative():
     assert decision.source == "tool_contract"
 
 
-
 def test_runtime_deny_takes_precedence_over_human_approval():
     from agentguard.models import RiskLevel, RuntimeRiskDecision, SecurityCheck
     from agentguard.security_engine import SecurityEngine
 
     decision = SecurityEngine().decide_tool(
         policy_check=SecurityCheck(
-            "dlp", False, RiskLevel.HIGH, "approval needed",
+            "dlp",
+            False,
+            RiskLevel.HIGH,
+            "approval needed",
             metadata={"requires_approval": True},
         ),
         runtime_decision=RuntimeRiskDecision(
