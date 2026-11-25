@@ -72,4 +72,3 @@ class SequencePolicyEngine:
                 )
                 queue = self._events[key]
         return matches
-"
