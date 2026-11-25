@@ -1,4 +1,4 @@
-""" "Bounded multi-step policy detection over canonical agent events."""
+"""Bounded multi-step policy detection over canonical agent events."""
 
 from __future__ import annotations
 
