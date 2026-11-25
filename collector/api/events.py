@@ -8,10 +8,10 @@ from flask import current_app, g, jsonify, request
 
 from agentguard.event_contract import AgentEvent, EventKind
 from collector.api.helpers import (
+    _db_run,
     _reject_if_agent_disconnected,
     _request_agent_id,
     _sqlite_connect,
-    _db_run,
     api_bp,
 )
 from collector.db import get_db, is_postgres, redact_pii, sql_placeholder
