@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from agentguard.event_contract import AgentEvent
-from agentguard.policy_sequences import SequenceMatch, SequencePolicyEngine, SequenceRule
+from agentguard.policy_sequences import (
+    SequenceMatch,
+    SequencePolicyEngine,
+    SequenceRule,
+)
 
 
 @dataclass(frozen=True)
