@@ -80,11 +80,14 @@ class PolicyDecisionEngine:
         )
 
         denied = False
-        if runtime_decision is not None and not getattr(runtime_decision, "allowed", True):
-            if runtime_action != "REQUIRE_APPROVAL":
-                denied = True
-                source = "runtime"
-                reasons.extend(getattr(runtime_decision, "reasons", [])[:5])
+        if (
+            runtime_decision is not None
+            and not getattr(runtime_decision, "allowed", True)
+            and runtime_action != "REQUIRE_APPROVAL"
+        ):
+            denied = True
+            source = "runtime"
+            reasons.extend(getattr(runtime_decision, "reasons", [])[:5])
 
         if (
             policy_check is not None
