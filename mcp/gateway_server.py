@@ -352,13 +352,14 @@ class CerbereGateway:
                     org_id=str(identity["org_id"]),
                     destination=label,
                 )
-                if not decision.allowed:
+                outcome = self.security_engine.decide_tool(
+                    contract_decision=decision,
+                )
+                if outcome.action == "DENY":
                     sys.stderr.write(
-                        f"[cerbere-ag-gateway] BLOCKED {name}: tool contract: {decision.reason}\\n"
+                        f"[cerbere-ag-gateway] BLOCKED {name}: {outcome.reason}\\n"
                     )
-                    raise RuntimeError(
-                        f"Blocked by CerbereAG: tool contract: {decision.reason}"
-                    )
+                    raise RuntimeError(f"Blocked by CerbereAG: {outcome.reason}")
             # 4. Enforcement AgentGuard avant tout forward — fail-closed
             try:
                 # run_in_executor ne propage pas automatiquement les ContextVars.
