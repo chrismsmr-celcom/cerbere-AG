@@ -1,4 +1,4 @@
-"""Bounded multi-step policy detection over canonical agent events."""
+""""Bounded multi-step policy detection over canonical agent events."""
 
 from __future__ import annotations
 
@@ -26,14 +26,16 @@ class SequenceMatch:
 
 
 class SequencePolicyEngine:
-    """Correlates events per tenant/agent/session; bounded memory and deterministic matching."""
+    """Correlates events per tenant/org/agent/session with bounded memory."""
 
     def __init__(self, rules: list[SequenceRule]):
         self.rules = tuple(rules)
-        self._events: dict[tuple[str, str, str], deque[AgentEvent]] = defaultdict(deque)
+        self._events: dict[tuple[str, str, str, str], deque[AgentEvent]] = defaultdict(deque)
 
     def ingest(self, event: AgentEvent) -> list[SequenceMatch]:
-        key = (event.tenant_id, event.agent_id, event.session_id or "")
+        # Org is a security boundary too: events from two orgs in the same
+        # tenant must never complete one another's multi-step policy sequence.
+        key = (event.tenant_id, event.org_id, event.agent_id, event.session_id or "")
         queue = self._events[key]
         queue.append(event)
         cutoff = event.timestamp - max(
@@ -70,3 +72,4 @@ class SequencePolicyEngine:
                 )
                 queue = self._events[key]
         return matches
+"
