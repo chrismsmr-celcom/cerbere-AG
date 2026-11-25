@@ -101,7 +101,6 @@ def test_sequence_state_is_isolated_between_orgs():
     assert runtime.emit(other_org).sequence_matches == ()
 
 
-
 def test_normalize_event_uses_trusted_identity_defaults():
     from agentguard.event_contract import normalize_event
 

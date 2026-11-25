@@ -43,7 +43,9 @@ def receive_agent_event():
         tenant_id = row[0] if row else None
     agent_id = _request_agent_id()
     if not org_id or not tenant_id or not agent_id:
-        return jsonify({"error": "Authenticated tenant, org and agent identity required"}), 403
+        return jsonify(
+            {"error": "Authenticated tenant, org and agent identity required"}
+        ), 403
 
     # Never accept tenant/org/agent identity from the event body.
     payload = dict(raw)

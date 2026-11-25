@@ -130,9 +130,7 @@ class PolicyDecisionEngine:
             )
 
         action = (
-            "DENY"
-            if denied
-            else ("REQUIRE_APPROVAL" if requires_approval else "ALLOW")
+            "DENY" if denied else ("REQUIRE_APPROVAL" if requires_approval else "ALLOW")
         )
         return PolicyDecision(action, would_action, requires_approval, reason, source)
 
