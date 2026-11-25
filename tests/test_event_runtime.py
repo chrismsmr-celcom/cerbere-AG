@@ -99,3 +99,31 @@ def test_sequence_state_is_isolated_between_orgs():
         tool_name="email.send",
     )
     assert runtime.emit(other_org).sequence_matches == ()
+
+
+def test_normalize_event_uses_trusted_identity_defaults():
+    from agentguard.event_contract import normalize_event
+
+    event = normalize_event(
+        {
+            "kind": "tool.pre",
+            "tenant_id": "attacker-tenant",
+            "org_id": "attacker-org",
+            "agent_id": "spoofed-agent",
+            "integration_id": "spoofed-adapter",
+            "surface": "spoofed-surface",
+            "tool_name": "db.read",
+        },
+        integration_id="claude-code",
+        surface="coding",
+        defaults={
+            "tenant_id": "tenant-real",
+            "org_id": "org-real",
+            "agent_id": "agent-real",
+        },
+    )
+    assert event.tenant_id == "tenant-real"
+    assert event.org_id == "org-real"
+    assert event.agent_id == "agent-real"
+    assert event.integration_id == "claude-code"
+    assert event.surface == "coding"

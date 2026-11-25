@@ -142,6 +142,8 @@ class AgentGuard:
         approval_timeout: float | None = None,
         approval_poll_interval: float | None = None,
         public_key_pem: str | None = None,
+        integration_id: str = "python-sdk",
+        surface: str = "python",
     ):
         self.collector_url = (
             collector_url
@@ -156,6 +158,9 @@ class AgentGuard:
             "AGENTGUARD_AGENT_ID",
             "default",
         )
+        self.integration_id = str(integration_id)[:128]
+        self.surface = str(surface)[:64]
+        self._event_sender: SpanSender | None = None
 
         self.max_budget = max(0.0, float(max_budget))
         self.block_on_high = block_on_high
@@ -502,6 +507,57 @@ class AgentGuard:
 
         return headers
 
+    def _emit_agent_event(
+        self,
+        kind: str,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        result: Any = None,
+        metadata: dict[str, Any] | None = None,
+        fail_closed: bool = False,
+    ) -> bool:
+        """Send a surface-neutral event to the authenticated collector boundary."""
+        if not self.api_key:
+            if fail_closed:
+                raise SecurityException(
+                    "AgentGuard DENY: API key required for canonical event persistence"
+                )
+            return False
+        payload = {
+            "event_id": uuid7(),
+            "kind": kind,
+            "timestamp": time.time(),
+            "session_id": self.trace_id,
+            "integration_id": self.integration_id,
+            "surface": self.surface,
+            "tool_name": tool_name,
+            "arguments": self._masker.mask_payload(arguments or {}),
+            "result": result,
+            "metadata": metadata or {},
+        }
+        # Best-effort telemetry must never add network latency to tool execution.
+        # Strict mode is deliberately synchronous: execution cannot proceed until
+        # the collector confirms persistence of the pre-execution event.
+        if bg_enabled() and not fail_closed:
+            return self._get_event_sender().submit(payload)
+
+        try:
+            self._post_agent_events([payload])
+            return True
+        except Exception as exc:
+            logger.warning(
+                "canonical_agent_event_delivery_failed",
+                event_kind=kind,
+                tool_name=tool_name,
+                error=str(exc),
+            )
+            if fail_closed:
+                raise SecurityException(
+                    "AgentGuard DENY: canonical event persistence unavailable"
+                ) from exc
+            return False
+
     # ==========================================================
     # MODE D'EXÉCUTION (contrôlé SaaS)
     # ==========================================================
@@ -728,6 +784,26 @@ class AgentGuard:
         else:
             self._post_spans([payload])
 
+    def _get_event_sender(self) -> SpanSender:
+        if self._event_sender is None:
+            with _BG_LOCK:
+                if self._event_sender is None:
+                    self._post_agent_events_bound = self._post_agent_events
+                    self._event_sender = SpanSender(self._post_agent_events_bound)
+        return self._event_sender
+
+    def _post_agent_events(self, events: list, session=None) -> None:
+        """Persist canonical events off the hot path, preserving FIFO order."""
+        post = session.post if session is not None else requests.post
+        for event in events:
+            response = post(
+                f"{self.collector_url}/api/events",
+                json=event,
+                headers=self._headers(),
+                timeout=self.collector_timeout,
+            )
+            response.raise_for_status()
+
     def _post_spans(self, payloads: list, session=None) -> None:
         """POST d'un LOT de spans déjà masqués. Compatibilité arrière : un lot
         d'UN span part en objet JSON (l'ancien contrat /span), un lot de
@@ -775,12 +851,20 @@ class AgentGuard:
             self._poller.stop()
         ok = True
         if self._sender is not None:
-            ok = self._sender.stop(drain=True, timeout=timeout)
+            ok = self._sender.stop(drain=True, timeout=timeout) and ok
+        if self._event_sender is not None:
+            ok = self._event_sender.stop(drain=True, timeout=timeout) and ok
         return ok
 
     def flush(self, timeout: float = 5.0) -> bool:
-        """Attend l'envoi des spans en attente (utile avant de quitter un script)."""
-        return True if self._sender is None else self._sender.flush(timeout)
+        """Attend l'envoi des spans et événements en attente."""
+        deadline = time.monotonic() + timeout
+        for sender in (self._sender, self._event_sender):
+            if sender is not None:
+                remaining = max(0.0, deadline - time.monotonic())
+                if not sender.flush(remaining):
+                    return False
+        return True
 
     def _send_to_collector(self, span: GuardSpan):
         try:
@@ -1477,6 +1561,12 @@ class AgentGuard:
         )
         requires_approval = policy_decision.requires_approval
         shadow_observation = policy_decision.shadow_observation
+        if (
+            shadow_observation is not None
+            and shadow_observation.get("would_have_action") == "DENY"
+        ):
+            # Keep legacy span vocabulary stable; the engine itself uses DENY.
+            shadow_observation["would_have_action"] = "BLOCK"
 
         if shadow_observation is not None:
             logger.warning(
@@ -1713,6 +1803,21 @@ class AgentGuard:
         ):
             self._consume_approval(approval_id, tool_name, params)
 
+        # Canonical pre-execution event. Strict deployments can require persistence.
+        self._emit_agent_event(
+            "tool.pre",
+            tool_name=tool_name,
+            arguments=params,
+            metadata={
+                "decision": policy_decision.action,
+                "decision_source": policy_decision.source,
+                "risk_score": runtime_decision.risk_score,
+                "taint_level": taint_level,
+            },
+            fail_closed=os.getenv("AGENTGUARD_EVENTS_FAIL_CLOSED", "false").lower()
+            == "true",
+        )
+
         # 9. Exécuter l'outil après les contrôles applicables.
         try:
             result = func(**params)
@@ -1753,6 +1858,18 @@ class AgentGuard:
             )
 
             raise
+
+        self._emit_agent_event(
+            "tool.result",
+            tool_name=tool_name,
+            arguments={},
+            result={
+                "sha256": hashlib.sha256(str(result).encode("utf-8")).hexdigest(),
+                "length": len(str(result)),
+                "type": type(result).__name__,
+            },
+            metadata={"status": "completed"},
+        )
 
         # 10. Inspect the result before returning it to the agent context.
         inspection = self.security_engine.inspect_tool_result(result)

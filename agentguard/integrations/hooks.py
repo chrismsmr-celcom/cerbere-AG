@@ -155,6 +155,10 @@ def _authorize(event: NormalizedHookEvent) -> None:
         agent_id=os.getenv("AGENTGUARD_AGENT_ID") or "coding-agent",
         fail_open=False,
         wait_for_approval=True,
+        integration_id=(
+            "claude-code" if event.event_name == "PreToolUse" else "cursor"
+        ),
+        surface="coding",
     )
     guard.guard_tool_call(
         event.tool_name,
