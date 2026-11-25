@@ -142,6 +142,8 @@ class AgentGuard:
         approval_timeout: float | None = None,
         approval_poll_interval: float | None = None,
         public_key_pem: str | None = None,
+        integration_id: str = "python-sdk",
+        surface: str = "python",
     ):
         self.collector_url = (
             collector_url
@@ -156,6 +158,8 @@ class AgentGuard:
             "AGENTGUARD_AGENT_ID",
             "default",
         )
+        self.integration_id = str(integration_id)[:128]
+        self.surface = str(surface)[:64]
 
         self.max_budget = max(0.0, float(max_budget))
         self.block_on_high = block_on_high
@@ -520,8 +524,8 @@ class AgentGuard:
             "kind": kind,
             "timestamp": time.time(),
             "session_id": self.trace_id,
-            "integration_id": "python-sdk",
-            "surface": "python",
+            "integration_id": self.integration_id,
+            "surface": self.surface,
             "tool_name": tool_name,
             "arguments": arguments or {},
             "result": result,
