@@ -39,6 +39,7 @@ from .models import (
 )
 from .policy import PolicyEngine
 from .runtime import RuntimeRiskEngine, TrajectoryAnalyzer
+from .security_engine import SecurityEngine
 from .taint import FlowTracker, TaintLevel
 from .vault import IncidentVault
 
@@ -179,6 +180,7 @@ class AgentGuard:
         )
 
         self.policy_engine = PolicyEngine(policies or [], redis_url)
+        self.security_engine = SecurityEngine()
         # Vérification des décisions signées du collector (Ed25519).
         # Activée dès qu'une clé publique est fournie (argument, AGENTGUARD_PUBLIC_KEY
         # ou AGENTGUARD_PUBLIC_KEY_FILE). Une clé fournie mais invalide fait ÉCHOUER
@@ -1813,7 +1815,42 @@ class AgentGuard:
 
             raise
 
-        # 10. Suivre le résultat pour les appels suivants.
+        # 10. Inspect the result before returning it to the agent context.
+        inspection = self.security_engine.inspect_tool_result(result)
+        if not inspection.safe:
+            finding_names = sorted({item.category for item in inspection.findings})
+            inspection_check = SecurityCheck(
+                "post_tool_inspection",
+                False,
+                RiskLevel.CRITICAL,
+                "; ".join(finding_names) or "Unsafe tool result",
+            )
+            span = GuardSpan(
+                span_id,
+                self.trace_id,
+                "tool_call",
+                start,
+                (time.time() - start) * 1000,
+                {"tool": tool_name, "params": params},
+                {
+                    "blocked": True,
+                    "reason": "post_tool_prompt_injection",
+                    "findings": finding_names,
+                    "result": inspection.redacted_text[:500],
+                },
+                [check, runtime_check, inspection_check],
+                True,
+                "Post-tool inspection blocked untrusted instructions",
+            )
+            self._tag_span(span, taint_level, runtime_decision)
+            self.spans.append(span)
+            self._send_to_collector(span)
+            self._record_trajectory_tool(tool_name, runtime_decision)
+            raise SecurityException(
+                "AgentGuard BLOCK: prompt injection detected in tool result"
+            )
+
+        # 11. Track the result for subsequent calls.
         if self._taint_enabled:
             source_level = (
                 TaintLevel.UNTRUSTED if _is_untrusted_source(tool_name) else None

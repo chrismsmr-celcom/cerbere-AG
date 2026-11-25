@@ -35,8 +35,8 @@ except ImportError:  # SDK plus ancien : l'approbation remonte comme SecurityExc
 from gateway_config import ConfigError, GatewayConfig, ServerSpec, load_config
 from gateway_inspection import ResponseInspector
 
-from agentguard.result_inspection import inspect_mcp_content
 from agentguard.sdk import AgentGuard
+from agentguard.security_engine import SecurityEngine
 from agentguard.tool_contracts import DataClass, DataOrigin
 
 # Identité de l'appelant courant (définie par l'auth HTTP, ou défaut en stdio).
@@ -190,6 +190,7 @@ class CerbereGateway:
 
     def __init__(self, config: GatewayConfig) -> None:
         self.config = config
+        self.security_engine = SecurityEngine(contracts=config.tool_contracts)
         self.guards = GuardPool(config)
         self.inspector = ResponseInspector(config.redact_pii, config.redact_secrets)
         self.server_budgets = ServerBudgetLedger()
@@ -344,7 +345,7 @@ class CerbereGateway:
                         inspector.taints.matching_values(args)
                     )
                 ]
-                decision = config.tool_contracts.authorize(
+                decision = self.security_engine.authorize_tool(
                     name,
                     origins,
                     tenant_id=str(identity["tenant_id"]),
@@ -384,7 +385,7 @@ class CerbereGateway:
             content = inspector.inspect_content(list(result.content))
             # Inspect untrusted tool output before returning it to the agent.
             # High-confidence prompt injection is fail-closed; secret-like values are redacted.
-            content, result_findings = inspect_mcp_content(
+            content, result_findings = self.security_engine.inspect_content(
                 content, block_on_injection=True
             )
             if result_findings:
