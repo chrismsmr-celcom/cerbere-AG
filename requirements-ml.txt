@@ -16,4 +16,4 @@ scikit-learn==1.5.0
 huggingface-hub==0.20.2    # Pour download des modèles au build Docker
 accelerate==1.15.0         # Optimisation inference
 sentencepiece==0.2.1      # Tokenizer pour certains modèles
-protobuf==5.29.6           # Requis par transformers
+protobuf==7.36.2           # Requis par transformers
