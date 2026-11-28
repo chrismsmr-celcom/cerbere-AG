@@ -1,5 +1,7 @@
 # 🐕‍🦺 CerbereAG MCP Server & Gateway
 
+The MCP Registry metadata for this package is maintained in [`server.json`](server.json). It describes the **advisory stdio server** published as `cerbere-ag-mcp`; the gateway is a separate command and requires an explicit upstream configuration file.
+
 **Runtime security for AI agents — as an MCP server, and as a universal gateway.**
 
 Two components ship in this package:
