@@ -6,7 +6,11 @@ self-hosted integration tests for persistence, API enforcement, or dashboard UX.
 
 import pytest
 
-from agentguard.attestation import build_attestation, sign_attestation, verify_attestation
+from agentguard.attestation import (
+    build_attestation,
+    sign_attestation,
+    verify_attestation,
+)
 from agentguard.delegation import DelegationRegistry
 from agentguard.egress import evaluate_egress, normalize_destination
 from agentguard.tool_contracts import (
@@ -51,10 +55,12 @@ def test_delegation_expiry_and_revocation_are_enforced():
     item = registry.grant(
         "del-2", "tenant-a", "parent", "child", {"tool.call"}, ttl_seconds=10,
     )
-    kwargs = dict(
-        tenant_id="tenant-a", parent_agent_id="parent",
-        child_agent_id="child", scope="tool.call",
-    )
+    kwargs = {
+        "tenant_id": "tenant-a",
+        "parent_agent_id": "parent",
+        "child_agent_id": "child",
+        "scope": "tool.call",
+    }
     assert registry.authorize("del-2", **kwargs, now=item.created_at + 1)
     assert not registry.authorize("del-2", **kwargs, now=item.expires_at + 1)
     assert registry.revoke("del-2")
