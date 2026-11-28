@@ -86,9 +86,11 @@ guard = AgentGuard(
     agent_id="invoice-agent",
 )
 
+
 @guard.guard_tool_call("read_invoice")
 def read_invoice(invoice_id: str):
     return invoice_service.read(invoice_id)
+
 
 @guard.guard_tool_call("send_invoice")
 def send_invoice(customer_id: str, document_id: str):
