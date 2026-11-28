@@ -204,13 +204,32 @@ def _command_parts(tokens: list[str]) -> tuple[str, list[str]]:
         raise ValueError("command has no executable")
     executable_index = 0
     # Common transparent wrappers: inspect the wrapped executable as well.
-    while executable_index < len(args) and _basename(args[executable_index]) in {
-        "command",
-        "exec",
-        "nohup",
-        "time",
-    }:
-        executable_index += 1
+    while executable_index < len(args):
+        wrapper = _basename(args[executable_index])
+        if wrapper in {"command", "exec", "nohup", "time"}:
+            executable_index += 1
+            continue
+        if wrapper == "env":
+            executable_index += 1
+            while executable_index < len(args):
+                item = args[executable_index]
+                if item == "--":
+                    executable_index += 1
+                    break
+                if item in {"-i", "--ignore-environment", "-0", "--null"}:
+                    executable_index += 1
+                    continue
+                if item in {"-u", "--unset", "-C", "--chdir"}:
+                    executable_index += 2
+                    continue
+                if item.startswith(("--unset=", "--chdir=")) or (
+                    item.startswith("-") and item != "-"
+                ) or ("=" in item and not item.startswith("=")):
+                    executable_index += 1
+                    continue
+                break
+            continue
+        break
     if executable_index >= len(args):
         raise ValueError("command wrapper has no executable")
     executable = args[executable_index]
@@ -272,6 +291,12 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
             False,
         )
 
+    if name in {"sh", "bash", "dash", "zsh", "fish"} and any(
+        arg in {"-c", "-lc", "-ec"} or (arg.startswith("-") and "c" in arg[1:])
+        for arg in args
+    ):
+        return executable, "Inline shell execution requires an explicit host policy", False
+
     # Local archives are not automatically exfiltration. The pipeline check
     # below blocks them only when their output reaches a network sink.
     return executable, None, name in _NETWORK_TOOLS
@@ -280,7 +305,10 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
 @dataclass(frozen=True)
 class HostSecurityPolicy:
     allowed_executables: tuple[str, ...] = ()
-    denied_command_patterns: tuple[str, ...] = (r"\bmkfs\b",)
+    denied_command_patterns: tuple[str, ...] = (
+        r"\bmkfs\b",
+        r"\bcurl\b.*\|\s*(?:sh|bash)",
+    )
     allowed_artifact_sha256: tuple[str, ...] = ()
     require_artifact_hash: bool = True
 
