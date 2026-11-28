@@ -222,9 +222,11 @@ def _command_parts(tokens: list[str]) -> tuple[str, list[str]]:
                 if item in {"-u", "--unset", "-C", "--chdir"}:
                     executable_index += 2
                     continue
-                if item.startswith(("--unset=", "--chdir=")) or (
-                    item.startswith("-") and item != "-"
-                ) or ("=" in item and not item.startswith("=")):
+                if (
+                    item.startswith(("--unset=", "--chdir="))
+                    or (item.startswith("-") and item != "-")
+                    or ("=" in item and not item.startswith("="))
+                ):
                     executable_index += 1
                     continue
                 break
@@ -295,7 +297,11 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
         arg in {"-c", "-lc", "-ec"} or (arg.startswith("-") and "c" in arg[1:])
         for arg in args
     ):
-        return executable, "Inline shell execution requires an explicit host policy", False
+        return (
+            executable,
+            "Inline shell execution requires an explicit host policy",
+            False,
+        )
 
     # Local archives are not automatically exfiltration. The pipeline check
     # below blocks them only when their output reaches a network sink.
