@@ -28,16 +28,46 @@ _COMMAND_SEPARATORS = {";", "&&", "||", "|", "&"}
 _REDIRECTIONS = {">", ">>", "<", "<<", "<<<", ">&", "<&"}
 _UNSUPPORTED_TOKENS = {"(", ")", "$", "`"}
 _NETWORK_TOOLS = {
-    "curl", "wget", "nc", "ncat", "netcat", "socat", "ftp", "sftp",
-    "scp", "ssh", "rsync",
+    "curl",
+    "wget",
+    "nc",
+    "ncat",
+    "netcat",
+    "socat",
+    "ftp",
+    "sftp",
+    "scp",
+    "ssh",
+    "rsync",
 }
 _SENSITIVE_PATH_PARTS = {
-    ".env", ".aws", ".ssh", ".gnupg", ".config/gcloud",
-    "id_rsa", "id_ed25519", "credentials", "secrets",
+    ".env",
+    ".aws",
+    ".ssh",
+    ".gnupg",
+    ".config/gcloud",
+    "id_rsa",
+    "id_ed25519",
+    "credentials",
+    "secrets",
 }
 _DANGEROUS_ROOTS = {
-    "/", "/boot", "/bin", "/dev", "/etc", "/home", "/lib", "/lib64",
-    "/opt", "/proc", "/root", "/run", "/sbin", "/srv", "/sys", "/usr",
+    "/",
+    "/boot",
+    "/bin",
+    "/dev",
+    "/etc",
+    "/home",
+    "/lib",
+    "/lib64",
+    "/opt",
+    "/proc",
+    "/root",
+    "/run",
+    "/sbin",
+    "/srv",
+    "/sys",
+    "/usr",
     "/var",
 }
 
@@ -72,9 +102,20 @@ def _is_dangerous_delete_target(value: str) -> bool:
     if target in _DANGEROUS_ROOTS:
         return True
     dangerous_globs = {
-        "/*", "/home/*", "/root/*", "/etc/*", "/usr/*", "/var/*",
-        "/boot/*", "/bin/*", "/sbin/*", "/lib/*", "/lib64/*",
-        "/proc/*", "/sys/*", "/dev/*",
+        "/*",
+        "/home/*",
+        "/root/*",
+        "/etc/*",
+        "/usr/*",
+        "/var/*",
+        "/boot/*",
+        "/bin/*",
+        "/sbin/*",
+        "/lib/*",
+        "/lib64/*",
+        "/proc/*",
+        "/sys/*",
+        "/dev/*",
     }
     return target in dangerous_globs
 
@@ -105,7 +146,11 @@ def _split_commands(tokens: list[str]) -> list[list[list[str]]]:
         token = tokens[index]
         # shlex emits file-descriptor prefixes (for example, 2>&1) as a
         # separate numeric token. Do not mistake that descriptor for a command.
-        if token.isdigit() and index + 1 < len(tokens) and tokens[index + 1] in _REDIRECTIONS:
+        if (
+            token.isdigit()
+            and index + 1 < len(tokens)
+            and tokens[index + 1] in _REDIRECTIONS
+        ):
             index += 1
             continue
         if token in _REDIRECTIONS:
@@ -160,7 +205,10 @@ def _command_parts(tokens: list[str]) -> tuple[str, list[str]]:
     executable_index = 0
     # Common transparent wrappers: inspect the wrapped executable as well.
     while executable_index < len(args) and _basename(args[executable_index]) in {
-        "command", "exec", "nohup", "time",
+        "command",
+        "exec",
+        "nohup",
+        "time",
     }:
         executable_index += 1
     if executable_index >= len(args):
@@ -199,21 +247,30 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
 
     if name in {"curl", "wget", "nc", "ncat", "netcat", "socat"}:
         for arg in args:
-            if _is_sensitive_path(arg) and (
-                arg.startswith(("@", "-")) or "=" in arg
-            ):
+            if _is_sensitive_path(arg) and (arg.startswith(("@", "-")) or "=" in arg):
                 return executable, "Sensitive file is supplied to a network tool", True
         # curl/wget upload flags can be separated from their values.
         for index, arg in enumerate(args[:-1]):
             if arg in {
-                "-d", "--data", "--data-raw", "--data-binary",
-                "--data-urlencode", "-F", "--form", "-T",
-                "--upload-file", "--post-file",
+                "-d",
+                "--data",
+                "--data-raw",
+                "--data-binary",
+                "--data-urlencode",
+                "-F",
+                "--form",
+                "-T",
+                "--upload-file",
+                "--post-file",
             } and _is_sensitive_path(args[index + 1]):
                 return executable, "Sensitive file is uploaded to a network tool", True
 
     if name in {"sudo", "doas", "su", "pkexec"}:
-        return executable, "Privilege-escalation wrapper requires an explicit host policy", False
+        return (
+            executable,
+            "Privilege-escalation wrapper requires an explicit host policy",
+            False,
+        )
 
     # Local archives are not automatically exfiltration. The pipeline check
     # below blocks them only when their output reaches a network sink.
@@ -223,9 +280,7 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
 @dataclass(frozen=True)
 class HostSecurityPolicy:
     allowed_executables: tuple[str, ...] = ()
-    denied_command_patterns: tuple[str, ...] = (
-        r"\bmkfs\b",
-    )
+    denied_command_patterns: tuple[str, ...] = (r"\bmkfs\b",)
     allowed_artifact_sha256: tuple[str, ...] = ()
     require_artifact_hash: bool = True
 
@@ -235,11 +290,15 @@ class HostSecurityPolicy:
         try:
             groups = _split_commands(_tokenize(command))
         except (ValueError, TypeError):
-            return HostDecision(False, "Command syntax could not be safely analyzed", command[:160])
+            return HostDecision(
+                False, "Command syntax could not be safely analyzed", command[:160]
+            )
 
         for pattern in self.denied_command_patterns:
             if re.search(pattern, command, re.IGNORECASE):
-                return HostDecision(False, "Command matches a denied pattern", command[:160])
+                return HostDecision(
+                    False, "Command matches a denied pattern", command[:160]
+                )
 
         inspected: list[tuple[str, list[str], bool]] = []
         for group in groups:
@@ -247,7 +306,11 @@ class HostSecurityPolicy:
                 try:
                     executable, finding, is_network = _inspect_command(tokens)
                 except ValueError:
-                    return HostDecision(False, "Command syntax could not be safely analyzed", command[:160])
+                    return HostDecision(
+                        False,
+                        "Command syntax could not be safely analyzed",
+                        command[:160],
+                    )
                 if finding:
                     return HostDecision(False, finding, executable)
                 inspected.append((executable, tokens, is_network))
@@ -257,19 +320,23 @@ class HostSecurityPolicy:
         for group in groups:
             has_sensitive_archive = any(
                 _basename(_command_parts(tokens)[0]) == "tar"
-                and any(_is_sensitive_path(arg) for arg in _strip_redirections(tokens)[1:])
+                and any(
+                    _is_sensitive_path(arg) for arg in _strip_redirections(tokens)[1:]
+                )
                 for tokens in group
             )
-            has_network_sink = any(
-                _inspect_command(tokens)[2] for tokens in group
-            )
+            has_network_sink = any(_inspect_command(tokens)[2] for tokens in group)
             if has_sensitive_archive and has_network_sink:
-                return HostDecision(False, "Sensitive archive is piped to a network tool", "pipeline")
+                return HostDecision(
+                    False, "Sensitive archive is piped to a network tool", "pipeline"
+                )
 
         if self.allowed_executables:
             for executable, _, _ in inspected:
                 if executable not in self.allowed_executables:
-                    return HostDecision(False, "Executable is not allowlisted", executable)
+                    return HostDecision(
+                        False, "Executable is not allowlisted", executable
+                    )
 
         subject = inspected[0][0] if inspected else command[:160]
         return HostDecision(True, "Command passed static host policy", subject)
