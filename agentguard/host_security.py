@@ -47,8 +47,10 @@ def _basename(executable: str) -> str:
 
 
 def _is_sensitive_path(value: str) -> bool:
-    candidate = value.strip().strip("\"'").lstrip("@")
+    candidate = value.strip().strip("\"'")
     candidate = candidate.split("=", 1)[-1] if "=" in candidate else candidate
+    candidate = re.sub(r"^-[A-Za-z]*@", "", candidate)
+    candidate = candidate.lstrip("@")
     candidate = candidate.replace("\\", "/")
     normalized = posixpath.normpath(candidate)
     parts = {part.lower() for part in normalized.split("/") if part}
