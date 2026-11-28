@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.chrismsmr-celcom/cerbere-ag",
+  "title": "Cerbere AG Security MCP Server",
+  "description": "Runtime security checks for AI agents, with an optional self-hosted MCP gateway for policy enforcement on routed tool calls.",
+  "repository": {
+    "url": "https://github.com/chrismsmr-celcom/cerbere-AG",
+    "source": "github"
+  },
+  "websiteUrl": "https://www.cerbereag.site",
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "cerbere-ag-mcp",
+      "version": "0.2.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
