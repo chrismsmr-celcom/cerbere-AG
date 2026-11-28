@@ -208,10 +208,11 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
                 if _is_sensitive_path(args[index + 1]):
                     return executable, "Sensitive file is uploaded to a network tool", True
 
-    if name == "tar":
-        if any(_is_sensitive_path(arg) for arg in args):
-            return executable, "Archive command reads a sensitive path", False
+    if name in {"sudo", "doas", "su", "pkexec"}:
+        return executable, "Privilege-escalation wrapper requires an explicit host policy", False
 
+    # Local archives are not automatically exfiltration. The pipeline check
+    # below blocks them only when their output reaches a network sink.
     return executable, None, name in _NETWORK_TOOLS
 
 
