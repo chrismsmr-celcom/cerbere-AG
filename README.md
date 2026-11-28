@@ -46,7 +46,6 @@ Self-hosted. Framework-independent. Built for MCP and existing agent stacks.
   <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lobehub/lobe-icons/master/packages/static-png/dark/devin-color.png"><img src="https://raw.githubusercontent.com/lobehub/lobe-icons/master/packages/static-png/light/devin-color.png" width="20" height="20" alt="Devin CLI" title="Devin CLI"></picture>
 </p>
 <p align="center"><sub>Plus Crush, Continue CLI, Factory Droid, Aider, and more — see <a href="AGENT_INTEGRATIONS.md">AGENT_INTEGRATIONS.md</a> for the full coverage matrix</sub></p>
----
 <p align="center">
 
 ```bash
