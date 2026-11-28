@@ -172,6 +172,14 @@ See [Works with](#-works-with) for Claude Code and Cursor.
 
 <br/>
 
+## Operator and integration guides
+
+- [Practical use cases](docs/USE_CASES.md)
+- [Framework and agent coverage](FRAMEWORK_COVERAGE.md)
+- [Agent operating skill](SKILL.md)
+- [Security primitive guarantees and limitations](docs/SECURITY_PRIMITIVES.md)
+- [Project governance](GOVERNANCE.md)
+
 ## Coding agents
 
 Coding agents are our first focused integration surface because they can read source files, run commands, modify repositories and use tools with access to credentials or production systems.

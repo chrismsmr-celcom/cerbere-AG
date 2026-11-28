@@ -8,6 +8,8 @@ they will always be listed under **Changed** or **Removed**.
 ## [Unreleased]
 
 ### Added
+- MCP Registry metadata for the `cerbere-ag-mcp` advisory stdio server (`mcp/server.json`).
+- Practical use cases, an agent operating skill, and a concise framework coverage matrix with explicit integration boundaries.
 - `SECURITY.md`: reporting channel, response and fix targets, coordinated disclosure, safe harbor, supported versions.
 - `CHANGELOG.md` and a release workflow that publishes a GitHub Release with a CycloneDX SBOM on every `v*` tag.
 - Supply-chain workflow: Trivy scan of the Docker image (fails on fixable CRITICAL vulnerabilities) and SBOM generation.
