@@ -71,13 +71,12 @@ def _is_dangerous_delete_target(value: str) -> bool:
     target = posixpath.normpath(target)
     if target in _DANGEROUS_ROOTS:
         return True
-    if target.startswith("/") and target.split("/", 2)[1:2] and target.rstrip("/") + "/*" in {
+    dangerous_globs = {
         "/*", "/home/*", "/root/*", "/etc/*", "/usr/*", "/var/*",
         "/boot/*", "/bin/*", "/sbin/*", "/lib/*", "/lib64/*",
         "/proc/*", "/sys/*", "/dev/*",
-    }:
-        return True
-    return False
+    }
+    return target in dangerous_globs
 
 
 def _tokenize(command: str) -> list[str]:
