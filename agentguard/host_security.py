@@ -169,6 +169,7 @@ def _split_commands(tokens: list[str]) -> list[list[list[str]]]:
             elif token not in {";", "&&", "||"}:
                 raise ValueError("empty command in pipeline")
             if token == "|":
+                index += 1
                 continue
             if pipeline:
                 groups.append(pipeline)
