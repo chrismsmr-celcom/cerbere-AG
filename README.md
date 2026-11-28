@@ -490,3 +490,8 @@ Do not rely on it as the sole security control for critical infrastructure.
 Copyright © 2026 Christopher Dikesa
 
 </div>
+
+
+## Security primitive reference
+
+See [Security primitives: implementation and operator visibility](docs/SECURITY_PRIMITIVES.md) for the implementation boundaries, dashboard visibility, test command, and required checklist for future features.
