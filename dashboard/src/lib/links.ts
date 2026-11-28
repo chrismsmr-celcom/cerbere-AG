@@ -4,8 +4,8 @@ export const TERMS_URL = '/terms'
 export const PRIVACY_URL = '/privacy'
 
 // Documentation : le README du dépôt public
-export const README_URL = 'https://github.com/chrismsmr-celcom/agentguard#readme'
-export const MCP_README_URL = 'https://github.com/chrismsmr-celcom/agentguard/blob/HEAD/README_MCP.md'
+export const README_URL = 'https://github.com/chrismsmr-celcom/cerbere-AG#readme'
+export const MCP_README_URL = 'https://github.com/chrismsmr-celcom/cerbere-AG/blob/main/README_MCP.md'
 
 // Adresse indiquée dans les pages légales pour toute question
 export const SUPPORT_EMAIL = 'hello@cerbereag.site'

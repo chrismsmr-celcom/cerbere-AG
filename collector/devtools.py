@@ -126,7 +126,7 @@ pip install cerbere-ag-mcp    # MCP server, for Claude Code / Cursor / Cline</co
         <div class="card">
             <h2>Links</h2>
             <div class="links">
-                <a href="https://github.com/chrismsmr-celcom/agentguard">GitHub<span>Source & issues</span></a>
+                <a href="https://github.com/chrismsmr-celcom/cerbere-AG">GitHub<span>Source & issues</span></a>
                 <a href="https://pypi.org/project/cerbere-ag/">PyPI — SDK<span>cerbere-ag</span></a>
                 <a href="https://pypi.org/project/cerbere-ag-mcp/">PyPI — MCP<span>cerbere-ag-mcp</span></a>
                 <a href="/documentation">Documentation<span>Full guide</span></a>
