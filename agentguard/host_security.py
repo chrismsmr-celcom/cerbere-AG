@@ -103,6 +103,11 @@ def _split_commands(tokens: list[str]) -> list[list[list[str]]]:
     index = 0
     while index < len(tokens):
         token = tokens[index]
+        # shlex emits file-descriptor prefixes (for example, 2>&1) as a
+        # separate numeric token. Do not mistake that descriptor for a command.
+        if token.isdigit() and index + 1 < len(tokens) and tokens[index + 1] in _REDIRECTIONS:
+            index += 1
+            continue
         if token in _REDIRECTIONS:
             if index + 1 >= len(tokens):
                 raise ValueError("redirection has no target")
