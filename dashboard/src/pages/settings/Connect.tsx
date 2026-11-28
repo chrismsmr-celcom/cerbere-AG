@@ -47,6 +47,20 @@ export default function Connect() {
           <span className="text-paper">Next:</span> run it from your server, send one real event, then open the Live feed to see it arrive.
         </p>
       </section>
+      <section className="rounded-lg border border-line bg-coal p-4">
+        <h2 className="font-display text-[15px]">Security coverage and limitations</h2>
+        <p className="mt-1 text-[13px] text-dim">
+          Integration snippets only protect execution paths routed through the selected SDK, hook, or MCP gateway. Advanced primitives such as data contracts, delegation, and egress checks have implementation-specific limits and are not all configurable from this screen.
+        </p>
+        <a
+          className="mt-2 inline-block text-[13px] text-amber hover:underline"
+          href="https://github.com/chrismsmr-celcom/cerbere-AG/blob/main/docs/SECURITY_PRIMITIVES.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Read the security primitive reference
+        </a>
+      </section>
     </div>
   )
 }
