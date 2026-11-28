@@ -25,7 +25,7 @@ class HostDecision:
 # Shell operators that divide commands or connect a pipeline. Redirections
 # are handled separately so their targets cannot be mistaken for arguments.
 _COMMAND_SEPARATORS = {";", "&&", "||", "|", "&"}
-_REDIRECTIONS = {">", ">>", "<", "<<", "<<<", ">&", "<&", ">>"}
+_REDIRECTIONS = {">", ">>", "<", "<<", "<<<", ">&", "<&"}
 _UNSUPPORTED_TOKENS = {"(", ")", "$", "`"}
 _NETWORK_TOOLS = {
     "curl", "wget", "nc", "ncat", "netcat", "socat", "ftp", "sftp",
@@ -112,7 +112,7 @@ def _split_commands(tokens: list[str]) -> list[list[list[str]]]:
             if index + 1 >= len(tokens):
                 raise ValueError("redirection has no target")
             target = tokens[index + 1]
-            if target.startswith("/dev/tcp/") or target.startswith("/dev/udp/"):
+            if target.startswith(("/dev/tcp/", "/dev/udp/")):
                 raise ValueError("network redirection is not supported")
             current.extend((token, target))
             index += 2
@@ -200,18 +200,17 @@ def _inspect_command(tokens: list[str]) -> tuple[str, str | None, bool]:
     if name in {"curl", "wget", "nc", "ncat", "netcat", "socat"}:
         for arg in args:
             if _is_sensitive_path(arg) and (
-                arg.startswith("@")
-                or arg.startswith("-")
-                or "=" in arg
+                arg.startswith(("@", "-")) or "=" in arg
             ):
                 return executable, "Sensitive file is supplied to a network tool", True
         # curl/wget upload flags can be separated from their values.
         for index, arg in enumerate(args[:-1]):
-            if arg in {"-d", "--data", "--data-raw", "--data-binary",
-                       "--data-urlencode", "-F", "--form", "-T",
-                       "--upload-file", "--post-file"}:
-                if _is_sensitive_path(args[index + 1]):
-                    return executable, "Sensitive file is uploaded to a network tool", True
+            if arg in {
+                "-d", "--data", "--data-raw", "--data-binary",
+                "--data-urlencode", "-F", "--form", "-T",
+                "--upload-file", "--post-file",
+            } and _is_sensitive_path(args[index + 1]):
+                return executable, "Sensitive file is uploaded to a network tool", True
 
     if name in {"sudo", "doas", "su", "pkexec"}:
         return executable, "Privilege-escalation wrapper requires an explicit host policy", False
