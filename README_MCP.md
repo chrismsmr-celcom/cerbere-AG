@@ -98,5 +98,5 @@ be run as a standalone HTTP service.
 
 * Core SDK (decorator-based integration for Python agents): [`cerbere-ag`](https://pypi.org/project/cerbere-ag/)
 * Dashboard, policy docs, other framework integrations (LangGraph, CrewAI, Composio, HTTP gateway): [app.cerbereag.site](https://app.cerbereag.site)
-* Source: [github.com/chrismsmr-celcom/agentguard](https://github.com/chrismsmr-celcom/agentguard)
+* Source: [github.com/chrismsmr-celcom/agentguard](https://github.com/chrismsmr-celcom/cerbere-AG)
 
